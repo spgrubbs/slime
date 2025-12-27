@@ -1116,7 +1116,8 @@ export default function HiveQueenGame() {
         const next = { ...prev };
         Object.entries(next).forEach(([zone, exp]) => {
           const zd = ZONES[zone];
-          if (!exp.monster) {
+          // Only spawn new monsters if target not yet reached
+          if (!exp.monster && exp.kills < exp.targetKills) {
             const mt = zd.monsters[Math.floor(Math.random() * zd.monsters.length)];
             const md = MONSTER_TYPES[mt];
             exp.monster = { type: mt, hp: md.hp, maxHp: md.hp, dmg: md.dmg, status: [] };
