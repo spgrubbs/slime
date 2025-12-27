@@ -921,7 +921,7 @@ export default function HiveQueenGame() {
   };
 
   const [expDuration, setExpDuration] = useState('10'); // '10', '100', 'infinite'
-  const [expSummary, setExpSummary] = useState(null);
+  const [expSummaries, setExpSummaries] = useState([]); // Array of expedition summaries
 
   // Helper function to calculate current stats based on biomass
   const getSlimeStats = (slime) => {
@@ -1002,7 +1002,7 @@ export default function HiveQueenGame() {
       log(`Party wiped in ${ZONES[zone].name}! Materials lost.`);
     }
 
-    setExpSummary(summary);
+    setExpSummaries(s => [...s, { ...summary, id: Date.now() }]);
     setExps(p => { const n = { ...p }; delete n[zone]; return n; });
     setBLogs(p => { const n = { ...p }; delete n[zone]; return n; });
   };
@@ -1377,82 +1377,6 @@ export default function HiveQueenGame() {
   return (
     <div onTouchStart={onTouch} onTouchEnd={onTouchEnd} style={{ fontFamily: 'system-ui', background: 'linear-gradient(135deg, #1a1a2e, #16213e)', minHeight: '100vh', color: '#e0e0e0' }}>
       {welcomeBack && <WelcomeBackModal data={welcomeBack} onClose={() => setWelcomeBack(null)} />}
-
-      {expSummary && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-          <div style={{ background: 'linear-gradient(135deg, #1a1a2e, #16213e)', borderRadius: 15, padding: 25, maxWidth: 400, width: '100%', border: `2px solid ${expSummary.survivors.length > 0 ? '#4ade80' : '#ef4444'}` }}>
-            <h2 style={{ margin: '0 0 15px', fontSize: 20, color: expSummary.survivors.length > 0 ? '#4ade80' : '#ef4444', textAlign: 'center' }}>
-              {expSummary.survivors.length > 0 ? '✅ Expedition Complete!' : '💀 Party Wiped!'}
-            </h2>
-
-            <div style={{ background: 'rgba(0,0,0,0.3)', borderRadius: 10, padding: 15, marginBottom: 15 }}>
-              <div style={{ fontSize: 14, fontWeight: 'bold', marginBottom: 10 }}>📊 Expedition Stats</div>
-              <div style={{ display: 'grid', gap: 8, fontSize: 12 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span>Zone:</span>
-                  <strong>{expSummary.zone}</strong>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span>Enemies Defeated:</span>
-                  <strong style={{ color: '#f59e0b' }}>{expSummary.kills}</strong>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span>Survivors:</span>
-                  <strong style={{ color: expSummary.survivors.length > 0 ? '#4ade80' : '#ef4444' }}>
-                    {expSummary.survivors.length}/{expSummary.totalParty}
-                  </strong>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span>Biomass Distributed:</span>
-                  <strong style={{ color: '#22d3ee' }}>{Math.floor(expSummary.biomassDistributed)}</strong>
-                </div>
-              </div>
-            </div>
-
-            {expSummary.survivors.length > 0 ? (
-              <div style={{ background: 'rgba(74,222,128,0.2)', borderRadius: 10, padding: 15, marginBottom: 15 }}>
-                <div style={{ fontSize: 14, fontWeight: 'bold', marginBottom: 10, color: '#4ade80' }}>📦 Materials Secured</div>
-                {Object.keys(expSummary.materials).length > 0 ? (
-                  <div style={{ display: 'grid', gap: 6, fontSize: 12 }}>
-                    {Object.entries(expSummary.materials).map(([mat, count]) => (
-                      <div key={mat} style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span>{mat}:</span>
-                        <strong style={{ color: '#4ade80' }}>+{count}</strong>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div style={{ fontSize: 12, opacity: 0.7 }}>No materials found</div>
-                )}
-              </div>
-            ) : (
-              <div style={{ background: 'rgba(239,68,68,0.2)', borderRadius: 10, padding: 15, marginBottom: 15 }}>
-                <div style={{ fontSize: 14, fontWeight: 'bold', marginBottom: 8, color: '#ef4444' }}>💀 Total Loss</div>
-                <div style={{ fontSize: 12, opacity: 0.8 }}>
-                  All slimes perished. Materials and biomass lost.
-                </div>
-              </div>
-            )}
-
-            <button
-              onClick={() => setExpSummary(null)}
-              style={{
-                width: '100%',
-                padding: 12,
-                background: 'linear-gradient(135deg, #4ade80, #22d3ee)',
-                border: 'none',
-                borderRadius: 8,
-                color: '#fff',
-                fontWeight: 'bold',
-                cursor: 'pointer',
-                fontSize: 14
-              }}
-            >
-              Continue
-            </button>
-          </div>
-        </div>
-      )}
 
       <Menu open={menu} close={() => setMenu(false)} tab={tab} setTab={setTab} tabs={tabs} />
       
