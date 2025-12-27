@@ -1654,10 +1654,12 @@ export default function HiveQueenGame() {
                     {towerDefense.deployedSlimes.map(ds => {
                       const sl = slimes.find(s => s.id === ds.id);
                       if (!sl) return null;
+                      const stats = getSlimeStats(sl);
+                      const biomass = sl.biomass || 0;
                       return <div key={ds.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: 6, background: 'rgba(74,222,128,0.1)', borderRadius: 6, fontSize: 9 }}>
                         <SlimeSprite tier={sl.tier} size={32} traits={sl.traits} />
                         <span style={{ marginTop: 2 }}>{sl.name.split(' ')[0]}</span>
-                        <span style={{ fontSize: 8, opacity: 0.7 }}>DPS: {Math.floor((sl.stats.firmness + sl.level * 1.2) * (1 + sl.stats.slipperiness * 0.1))}</span>
+                        <span style={{ fontSize: 8, opacity: 0.7 }}>DPS: {Math.floor((stats.firmness + biomass * 0.01) * (1 + stats.slipperiness * 0.1))}</span>
                       </div>;
                     })}
                   </div>
