@@ -15,10 +15,10 @@ const STAT_INFO = {
 };
 
 const SLIME_TIERS = {
-  basic: { name: 'Basic', magickaCost: 5, statMultiplier: 1, traitSlots: 1, color: '#4ade80', baseHp: 50 },
-  enhanced: { name: 'Enhanced', magickaCost: 10, statMultiplier: 1.5, traitSlots: 2, color: '#22d3ee', unlockLevel: 5, baseHp: 80 },
-  elite: { name: 'Elite', magickaCost: 20, statMultiplier: 2, traitSlots: 3, color: '#a855f7', unlockLevel: 15, baseHp: 120 },
-  royal: { name: 'Royal', magickaCost: 40, statMultiplier: 3, traitSlots: 4, color: '#f59e0b', unlockLevel: 30, baseHp: 200 },
+  basic: { name: 'Basic', magickaCost: 5, statMultiplier: 1, traitSlots: 1, color: '#4ade80', baseHp: 50, biomassPerPercent: 10 },
+  enhanced: { name: 'Enhanced', magickaCost: 10, statMultiplier: 1.5, traitSlots: 2, color: '#22d3ee', unlockLevel: 5, baseHp: 80, biomassPerPercent: 100 },
+  elite: { name: 'Elite', magickaCost: 20, statMultiplier: 2, traitSlots: 3, color: '#a855f7', unlockLevel: 15, baseHp: 120, biomassPerPercent: 1000 },
+  royal: { name: 'Royal', magickaCost: 40, statMultiplier: 3, traitSlots: 4, color: '#f59e0b', unlockLevel: 30, baseHp: 200, biomassPerPercent: 10000 },
 };
 
 const TRAIT_LIBRARY = {
@@ -882,11 +882,11 @@ export default function HiveQueenGame() {
     const td = SLIME_TIERS[tier];
     const bioCost = BASE_SLIME_COST + selT.length * 5;
     if (bio < bioCost || freeMag < magCost) return;
-    const stats = { firmness: Math.floor(5 * td.statMultiplier), slipperiness: Math.floor(5 * td.statMultiplier), viscosity: Math.floor(5 * td.statMultiplier) };
+    const baseStats = { firmness: Math.floor(5 * td.statMultiplier), slipperiness: Math.floor(5 * td.statMultiplier), viscosity: Math.floor(5 * td.statMultiplier) };
     const pass = [];
-    selT.forEach(id => { const t = TRAIT_LIBRARY[id]; if (t) { stats[t.stat] += t.bonus; pass.push(t.passive); } });
-    const maxHp = Math.floor((td.baseHp + stats.firmness * 3) * bon.hp);
-    setSlimes(p => [...p, { id: genId(), name, tier, level: 1, xp: 0, traits: selT, pass, stats, maxHp, magCost }]);
+    selT.forEach(id => { const t = TRAIT_LIBRARY[id]; if (t) { baseStats[t.stat] += t.bonus; pass.push(t.passive); } });
+    const maxHp = Math.floor((td.baseHp + baseStats.firmness * 3) * bon.hp);
+    setSlimes(p => [...p, { id: genId(), name, tier, biomass: 0, traits: selT, pass, baseStats, maxHp, magCost }]);
     setBio(p => p - bioCost);
     setTraits(p => { const n = { ...p }; selT.forEach(t => { n[t]--; if (n[t] <= 0) delete n[t]; }); return n; });
     log(`${name} emerges!`);
@@ -895,25 +895,81 @@ export default function HiveQueenGame() {
   const reabsorb = (id) => {
     const sl = slimes.find(s => s.id === id);
     if (!sl || Object.values(exps).some(e => e.party.some(p => p.id === id))) { log('Cannot reabsorb!'); return; }
-    const xpG = Math.floor((sl.xp * 0.5 + sl.level * 10) * bon.xp);
-    setQueen(p => { let xp = p.xp + xpG, lv = p.level; while (xp >= lv * 100) { xp -= lv * 100; lv++; } return { level: lv, xp }; });
+    const biomassGained = sl.biomass || 0;
+    setBio(p => p + biomassGained);
     setSlimes(p => p.filter(s => s.id !== id));
-    log(`Reabsorbed ${sl.name}! +${xpG} XP`);
+    log(`Reabsorbed ${sl.name}! +${biomassGained}🧬`);
   };
 
-  const startExp = (zone) => {
+  const [expDuration, setExpDuration] = useState('10'); // '10', '100', 'infinite'
+  const [expSummary, setExpSummary] = useState(null);
+
+  // Helper function to calculate current stats based on biomass
+  const getSlimeStats = (slime) => {
+    if (!slime) return { firmness: 0, slipperiness: 0, viscosity: 0 };
+    const tier = SLIME_TIERS[slime.tier];
+    const biomass = slime.biomass || 0;
+    const percentBonus = biomass / tier.biomassPerPercent; // How many percent increases
+    const multiplier = 1 + (percentBonus / 100); // Convert to multiplier (1% = 0.01)
+
+    return {
+      firmness: Math.floor(slime.baseStats.firmness * multiplier),
+      slipperiness: Math.floor(slime.baseStats.slipperiness * multiplier),
+      viscosity: Math.floor(slime.baseStats.viscosity * multiplier),
+    };
+  };
+
+  const startExp = (zone, duration = expDuration) => {
     if (exps[zone] || !party.length) return;
-    const p = party.map(id => { const sl = slimes.find(s => s.id === id); return { id, hp: sl.maxHp, maxHp: sl.maxHp, status: [], usedUndying: false, usedRebirth: false, usedAmbush: false }; });
-    setExps(pr => ({ ...pr, [zone]: { party: p, monster: null, kills: 0, timer: 0, turn: 0, animSlime: null, slimeAnim: 'idle', monAnim: 'idle' } }));
-    setBLogs(pr => ({ ...pr, [zone]: [{ m: `Entering ${ZONES[zone].name}...`, c: '#22d3ee' }] }));
+    const p = party.map(id => { const sl = slimes.find(s => s.id === id); return { id, hp: sl.maxHp, maxHp: sl.maxHp, status: [], usedUndying: false, usedRebirth: false, usedAmbush: false, biomassGained: 0 }; });
+    const targetKills = duration === '10' ? 10 : duration === '100' ? 100 : Infinity;
+    setExps(pr => ({ ...pr, [zone]: { party: p, monster: null, kills: 0, targetKills, materials: {}, timer: 0, turn: 0, animSlime: null, slimeAnim: 'idle', monAnim: 'idle' } }));
+    setBLogs(pr => ({ ...pr, [zone]: [{ m: `Entering ${ZONES[zone].name}... (Target: ${duration === 'infinite' ? '∞' : targetKills})`, c: '#22d3ee' }] }));
     log(`Party sent to ${ZONES[zone].name}!`);
     setParty([]);
   };
 
   const stopExp = (zone) => {
+    const exp = exps[zone];
+    if (!exp) return;
+
+    // Create summary
+    const summary = {
+      zone: ZONES[zone].name,
+      kills: exp.kills,
+      materials: exp.materials,
+      survivors: exp.party.filter(p => p.hp > 0),
+      totalParty: exp.party.length,
+      biomassDistributed: exp.party.reduce((sum, p) => sum + (p.biomassGained || 0), 0),
+    };
+
+    // Add materials to inventory if any slimes survived
+    if (summary.survivors.length > 0) {
+      setMats(m => {
+        const n = { ...m };
+        Object.entries(exp.materials).forEach(([mat, count]) => {
+          n[mat] = (n[mat] || 0) + count;
+        });
+        return n;
+      });
+
+      // Distribute biomass to surviving slimes
+      setSlimes(slimes => slimes.map(sl => {
+        const partyMember = exp.party.find(p => p.id === sl.id);
+        if (partyMember && partyMember.hp > 0) {
+          return { ...sl, biomass: (sl.biomass || 0) + (partyMember.biomassGained || 0) };
+        }
+        return sl;
+      }));
+
+      log(`Recalled from ${ZONES[zone].name}! Materials secured.`);
+    } else {
+      log(`Party wiped in ${ZONES[zone].name}! Materials lost.`);
+    }
+
+    setExpSummary(summary);
     setExps(p => { const n = { ...p }; delete n[zone]; return n; });
     setBLogs(p => { const n = { ...p }; delete n[zone]; return n; });
-    log(`Recalled from ${ZONES[zone].name}`);
   };
 
   const startRes = (id) => {
@@ -1063,17 +1119,18 @@ export default function HiveQueenGame() {
                 if (mon.hp <= 0) return;
                 const sl = slimes.find(s => s.id === p.id);
                 if (!sl) return;
-                let dmg = sl.stats.firmness + sl.level * 1.2;
+                const stats = getSlimeStats(sl);
+                let dmg = stats.firmness;
                 let crit = false;
                 if (sl.pass?.includes('ferocity')) dmg *= 1.15;
-                const critCh = 0.05 + sl.stats.slipperiness * 0.01 + (sl.pass?.includes('trickster') ? 0.08 : 0);
+                const critCh = 0.05 + stats.slipperiness * 0.01 + (sl.pass?.includes('trickster') ? 0.08 : 0);
                 if (sl.pass?.includes('ambush') && !p.usedAmbush) { crit = true; p.usedAmbush = true; }
                 else if (Math.random() < critCh) crit = true;
                 if (crit) dmg *= (1.5 + (sl.pass?.includes('crushing') ? 0.3 : 0));
                 dmg = Math.floor(dmg * (1 + bon.spd * 0.1));
                 mon.hp -= dmg;
-                if (sl.pass?.includes('fireBreath') && !(mon.status || []).some(s => s.type === 'burn') && Math.random() < 0.3 + sl.stats.viscosity * 0.02) { mon.status.push({ type: 'burn', dur: STATUS_EFFECTS.burn.dur }); bLog(zone, `${sl.name} burns ${md.name}! 🔥`, '#f97316'); }
-                if (sl.pass?.includes('poison') && !(mon.status || []).some(s => s.type === 'poison') && Math.random() < 0.35 + sl.stats.viscosity * 0.02) { mon.status.push({ type: 'poison', dur: STATUS_EFFECTS.poison.dur }); bLog(zone, `${sl.name} poisons ${md.name}! 🧪`, '#22c55e'); }
+                if (sl.pass?.includes('fireBreath') && !(mon.status || []).some(s => s.type === 'burn') && Math.random() < 0.3 + stats.viscosity * 0.02) { mon.status.push({ type: 'burn', dur: STATUS_EFFECTS.burn.dur }); bLog(zone, `${sl.name} burns ${md.name}! 🔥`, '#f97316'); }
+                if (sl.pass?.includes('poison') && !(mon.status || []).some(s => s.type === 'poison') && Math.random() < 0.35 + stats.viscosity * 0.02) { mon.status.push({ type: 'poison', dur: STATUS_EFFECTS.poison.dur }); bLog(zone, `${sl.name} poisons ${md.name}! 🧪`, '#22c55e'); }
                 if (idx === 0) { exp.animSlime = p.id; exp.slimeAnim = 'attack'; exp.monAnim = 'hurt'; }
                 bLog(zone, `${sl.name} ${crit ? '💥CRITS' : 'hits'} for ${Math.floor(dmg)}!`, crit ? '#f59e0b' : '#4ade80');
               });
@@ -1081,23 +1138,46 @@ export default function HiveQueenGame() {
                 exp.kills++;
                 let bioG = Math.floor(md.biomass * bon.bio);
                 living.forEach(p => { const sl = slimes.find(s => s.id === p.id); if (sl?.pass?.includes('manaLeech')) bioG = Math.floor(bioG * 1.1); });
-                setBio(b => b + bioG);
-                bLog(zone, `${md.name} defeated! +${bioG}🧬`, '#4ade80');
+
+                // Distribute biomass evenly among living party members
+                const bioPerSlime = bioG / living.length;
+                living.forEach(p => {
+                  p.biomassGained = (p.biomassGained || 0) + bioPerSlime;
+                });
+                bLog(zone, `${md.name} defeated! +${Math.floor(bioPerSlime)}🧬 each`, '#4ade80');
+
                 // Track defeated monsters for compendium
                 setDefeatedMonsters(dm => dm.includes(mon.type) ? dm : [...dm, mon.type]);
-                // Material drops (50% chance)
-                if (Math.random() < 0.5) { const mat = md.mats[Math.floor(Math.random() * md.mats.length)]; setMats(m => ({ ...m, [mat]: (m[mat] || 0) + 1 })); bLog(zone, `Found ${mat}! 📦`, '#f59e0b'); log(`Found ${mat}!`); }
-                // Trait drops (existing drop rate)
-                if (Math.random() < md.drop) { setTraits(t => ({ ...t, [md.trait]: (t[md.trait] || 0) + 1 })); bLog(zone, `✨ RARE: ${TRAIT_LIBRARY[md.trait].name}! ✨`, '#a855f7'); log(`Got ${TRAIT_LIBRARY[md.trait].name}!`); }
-                setSlimes(s => s.map(sl => { if (living.some(p => p.id === sl.id)) { let xp = sl.xp + md.diff * 3 + 2, lv = sl.level; while (xp >= lv * 50) { xp -= lv * 50; lv++; bLog(zone, `${sl.name} → Lv.${lv}! ⭐`, '#22d3ee'); log(`${sl.name} leveled up!`); } return { ...sl, xp, level: lv }; } return sl; }));
+
+                // Material drops (50% chance) - add to expedition materials
+                if (Math.random() < 0.5) {
+                  const mat = md.mats[Math.floor(Math.random() * md.mats.length)];
+                  exp.materials[mat] = (exp.materials[mat] || 0) + 1;
+                  bLog(zone, `Found ${mat}! 📦`, '#f59e0b');
+                }
+
+                // Trait drops (existing drop rate) - add immediately
+                if (Math.random() < md.drop) {
+                  setTraits(t => ({ ...t, [md.trait]: (t[md.trait] || 0) + 1 }));
+                  bLog(zone, `✨ RARE: ${TRAIT_LIBRARY[md.trait].name}! ✨`, '#a855f7');
+                  log(`Got ${TRAIT_LIBRARY[md.trait].name}!`);
+                }
+
                 exp.monster = null;
+
+                // Check if target kills reached
+                if (exp.kills >= exp.targetKills) {
+                  bLog(zone, `Target reached! Auto-recalling party...`, '#4ade80');
+                  setTimeout(() => stopExp(zone), 1000);
+                }
               }
             } else {
               if (mon.hp > 0) {
                 const tgt = living[Math.floor(Math.random() * living.length)];
                 const tgtSl = slimes.find(s => s.id === tgt.id);
+                const tgtStats = tgtSl ? getSlimeStats(tgtSl) : { slipperiness: 0 };
                 let inc = md.dmg;
-                const dodgeCh = 0.05 + (tgtSl?.stats.slipperiness || 0) * 0.015 + (tgtSl?.pass?.includes('echolocation') ? 0.12 : 0) + (tgtSl?.pass?.includes('trickster') ? 0.08 : 0);
+                const dodgeCh = 0.05 + (tgtStats.slipperiness || 0) * 0.015 + (tgtSl?.pass?.includes('echolocation') ? 0.12 : 0) + (tgtSl?.pass?.includes('trickster') ? 0.08 : 0);
                 if (Math.random() < dodgeCh) { bLog(zone, `${tgtSl?.name} dodges! 💨`, '#22d3ee'); }
                 else {
                   if (tgtSl?.pass?.includes('armored')) inc *= 0.8;
@@ -1174,14 +1254,15 @@ export default function HiveQueenGame() {
           const sl = slimes.find(s => s.id === ds.id);
           if (!sl) return;
 
-          const attackSpeed = 1 + (sl.stats.slipperiness || 0) * 0.1;
+          const stats = getSlimeStats(sl);
+          const attackSpeed = 1 + (stats.slipperiness || 0) * 0.1;
           ds.attackTimer = (ds.attackTimer || 0) + dt;
 
           if (ds.attackTimer >= 1 / attackSpeed) {
             ds.attackTimer = 0;
             // Attack the first human
             if (next.humans.length > 0) {
-              const damage = (sl.stats.firmness || 5) + sl.level * 1.2;
+              const damage = stats.firmness || 5;
               next.totalDamage += damage;
 
               // Apply damage to first human
