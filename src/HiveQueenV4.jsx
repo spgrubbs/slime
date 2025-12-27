@@ -118,6 +118,7 @@ const getDefaultState = () => ({
   research: [],
   activeRes: null,
   lastTowerDefense: 0,
+  defeatedMonsters: [],
   lastSave: Date.now(),
 });
 
@@ -522,10 +523,10 @@ const SlimeDetail = ({ slime, expState }) => {
   );
 };
 
-const Compendium = ({ queen }) => {
+const Compendium = ({ queen, defeatedMonsters }) => {
   const [zone, setZone] = useState('forest');
   const z = ZONES[zone];
-  
+
   return (
     <div>
       <div style={{ display: 'flex', gap: 6, marginBottom: 15, flexWrap: 'wrap' }}>
@@ -544,6 +545,17 @@ const Compendium = ({ queen }) => {
       {z.monsters.map(mid => {
         const m = MONSTER_TYPES[mid];
         const tr = TRAIT_LIBRARY[m.trait];
+        const defeated = defeatedMonsters.includes(mid);
+
+        if (!defeated) {
+          return (
+            <div key={mid} style={{ background: 'rgba(0,0,0,0.3)', borderRadius: 10, padding: 15, marginBottom: 10, textAlign: 'center', opacity: 0.5 }}>
+              <div style={{ fontSize: 40 }}>❓</div>
+              <div style={{ fontSize: 14, fontStyle: 'italic', marginTop: 8 }}>Defeat this monster to unlock its entry</div>
+            </div>
+          );
+        }
+
         return (
           <div key={mid} style={{ background: 'rgba(0,0,0,0.3)', borderRadius: 10, padding: 15, marginBottom: 10 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 15, marginBottom: 10 }}>
@@ -565,7 +577,7 @@ const Compendium = ({ queen }) => {
             <div>
               <div style={{ fontSize: 10, opacity: 0.6, marginBottom: 4 }}>Drops</div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                {m.mats.map((mat,i) => <span key={i} style={{ fontSize: 10, padding: '3px 8px', background: 'rgba(245,158,11,0.2)', borderRadius: 4 }}>📦 {mat}</span>)}
+                {m.mats.map((mat,i) => <span key={i} style={{ fontSize: 10, padding: '3px 8px', background: 'rgba(245,158,11,0.2)', borderRadius: 4 }}>📦 {mat} <span style={{ opacity: 0.6 }}>(50%)</span></span>)}
                 <span style={{ fontSize: 10, padding: '3px 8px', background: `${tr.color}33`, borderRadius: 4 }}>{tr.icon} {tr.name} <span style={{ opacity: 0.6 }}>({(m.drop*100).toFixed(1)}%)</span></span>
               </div>
             </div>
@@ -743,7 +755,8 @@ export default function HiveQueenGame() {
   const [lastSave, setLastSave] = useState(null);
   const [lastTowerDefense, setLastTowerDefense] = useState(0);
   const [towerDefense, setTowerDefense] = useState(null);
-  
+  const [defeatedMonsters, setDefeatedMonsters] = useState([]);
+
   const [tab, setTab] = useState(0);
   const [menu, setMenu] = useState(false);
   const [dev, setDev] = useState(false);
@@ -793,6 +806,7 @@ export default function HiveQueenGame() {
         setQueen(saved.queen);
         setBuilds(saved.builds || {});
         setLastTowerDefense(saved.lastTowerDefense || 0);
+        setDefeatedMonsters(saved.defeatedMonsters || []);
         setWelcomeBack(offline);
       } else {
         // Just load normally
@@ -806,6 +820,7 @@ export default function HiveQueenGame() {
         setResearch(saved.research || []);
         setActiveRes(saved.activeRes);
         setLastTowerDefense(saved.lastTowerDefense || 0);
+        setDefeatedMonsters(saved.defeatedMonsters || []);
       }
       setLastSave(saved.lastSave);
       setLogs([{ t: new Date().toLocaleTimeString(), m: '💾 Game loaded!' }]);
@@ -817,16 +832,16 @@ export default function HiveQueenGame() {
   useEffect(() => {
     if (!gameLoaded) return;
     const interval = setInterval(() => {
-      const state = { queen, bio, mats, traits, slimes, exps, builds, research, activeRes, lastTowerDefense, lastSave: Date.now() };
+      const state = { queen, bio, mats, traits, slimes, exps, builds, research, activeRes, lastTowerDefense, defeatedMonsters, lastSave: Date.now() };
       if (saveGame(state)) {
         setLastSave(Date.now());
       }
     }, AUTO_SAVE_INTERVAL);
     return () => clearInterval(interval);
-  }, [gameLoaded, queen, bio, mats, traits, slimes, exps, builds, research, activeRes, lastTowerDefense]);
+  }, [gameLoaded, queen, bio, mats, traits, slimes, exps, builds, research, activeRes, lastTowerDefense, defeatedMonsters]);
 
   const manualSave = () => {
-    const state = { queen, bio, mats, traits, slimes, exps, builds, research, activeRes, lastTowerDefense, lastSave: Date.now() };
+    const state = { queen, bio, mats, traits, slimes, exps, builds, research, activeRes, lastTowerDefense, defeatedMonsters, lastSave: Date.now() };
     if (saveGame(state)) {
       setLastSave(Date.now());
       log('💾 Game saved!');
@@ -848,6 +863,7 @@ export default function HiveQueenGame() {
     setLastSave(null);
     setLastTowerDefense(0);
     setTowerDefense(null);
+    setDefeatedMonsters([]);
     log('🗑️ Save deleted. Starting fresh!');
   };
 
@@ -949,33 +965,51 @@ export default function HiveQueenGame() {
     log('🎯 Tower Defense battle started!');
   };
 
-  const endTowerDefense = (victory) => {
+  const endTowerDefense = (victory, summary) => {
+    let rewards = { biomass: 0, materials: {} };
+    let losses = { biomass: 0 };
+
     if (victory) {
-      // Give rewards
-      let totalBio = 0;
-      let totalMats = {};
+      // Calculate rewards
       TD_WAVES.forEach(w => {
-        totalBio += w.reward.biomass;
+        rewards.biomass += w.reward.biomass;
         Object.entries(w.reward.mats).forEach(([m, c]) => {
-          totalMats[m] = (totalMats[m] || 0) + c;
+          rewards.materials[m] = (rewards.materials[m] || 0) + c;
         });
       });
-      setBio(p => p + totalBio);
+      setBio(p => p + rewards.biomass);
       setMats(p => {
         const n = { ...p };
-        Object.entries(totalMats).forEach(([m, c]) => {
+        Object.entries(rewards.materials).forEach(([m, c]) => {
           n[m] = (n[m] || 0) + c;
         });
         return n;
       });
-      log(`🎉 Victory! +${totalBio} biomass, materials gained!`);
+      log(`🎉 Victory! +${rewards.biomass} biomass, materials gained!`);
     } else {
       // Lose half biomass
-      const loss = Math.floor(bio / 2);
-      setBio(p => Math.max(0, p - loss));
-      log(`💀 Defeat! Lost ${loss} biomass!`);
+      losses.biomass = Math.floor(bio / 2);
+      setBio(p => Math.max(0, p - losses.biomass));
+      log(`💀 Defeat! Lost ${losses.biomass} biomass!`);
     }
+
+    // Update tower defense with summary but don't clear it yet
+    setTowerDefense(prev => ({
+      ...prev,
+      phase: victory ? 'victory' : 'defeat',
+      summary: {
+        victory,
+        totalDamage: summary?.totalDamage || 0,
+        humansDefeated: summary?.humansDefeated || 0,
+        rewards,
+        losses,
+      }
+    }));
+
     setLastTowerDefense(Date.now());
+  };
+
+  const closeTowerDefense = () => {
     setTowerDefense(null);
   };
 
@@ -1049,7 +1083,11 @@ export default function HiveQueenGame() {
                 living.forEach(p => { const sl = slimes.find(s => s.id === p.id); if (sl?.pass?.includes('manaLeech')) bioG = Math.floor(bioG * 1.1); });
                 setBio(b => b + bioG);
                 bLog(zone, `${md.name} defeated! +${bioG}🧬`, '#4ade80');
-                if (Math.random() < 0.2) { const mat = md.mats[Math.floor(Math.random() * md.mats.length)]; setMats(m => ({ ...m, [mat]: (m[mat] || 0) + 1 })); bLog(zone, `Found ${mat}! 📦`, '#f59e0b'); log(`Found ${mat}!`); }
+                // Track defeated monsters for compendium
+                setDefeatedMonsters(dm => dm.includes(mon.type) ? dm : [...dm, mon.type]);
+                // Material drops (50% chance)
+                if (Math.random() < 0.5) { const mat = md.mats[Math.floor(Math.random() * md.mats.length)]; setMats(m => ({ ...m, [mat]: (m[mat] || 0) + 1 })); bLog(zone, `Found ${mat}! 📦`, '#f59e0b'); log(`Found ${mat}!`); }
+                // Trait drops (existing drop rate)
                 if (Math.random() < md.drop) { setTraits(t => ({ ...t, [md.trait]: (t[md.trait] || 0) + 1 })); bLog(zone, `✨ RARE: ${TRAIT_LIBRARY[md.trait].name}! ✨`, '#a855f7'); log(`Got ${TRAIT_LIBRARY[md.trait].name}!`); }
                 setSlimes(s => s.map(sl => { if (living.some(p => p.id === sl.id)) { let xp = sl.xp + md.diff * 3 + 2, lv = sl.level; while (xp >= lv * 50) { xp -= lv * 50; lv++; bLog(zone, `${sl.name} → Lv.${lv}! ⭐`, '#22d3ee'); log(`${sl.name} leveled up!`); } return { ...sl, xp, level: lv }; } return sl; }));
                 exp.monster = null;
@@ -1095,7 +1133,7 @@ export default function HiveQueenGame() {
       }
     }, TICK_RATE);
     return () => clearInterval(iv);
-  }, [gameLoaded, lastTick, speed, slimes, bon, activeRes, log, bLog]);
+  }, [gameLoaded, lastTick, speed, slimes, bon, activeRes, log, bLog, setDefeatedMonsters]);
 
   // Tower Defense Combat Loop
   useEffect(() => {
@@ -1109,46 +1147,65 @@ export default function HiveQueenGame() {
         const dt = (TD_TICK_SPEED / 1000) * speed;
         next.battleTimer += dt;
 
-        // Move humans
-        next.humans = next.humans.map(h => ({
-          ...h,
-          position: h.position + h.speed * dt * 10,
-        }));
+        // Track stats for summary
+        if (!next.totalDamage) next.totalDamage = 0;
+        if (!next.humansDefeated) next.humansDefeated = 0;
+
+        // Move humans and apply damage
+        let humansToRemove = [];
+        next.humans = next.humans.map(h => {
+          const updated = {
+            ...h,
+            position: h.position + h.speed * dt * 10,
+          };
+          return updated;
+        });
 
         // Check if any human reached the end (position >= 100)
         const reachedEnd = next.humans.some(h => h.position >= 100);
         if (reachedEnd) {
           next.phase = 'defeat';
-          setTimeout(() => endTowerDefense(false), 100);
+          setTimeout(() => endTowerDefense(false, { totalDamage: next.totalDamage, humansDefeated: next.humansDefeated }), 100);
           return next;
         }
 
-        // Slimes attack
-        next.deployedSlimes = next.deployedSlimes.map(ds => {
+        // Slimes attack - apply damage to humans
+        next.deployedSlimes.forEach(ds => {
           const sl = slimes.find(s => s.id === ds.id);
-          if (!sl) return ds;
+          if (!sl) return;
 
-          const attackSpeed = 1 + (sl.stats.slipperiness || 0) * 0.1; // Attack every (1 / attackSpeed) seconds
-          ds.attackTimer += dt;
+          const attackSpeed = 1 + (sl.stats.slipperiness || 0) * 0.1;
+          ds.attackTimer = (ds.attackTimer || 0) + dt;
 
           if (ds.attackTimer >= 1 / attackSpeed) {
             ds.attackTimer = 0;
-            // Find a target
+            // Attack the first human
             if (next.humans.length > 0) {
-              const target = next.humans[0]; // Attack first human
               const damage = (sl.stats.firmness || 5) + sl.level * 1.2;
-              target.hp -= damage;
-              next.battleLog = [...next.battleLog.slice(-20), `${sl.name} attacks for ${Math.floor(damage)} damage!`];
+              next.totalDamage += damage;
 
-              if (target.hp <= 0) {
-                next.battleLog = [...next.battleLog.slice(-20), `Human warrior defeated!`];
-                next.humans = next.humans.filter(h => h.id !== target.id);
-              }
+              // Apply damage to first human
+              next.humans = next.humans.map((h, idx) => {
+                if (idx === 0) {
+                  const newHp = h.hp - damage;
+                  next.battleLog = [...next.battleLog.slice(-20), `${sl.name} attacks for ${Math.floor(damage)} damage!`];
+
+                  if (newHp <= 0) {
+                    next.battleLog = [...next.battleLog.slice(-20), `Human warrior defeated!`];
+                    next.humansDefeated++;
+                    humansToRemove.push(h.id);
+                  }
+
+                  return { ...h, hp: newHp };
+                }
+                return h;
+              });
             }
           }
-
-          return ds;
         });
+
+        // Remove defeated humans
+        next.humans = next.humans.filter(h => !humansToRemove.includes(h.id));
 
         // Check if all humans defeated
         if (next.humans.length === 0) {
@@ -1173,7 +1230,7 @@ export default function HiveQueenGame() {
           } else {
             // Victory!
             next.phase = 'victory';
-            setTimeout(() => endTowerDefense(true), 100);
+            setTimeout(() => endTowerDefense(true, { totalDamage: next.totalDamage, humansDefeated: next.humansDefeated }), 100);
           }
         }
 
@@ -1417,11 +1474,61 @@ export default function HiveQueenGame() {
                   ))}
                 </div>
 
-                {(towerDefense.phase === 'victory' || towerDefense.phase === 'defeat') && (
-                  <div style={{ marginTop: 15, padding: 15, background: towerDefense.phase === 'victory' ? 'rgba(74,222,128,0.2)' : 'rgba(239,68,68,0.2)', borderRadius: 10, textAlign: 'center' }}>
-                    <div style={{ fontSize: 18, fontWeight: 'bold', marginBottom: 8 }}>
+                {(towerDefense.phase === 'victory' || towerDefense.phase === 'defeat') && towerDefense.summary && (
+                  <div style={{ marginTop: 15, padding: 20, background: towerDefense.phase === 'victory' ? 'rgba(74,222,128,0.2)' : 'rgba(239,68,68,0.2)', borderRadius: 10 }}>
+                    <div style={{ fontSize: 20, fontWeight: 'bold', marginBottom: 15, textAlign: 'center' }}>
                       {towerDefense.phase === 'victory' ? '🎉 Victory!' : '💀 Defeat!'}
                     </div>
+
+                    {/* Battle Statistics */}
+                    <div style={{ background: 'rgba(0,0,0,0.3)', padding: 15, borderRadius: 8, marginBottom: 15 }}>
+                      <div style={{ fontSize: 14, fontWeight: 'bold', marginBottom: 10 }}>📊 Battle Statistics</div>
+                      <div style={{ display: 'grid', gap: 8, fontSize: 12 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <span>Total Damage Dealt:</span>
+                          <strong style={{ color: '#f59e0b' }}>{Math.floor(towerDefense.summary.totalDamage)}</strong>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <span>Humans Defeated:</span>
+                          <strong style={{ color: '#ef4444' }}>{towerDefense.summary.humansDefeated}</strong>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <span>Waves Completed:</span>
+                          <strong style={{ color: '#22d3ee' }}>{towerDefense.phase === 'victory' ? '3/3' : `${towerDefense.currentWave}/3`}</strong>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Rewards/Losses */}
+                    {towerDefense.summary.victory ? (
+                      <div style={{ background: 'rgba(74,222,128,0.2)', padding: 15, borderRadius: 8, marginBottom: 15 }}>
+                        <div style={{ fontSize: 14, fontWeight: 'bold', marginBottom: 10, color: '#4ade80' }}>🎁 Rewards Gained</div>
+                        <div style={{ display: 'grid', gap: 8, fontSize: 12 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                            <span>Biomass:</span>
+                            <strong style={{ color: '#4ade80' }}>+{towerDefense.summary.rewards.biomass}</strong>
+                          </div>
+                          {Object.entries(towerDefense.summary.rewards.materials).map(([mat, count]) => (
+                            <div key={mat} style={{ display: 'flex', justifyContent: 'space-between' }}>
+                              <span>{mat}:</span>
+                              <strong style={{ color: '#4ade80' }}>+{count}</strong>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <div style={{ background: 'rgba(239,68,68,0.2)', padding: 15, borderRadius: 8, marginBottom: 15 }}>
+                        <div style={{ fontSize: 14, fontWeight: 'bold', marginBottom: 10, color: '#ef4444' }}>💔 Resources Lost</div>
+                        <div style={{ display: 'grid', gap: 8, fontSize: 12 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                            <span>Biomass Lost:</span>
+                            <strong style={{ color: '#ef4444' }}>-{towerDefense.summary.losses.biomass}</strong>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    <button onClick={closeTowerDefense} style={{ width: '100%', padding: 12, background: 'linear-gradient(135deg, #ec4899, #a855f7)', border: 'none', borderRadius: 8, color: '#fff', fontWeight: 'bold', cursor: 'pointer' }}>Continue</button>
                   </div>
                 )}
               </div>
@@ -1451,7 +1558,7 @@ export default function HiveQueenGame() {
           </div>
         )}
 
-        {tab === 5 && <Compendium queen={queen} />}
+        {tab === 5 && <Compendium queen={queen} defeatedMonsters={defeatedMonsters} />}
 
         {tab === 6 && (
           <div>
