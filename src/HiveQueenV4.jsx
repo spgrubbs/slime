@@ -4,7 +4,7 @@ const TICK_RATE = 100;
 const BASE_SLIME_COST = 10;
 const TRAIT_MAGICKA_COST = 3;
 const BASE_MAGICKA = 50;
-const BATTLE_TICK_SPEED = 2500;
+const BATTLE_TICK_SPEED = 1000;
 const AUTO_SAVE_INTERVAL = 30000;
 const SAVE_KEY = 'hive_queen_save_v1';
 
@@ -68,9 +68,15 @@ const ZONES = {
 
 const BUILDINGS = {
   slimePit: { name: 'Slime Pit', icon: '🕳️', desc: '+10 max Magicka', cost: { 'Wolf Pelt': 5, 'Crude Iron': 3 } },
-  researchLab: { name: 'Research Chamber', icon: '🔬', desc: '+25% research speed', cost: { 'Mana Crystal': 3, 'Ancient Stone': 5 } },
+  researchLab: { name: 'Research Chamber', icon: '🔬', desc: '+25% build speed', cost: { 'Mana Crystal': 3, 'Ancient Stone': 5 } },
   hatchery: { name: 'Royal Hatchery', icon: '🥚', desc: 'Unlock Elite Slimes', cost: { 'Dragon Scale': 1, 'Soul Fragment': 10 }, max: 1 },
   defenseSlot: { name: 'Defense Slot', icon: '🎯', desc: '+1 Tower Defense slot', cost: { 'Human Bone': 5, 'Iron Sword': 3 }, max: 6 },
+  efficientDigestion: { name: 'Biomass Pools', icon: '🧪', desc: '+20% biomass gain', cost: 50, time: 60, max: 1 },
+  enhancedAbsorption: { name: 'Absorption Nexus', icon: '🔮', desc: '+25% reabsorb XP', cost: 100, time: 120, max: 1 },
+  slimeVitality: { name: 'Vitality Chamber', icon: '💗', desc: '+15% max HP', cost: 150, time: 180, max: 1 },
+  swiftSlimes: { name: 'Training Arena', icon: '⚔️', desc: '+20% attack speed', cost: 200, time: 240, max: 1 },
+  extendedExpedition: { name: 'Expedition Depot', icon: '🗺️', desc: 'Unlock 100-enemy expeditions', cost: 250, time: 300, max: 1 },
+  infiniteExpedition: { name: 'Deep Exploration Hub', icon: '🌌', desc: 'Unlock infinite expeditions', cost: 500, time: 600, max: 1 },
 };
 
 const RESEARCH = {
@@ -96,6 +102,19 @@ const TD_WAVES = [
 const NAME_PRE = ['Glo', 'Spl', 'Oo', 'Squ', 'Blo', 'Jel', 'Wob', 'Bou', 'Dri', 'Sli', 'Goo', 'Muc', 'Pud', 'Glu', 'Flu', 'Gel', 'Mor', 'Gur', 'Bub'];
 const NAME_SUF = ['bby', 'osh', 'ize', 'orp', 'oop', 'elly', 'ubble', 'urt', 'ime', 'ick', 'ooey', 'uck', 'udge', 'op', 'ash', 'urp', 'oze', 'ish'];
 const NAME_TIT = ['', '', '', '', ' the Brave', ' the Squishy', ' the Mighty', ' the Swift', ' the Wise', ' the Gooey', ' the Bouncy', ' the Firm'];
+
+const EXPLORATION_EVENTS = [
+  { msg: 'The slimes discover a hidden grove...', type: 'flavor' },
+  { msg: 'Strange sounds echo in the distance.', type: 'flavor' },
+  { msg: 'The party finds ancient markings on a tree.', type: 'flavor' },
+  { msg: 'A gentle breeze carries unfamiliar scents.', type: 'flavor' },
+  { msg: 'The slimes spot movement in the shadows.', type: 'flavor' },
+  { msg: 'Mysterious lights flicker ahead.', type: 'flavor' },
+  { msg: 'The path winds deeper into unknown territory.', type: 'flavor' },
+  { msg: 'Rustling in the undergrowth keeps the party alert.', type: 'flavor' },
+  { msg: 'Found a small biomass deposit!', type: 'biomass', amount: 3 },
+  { msg: 'Discovered a cache of materials!', type: 'material' },
+];
 
 const genName = () => NAME_PRE[Math.floor(Math.random() * NAME_PRE.length)] + NAME_SUF[Math.floor(Math.random() * NAME_SUF.length)] + NAME_TIT[Math.floor(Math.random() * NAME_TIT.length)];
 const genId = () => Math.random().toString(36).substr(2, 9);
@@ -368,6 +387,21 @@ const BattleArena = ({ exp, slimes, zone, logs }) => {
           )}
         </div>
       </div>
+      {exp.monster && (
+        <div style={{ padding: '0 12px 8px', background: 'rgba(0,0,0,0.3)' }}>
+          <div style={{ fontSize: 10, opacity: 0.6, marginBottom: 4 }}>Next action</div>
+          <div style={{ height: 6, background: 'rgba(0,0,0,0.5)', borderRadius: 3, overflow: 'hidden' }}>
+            <div
+              style={{
+                width: `${(exp.timer / (BATTLE_TICK_SPEED / 1)) * 100}%`,
+                height: '100%',
+                background: 'linear-gradient(90deg, #22d3ee, #4ade80)',
+                transition: 'width 0.1s linear'
+              }}
+            />
+          </div>
+        </div>
+      )}
       <div ref={logRef} style={{ height: 100, overflowY: 'auto', background: 'rgba(0,0,0,0.5)', padding: '8px 12px', fontSize: 11 }}>
         {(logs || []).slice(-20).map((l,i) => (
           <div key={i} style={{ padding: '3px 0', color: l.c || '#888' }}>{l.m}</div>
@@ -783,9 +817,7 @@ export default function HiveQueenGame() {
     { id: 3, icon: '🎯', label: 'Defense' },
     { id: 4, icon: '📦', label: 'Inventory' },
     { id: 5, icon: '📖', label: 'Compendium' },
-    { id: 6, icon: '🔬', label: 'Research' },
-    { id: 7, icon: '🏗️', label: 'Buildings' },
-    { id: 8, icon: '⚙️', label: 'Settings' },
+    { id: 6, icon: '⚙️', label: 'Settings' },
   ];
 
   const maxMag = BASE_MAGICKA + (builds.slimePit || 0) * 10;
@@ -960,7 +992,7 @@ export default function HiveQueenGame() {
     if (exps[zone] || !party.length) return;
     const p = party.map(id => { const sl = slimes.find(s => s.id === id); return { id, hp: sl.maxHp, maxHp: sl.maxHp, status: [], usedUndying: false, usedRebirth: false, usedAmbush: false, biomassGained: 0 }; });
     const targetKills = duration === '10' ? 10 : duration === '100' ? 100 : Infinity;
-    setExps(pr => ({ ...pr, [zone]: { party: p, monster: null, kills: 0, targetKills, materials: {}, timer: 0, turn: 0, animSlime: null, slimeAnim: 'idle', monAnim: 'idle' } }));
+    setExps(pr => ({ ...pr, [zone]: { party: p, monster: null, kills: 0, targetKills, materials: {}, timer: 0, turn: 0, currentAttacker: 0, exploring: false, animSlime: null, slimeAnim: 'idle', monAnim: 'idle' } }));
     setBLogs(pr => ({ ...pr, [zone]: [{ m: `Entering ${ZONES[zone].name}... (Target: ${duration === 'infinite' ? '∞' : targetKills})`, c: '#22d3ee' }] }));
     log(`Party sent to ${ZONES[zone].name}!`);
     setParty([]);
@@ -1119,7 +1151,32 @@ export default function HiveQueenGame() {
         Object.entries(next).forEach(([zone, exp]) => {
           const zd = ZONES[zone];
           // Only spawn new monsters if target not yet reached
-          if (!exp.monster && exp.kills < exp.targetKills) {
+          if (!exp.monster && exp.kills < exp.targetKills && !exp.exploring) {
+            // 30% chance to trigger exploration event before spawning monster
+            if (Math.random() < 0.3) {
+              exp.exploring = true;
+              const event = EXPLORATION_EVENTS[Math.floor(Math.random() * EXPLORATION_EVENTS.length)];
+              bLog(zone, event.msg, '#a855f7');
+
+              if (event.type === 'biomass') {
+                setBio(b => b + event.amount);
+              } else if (event.type === 'material') {
+                const zoneMats = zd.monsters.map(m => MONSTER_TYPES[m].mats).flat();
+                const mat = zoneMats[Math.floor(Math.random() * zoneMats.length)];
+                exp.materials[mat] = (exp.materials[mat] || 0) + 1;
+                bLog(zone, `Found ${mat}!`, '#f59e0b');
+              }
+            } else {
+              // Spawn monster immediately
+              const mt = zd.monsters[Math.floor(Math.random() * zd.monsters.length)];
+              const md = MONSTER_TYPES[mt];
+              exp.monster = { type: mt, hp: md.hp, maxHp: md.hp, dmg: md.dmg, status: [] };
+              bLog(zone, `A ${md.name} appears!`, '#22d3ee');
+              exp.turn = 0;
+            }
+          } else if (exp.exploring) {
+            // After exploration event, spawn the monster
+            exp.exploring = false;
             const mt = zd.monsters[Math.floor(Math.random() * zd.monsters.length)];
             const md = MONSTER_TYPES[mt];
             exp.monster = { type: mt, hp: md.hp, maxHp: md.hp, dmg: md.dmg, status: [] };
@@ -1149,29 +1206,34 @@ export default function HiveQueenGame() {
               });
             });
 
-            const slimeTurn = exp.turn % 2 === 0;
+            // Determine whose turn it is
+            const totalCombatants = living.length + 1; // slimes + monster
+            const currentTurn = exp.turn % totalCombatants;
+            const isMonsterTurn = currentTurn === living.length;
             exp.turn++;
 
-            if (slimeTurn) {
-              living.forEach((p, idx) => {
-                if (mon.hp <= 0) return;
+            if (!isMonsterTurn) {
+              // One slime attacks
+              const p = living[currentTurn];
+              if (mon.hp > 0 && p) {
                 const sl = slimes.find(s => s.id === p.id);
-                if (!sl) return;
-                const stats = getSlimeStats(sl);
-                let dmg = stats.firmness;
-                let crit = false;
-                if (sl.pass?.includes('ferocity')) dmg *= 1.15;
-                const critCh = 0.05 + stats.slipperiness * 0.01 + (sl.pass?.includes('trickster') ? 0.08 : 0);
-                if (sl.pass?.includes('ambush') && !p.usedAmbush) { crit = true; p.usedAmbush = true; }
-                else if (Math.random() < critCh) crit = true;
-                if (crit) dmg *= (1.5 + (sl.pass?.includes('crushing') ? 0.3 : 0));
-                dmg = Math.floor(dmg * (1 + bon.spd * 0.1));
-                mon.hp -= dmg;
-                if (sl.pass?.includes('fireBreath') && !(mon.status || []).some(s => s.type === 'burn') && Math.random() < 0.3 + stats.viscosity * 0.02) { mon.status.push({ type: 'burn', dur: STATUS_EFFECTS.burn.dur }); bLog(zone, `${sl.name} burns ${md.name}! 🔥`, '#f97316'); }
-                if (sl.pass?.includes('poison') && !(mon.status || []).some(s => s.type === 'poison') && Math.random() < 0.35 + stats.viscosity * 0.02) { mon.status.push({ type: 'poison', dur: STATUS_EFFECTS.poison.dur }); bLog(zone, `${sl.name} poisons ${md.name}! 🧪`, '#22c55e'); }
-                if (idx === 0) { exp.animSlime = p.id; exp.slimeAnim = 'attack'; exp.monAnim = 'hurt'; }
-                bLog(zone, `${sl.name} ${crit ? '💥CRITS' : 'hits'} for ${Math.floor(dmg)}!`, crit ? '#f59e0b' : '#4ade80');
-              });
+                if (sl) {
+                  const stats = getSlimeStats(sl);
+                  let dmg = stats.firmness;
+                  let crit = false;
+                  if (sl.pass?.includes('ferocity')) dmg *= 1.15;
+                  const critCh = 0.05 + stats.slipperiness * 0.01 + (sl.pass?.includes('trickster') ? 0.08 : 0);
+                  if (sl.pass?.includes('ambush') && !p.usedAmbush) { crit = true; p.usedAmbush = true; }
+                  else if (Math.random() < critCh) crit = true;
+                  if (crit) dmg *= (1.5 + (sl.pass?.includes('crushing') ? 0.3 : 0));
+                  dmg = Math.floor(dmg * (1 + bon.spd * 0.1));
+                  mon.hp -= dmg;
+                  if (sl.pass?.includes('fireBreath') && !(mon.status || []).some(s => s.type === 'burn') && Math.random() < 0.3 + stats.viscosity * 0.02) { mon.status.push({ type: 'burn', dur: STATUS_EFFECTS.burn.dur }); bLog(zone, `${sl.name} burns ${md.name}! 🔥`, '#f97316'); }
+                  if (sl.pass?.includes('poison') && !(mon.status || []).some(s => s.type === 'poison') && Math.random() < 0.35 + stats.viscosity * 0.02) { mon.status.push({ type: 'poison', dur: STATUS_EFFECTS.poison.dur }); bLog(zone, `${sl.name} poisons ${md.name}! 🧪`, '#22c55e'); }
+                  exp.animSlime = p.id; exp.slimeAnim = 'attack'; exp.monAnim = 'hurt';
+                  bLog(zone, `${sl.name} ${crit ? '💥CRITS' : 'hits'} for ${Math.floor(dmg)}!`, crit ? '#f59e0b' : '#4ade80');
+                }
+              }
               if (mon.hp <= 0) {
                 exp.kills++;
                 let bioG = Math.floor(md.biomass * bon.bio);
@@ -1442,75 +1504,71 @@ export default function HiveQueenGame() {
         
         {tab === 0 && (
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 20, padding: 20, background: 'rgba(236,72,153,0.1)', borderRadius: 12, marginBottom: 20 }}>
-              <SlimeSprite tier="royal" size={80} isQueen />
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 18, fontWeight: 'bold' }}>The Hive Queen</div>
-                <div style={{ fontSize: 14, opacity: 0.7, marginBottom: 10 }}>Level {queen.level}</div>
-                <button
-                  onClick={levelUpQueen}
-                  disabled={bio < queen.level * 100}
-                  style={{
-                    padding: '10px 20px',
-                    background: bio >= queen.level * 100 ? 'linear-gradient(135deg, #ec4899, #f472b6)' : 'rgba(100,100,100,0.5)',
-                    border: 'none',
-                    borderRadius: 8,
-                    color: '#fff',
-                    fontWeight: 'bold',
-                    cursor: bio >= queen.level * 100 ? 'pointer' : 'not-allowed',
-                    fontSize: 12
-                  }}
-                >
-                  ⬆️ Level Up ({queen.level * 100}🧬)
-                </button>
-              </div>
-            </div>
-
-            {/* Collapsible Research Section */}
-            <div style={{ background: 'rgba(0,0,0,0.2)', borderRadius: 10, marginBottom: 15, overflow: 'hidden' }}>
-              <button
-                onClick={() => setExpandedSections(s => ({ ...s, research: !s.research }))}
-                style={{
-                  width: '100%',
-                  padding: 15,
-                  background: 'rgba(34,211,238,0.1)',
-                  border: 'none',
-                  borderRadius: 0,
-                  color: '#fff',
-                  fontWeight: 'bold',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  fontSize: 14
-                }}
-              >
-                <span>🔬 Research</span>
-                <span>{expandedSections.research ? '▼' : '▶'}</span>
-              </button>
-              {expandedSections.research && (
-                <div style={{ padding: 15 }}>
-                  {activeRes && (
-                    <div style={{ background: 'rgba(34,211,238,0.1)', padding: 15, borderRadius: 10, marginBottom: 15 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}><span>{RESEARCH[activeRes.id].name}</span><span style={{ color: '#22d3ee', fontFamily: 'monospace' }}>⏱️ {getResTime()}</span></div>
-                      <div style={{ height: 12, background: 'rgba(0,0,0,0.5)', borderRadius: 6, overflow: 'hidden' }}><div style={{ width: `${activeRes.prog}%`, height: '100%', background: 'linear-gradient(90deg, #22d3ee, #4ade80)' }} /></div>
-                      <div style={{ fontSize: 11, opacity: 0.6, marginTop: 4, textAlign: 'right' }}>{Math.floor(activeRes.prog)}%</div>
-                    </div>
-                  )}
-                  <div style={{ display: 'grid', gap: 10 }}>
-                    {Object.entries(RESEARCH).map(([k, r]) => {
-                      const done = research.includes(k);
-                      return <div key={k} style={{ padding: 15, background: 'rgba(0,0,0,0.3)', borderRadius: 10, borderLeft: done ? '3px solid #4ade80' : activeRes?.id === k ? '3px solid #22d3ee' : '3px solid transparent' }}>
-                        <div style={{ fontWeight: 'bold', marginBottom: 4 }}>{r.name}</div>
-                        <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 8 }}>{r.desc}</div>
-                        <div style={{ fontSize: 11, opacity: 0.5, marginBottom: 8 }}>Time: {Math.floor(r.time / 60)}:{(r.time % 60).toString().padStart(2, '0')}</div>
-                        {!done && !activeRes && <button onClick={() => startRes(k)} disabled={bio < r.cost} style={{ padding: '8px 16px', background: bio >= r.cost ? '#4ade80' : 'rgba(100,100,100,0.5)', border: 'none', borderRadius: 6, color: '#1a1a2e', fontWeight: 'bold', cursor: bio >= r.cost ? 'pointer' : 'not-allowed' }}>Research ({r.cost}🧬)</button>}
-                        {done && <span style={{ color: '#4ade80' }}>✓ Complete</span>}
-                      </div>;
-                    })}
-                  </div>
+            <div style={{ background: 'rgba(236,72,153,0.1)', borderRadius: 12, marginBottom: 20, padding: 20 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 20, marginBottom: 15 }}>
+                <SlimeSprite tier="royal" size={80} isQueen />
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 18, fontWeight: 'bold' }}>The Hive Queen</div>
+                  <div style={{ fontSize: 14, opacity: 0.7, marginBottom: 10 }}>Level {queen.level}</div>
+                  <button
+                    onClick={levelUpQueen}
+                    disabled={bio < queen.level * 100}
+                    style={{
+                      padding: '10px 20px',
+                      background: bio >= queen.level * 100 ? 'linear-gradient(135deg, #ec4899, #f472b6)' : 'rgba(100,100,100,0.5)',
+                      border: 'none',
+                      borderRadius: 8,
+                      color: '#fff',
+                      fontWeight: 'bold',
+                      cursor: bio >= queen.level * 100 ? 'pointer' : 'not-allowed',
+                      fontSize: 12
+                    }}
+                  >
+                    ⬆️ Level Up ({queen.level * 100}🧬)
+                  </button>
                 </div>
-              )}
+              </div>
+
+              {/* Current Effects */}
+              <div style={{ background: 'rgba(0,0,0,0.2)', borderRadius: 8, padding: 12, marginBottom: 10 }}>
+                <div style={{ fontSize: 12, fontWeight: 'bold', marginBottom: 8, opacity: 0.9 }}>✨ Current Benefits</div>
+                <div style={{ display: 'grid', gap: 4, fontSize: 11 }}>
+                  {Object.entries(SLIME_TIERS).filter(([_, t]) => !t.unlockLevel || queen.level >= t.unlockLevel).map(([k, t]) => (
+                    <div key={k} style={{ color: '#4ade80' }}>• {t.name} Slimes unlocked</div>
+                  ))}
+                  {Object.entries(ZONES).filter(([_, z]) => !z.unlock || queen.level >= z.unlock).map(([k, z]) => (
+                    <div key={k} style={{ color: '#22d3ee' }}>• {z.name} accessible</div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Next Level Preview */}
+              {(() => {
+                const nextLevel = queen.level + 1;
+                const nextUnlocks = [];
+
+                Object.entries(SLIME_TIERS).forEach(([k, t]) => {
+                  if (t.unlockLevel === nextLevel) nextUnlocks.push({ type: 'slime', name: t.name + ' Slimes', icon: '🟢' });
+                });
+
+                Object.entries(ZONES).forEach(([k, z]) => {
+                  if (z.unlock === nextLevel) nextUnlocks.push({ type: 'zone', name: z.name, icon: z.icon });
+                });
+
+                if (nextUnlocks.length > 0) {
+                  return (
+                    <div style={{ background: 'rgba(236,72,153,0.2)', borderRadius: 8, padding: 12 }}>
+                      <div style={{ fontSize: 12, fontWeight: 'bold', marginBottom: 8, opacity: 0.9 }}>🔮 Next Level ({nextLevel})</div>
+                      <div style={{ display: 'grid', gap: 4, fontSize: 11 }}>
+                        {nextUnlocks.map((u, i) => (
+                          <div key={i} style={{ color: '#f472b6' }}>• {u.icon} {u.name}</div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
             </div>
 
             {/* Collapsible Buildings Section */}
@@ -1537,14 +1595,48 @@ export default function HiveQueenGame() {
               </button>
               {expandedSections.buildings && (
                 <div style={{ padding: 15 }}>
+                  {activeRes && (
+                    <div style={{ background: 'rgba(34,211,238,0.1)', padding: 15, borderRadius: 10, marginBottom: 15 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}><span>{BUILDINGS[activeRes.id].name}</span><span style={{ color: '#22d3ee', fontFamily: 'monospace' }}>⏱️ {getResTime()}</span></div>
+                      <div style={{ height: 12, background: 'rgba(0,0,0,0.5)', borderRadius: 6, overflow: 'hidden' }}><div style={{ width: `${activeRes.prog}%`, height: '100%', background: 'linear-gradient(90deg, #22d3ee, #4ade80)' }} /></div>
+                      <div style={{ fontSize: 11, opacity: 0.6, marginTop: 4, textAlign: 'right' }}>{Math.floor(activeRes.prog)}%</div>
+                    </div>
+                  )}
                   <div style={{ display: 'grid', gap: 10 }}>
                     {Object.entries(BUILDINGS).map(([k, b]) => {
-                      const can = Object.entries(b.cost).every(([m, c]) => (mats[m] || 0) >= c);
+                      const isTimeBased = typeof b.cost === 'number';
+                      const done = research.includes(k);
+                      const can = isTimeBased ? bio >= b.cost : Object.entries(b.cost).every(([m, c]) => (mats[m] || 0) >= c);
                       const max = b.max && (builds[k] || 0) >= b.max;
-                      return <div key={k} style={{ padding: 15, background: 'rgba(0,0,0,0.3)', borderRadius: 10 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}><span style={{ fontSize: 28 }}>{b.icon}</span><div><div style={{ fontWeight: 'bold' }}>{b.name}</div><div style={{ fontSize: 12, opacity: 0.7 }}>{b.desc}</div></div><span style={{ marginLeft: 'auto', color: '#4ade80', fontSize: 18 }}>x{builds[k] || 0}</span></div>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>{Object.entries(b.cost).map(([m, c]) => <span key={m} style={{ fontSize: 11, padding: '3px 8px', background: 'rgba(0,0,0,0.3)', borderRadius: 4, color: (mats[m] || 0) >= c ? '#4ade80' : '#ef4444' }}>{m}: {c}</span>)}</div>
-                        <button onClick={() => build(k)} disabled={!can || max} style={{ padding: '8px 16px', background: can && !max ? '#4ade80' : 'rgba(100,100,100,0.5)', border: 'none', borderRadius: 6, color: '#1a1a2e', fontWeight: 'bold', cursor: can && !max ? 'pointer' : 'not-allowed' }}>{max ? 'Max' : 'Build'}</button>
+                      const isBuilding = activeRes?.id === k;
+
+                      return <div key={k} style={{ padding: 15, background: 'rgba(0,0,0,0.3)', borderRadius: 10, borderLeft: done ? '3px solid #4ade80' : isBuilding ? '3px solid #22d3ee' : '3px solid transparent' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+                          <span style={{ fontSize: 28 }}>{b.icon}</span>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontWeight: 'bold' }}>{b.name}</div>
+                            <div style={{ fontSize: 12, opacity: 0.7 }}>{b.desc}</div>
+                            {isTimeBased && b.time && (
+                              <div style={{ fontSize: 11, opacity: 0.5, marginTop: 4 }}>Build time: {Math.floor(b.time / 60)}:{(b.time % 60).toString().padStart(2, '0')}</div>
+                            )}
+                          </div>
+                          {!isTimeBased && <span style={{ marginLeft: 'auto', color: '#4ade80', fontSize: 18 }}>x{builds[k] || 0}</span>}
+                        </div>
+
+                        {isTimeBased ? (
+                          <div style={{ marginTop: 8 }}>
+                            <div style={{ fontSize: 11, padding: '3px 8px', background: 'rgba(0,0,0,0.3)', borderRadius: 4, color: bio >= b.cost ? '#4ade80' : '#ef4444', display: 'inline-block', marginBottom: 8 }}>
+                              Cost: {b.cost}🧬
+                            </div>
+                            {!done && !activeRes && <button onClick={() => startRes(k)} disabled={bio < b.cost || max} style={{ padding: '8px 16px', background: can && !max ? '#4ade80' : 'rgba(100,100,100,0.5)', border: 'none', borderRadius: 6, color: '#1a1a2e', fontWeight: 'bold', cursor: can && !max ? 'pointer' : 'not-allowed', display: 'block' }}>{max ? 'Built' : `Build (${b.cost}🧬)`}</button>}
+                            {done && <span style={{ color: '#4ade80' }}>✓ Built</span>}
+                          </div>
+                        ) : (
+                          <div>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>{Object.entries(b.cost).map(([m, c]) => <span key={m} style={{ fontSize: 11, padding: '3px 8px', background: 'rgba(0,0,0,0.3)', borderRadius: 4, color: (mats[m] || 0) >= c ? '#4ade80' : '#ef4444' }}>{m}: {c}</span>)}</div>
+                            <button onClick={() => build(k)} disabled={!can || max} style={{ padding: '8px 16px', background: can && !max ? '#4ade80' : 'rgba(100,100,100,0.5)', border: 'none', borderRadius: 6, color: '#1a1a2e', fontWeight: 'bold', cursor: can && !max ? 'pointer' : 'not-allowed' }}>{max ? 'Max' : 'Build'}</button>
+                          </div>
+                        )}
                       </div>;
                     })}
                   </div>
@@ -1689,29 +1781,34 @@ export default function HiveQueenGame() {
                 <div style={{ fontSize: 12, marginBottom: 8, opacity: 0.7 }}>Expedition Duration</div>
                 <div style={{ display: 'flex', gap: 8, marginBottom: 15 }}>
                   {[
-                    { value: '10', label: '10 Enemies', icon: '⚡' },
-                    { value: '100', label: '100 Enemies', icon: '⚔️' },
-                    { value: 'infinite', label: 'Infinite', icon: '♾️' }
-                  ].map(opt => (
-                    <button
-                      key={opt.value}
-                      onClick={() => setExpDuration(opt.value)}
-                      style={{
-                        flex: 1,
-                        padding: 10,
-                        background: expDuration === opt.value ? 'rgba(34,211,238,0.3)' : 'rgba(0,0,0,0.3)',
-                        border: `2px solid ${expDuration === opt.value ? '#22d3ee' : 'transparent'}`,
-                        borderRadius: 8,
-                        color: '#fff',
-                        cursor: 'pointer',
-                        fontSize: 10,
-                        fontWeight: expDuration === opt.value ? 'bold' : 'normal'
-                      }}
-                    >
-                      <div style={{ fontSize: 16 }}>{opt.icon}</div>
-                      <div>{opt.label}</div>
-                    </button>
-                  ))}
+                    { value: '10', label: '10 Enemies', icon: '⚡', unlock: null },
+                    { value: '100', label: '100 Enemies', icon: '⚔️', unlock: 'extendedExpedition' },
+                    { value: 'infinite', label: 'Infinite', icon: '♾️', unlock: 'infiniteExpedition' }
+                  ].map(opt => {
+                    const unlocked = !opt.unlock || research.includes(opt.unlock);
+                    return (
+                      <button
+                        key={opt.value}
+                        onClick={() => unlocked && setExpDuration(opt.value)}
+                        disabled={!unlocked}
+                        style={{
+                          flex: 1,
+                          padding: 10,
+                          background: !unlocked ? 'rgba(100,100,100,0.3)' : expDuration === opt.value ? 'rgba(34,211,238,0.3)' : 'rgba(0,0,0,0.3)',
+                          border: `2px solid ${expDuration === opt.value ? '#22d3ee' : 'transparent'}`,
+                          borderRadius: 8,
+                          color: '#fff',
+                          cursor: unlocked ? 'pointer' : 'not-allowed',
+                          fontSize: 10,
+                          fontWeight: expDuration === opt.value ? 'bold' : 'normal',
+                          opacity: unlocked ? 1 : 0.5
+                        }}
+                      >
+                        <div style={{ fontSize: 16 }}>{unlocked ? opt.icon : '🔒'}</div>
+                        <div>{opt.label}</div>
+                      </button>
+                    );
+                  })}
                 </div>
                 <div style={{ fontSize: 12, marginBottom: 8, opacity: 0.7 }}>Party (max 4)</div>
                 <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
@@ -1919,45 +2016,7 @@ export default function HiveQueenGame() {
 
         {tab === 5 && <Compendium queen={queen} defeatedMonsters={defeatedMonsters} />}
 
-        {tab === 6 && (
-          <div>
-            {activeRes && (
-              <div style={{ background: 'rgba(34,211,238,0.1)', padding: 15, borderRadius: 10, marginBottom: 15 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}><span>{RESEARCH[activeRes.id].name}</span><span style={{ color: '#22d3ee', fontFamily: 'monospace' }}>⏱️ {getResTime()}</span></div>
-                <div style={{ height: 12, background: 'rgba(0,0,0,0.5)', borderRadius: 6, overflow: 'hidden' }}><div style={{ width: `${activeRes.prog}%`, height: '100%', background: 'linear-gradient(90deg, #22d3ee, #4ade80)' }} /></div>
-                <div style={{ fontSize: 11, opacity: 0.6, marginTop: 4, textAlign: 'right' }}>{Math.floor(activeRes.prog)}%</div>
-              </div>
-            )}
-            <div style={{ display: 'grid', gap: 10 }}>
-              {Object.entries(RESEARCH).map(([k, r]) => {
-                const done = research.includes(k);
-                return <div key={k} style={{ padding: 15, background: 'rgba(0,0,0,0.3)', borderRadius: 10, borderLeft: done ? '3px solid #4ade80' : activeRes?.id === k ? '3px solid #22d3ee' : '3px solid transparent' }}>
-                  <div style={{ fontWeight: 'bold', marginBottom: 4 }}>{r.name}</div>
-                  <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 8 }}>{r.desc}</div>
-                  <div style={{ fontSize: 11, opacity: 0.5, marginBottom: 8 }}>Time: {Math.floor(r.time / 60)}:{(r.time % 60).toString().padStart(2, '0')}</div>
-                  {!done && !activeRes && <button onClick={() => startRes(k)} disabled={bio < r.cost} style={{ padding: '8px 16px', background: bio >= r.cost ? '#4ade80' : 'rgba(100,100,100,0.5)', border: 'none', borderRadius: 6, color: '#1a1a2e', fontWeight: 'bold', cursor: bio >= r.cost ? 'pointer' : 'not-allowed' }}>Research ({r.cost}🧬)</button>}
-                  {done && <span style={{ color: '#4ade80' }}>✓ Complete</span>}
-                </div>;
-              })}
-            </div>
-          </div>
-        )}
-
-        {tab === 7 && (
-          <div style={{ display: 'grid', gap: 10 }}>
-            {Object.entries(BUILDINGS).map(([k, b]) => {
-              const can = Object.entries(b.cost).every(([m, c]) => (mats[m] || 0) >= c);
-              const max = b.max && (builds[k] || 0) >= b.max;
-              return <div key={k} style={{ padding: 15, background: 'rgba(0,0,0,0.3)', borderRadius: 10 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}><span style={{ fontSize: 28 }}>{b.icon}</span><div><div style={{ fontWeight: 'bold' }}>{b.name}</div><div style={{ fontSize: 12, opacity: 0.7 }}>{b.desc}</div></div><span style={{ marginLeft: 'auto', color: '#4ade80', fontSize: 18 }}>x{builds[k] || 0}</span></div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>{Object.entries(b.cost).map(([m, c]) => <span key={m} style={{ fontSize: 11, padding: '3px 8px', background: 'rgba(0,0,0,0.3)', borderRadius: 4, color: (mats[m] || 0) >= c ? '#4ade80' : '#ef4444' }}>{m}: {c}</span>)}</div>
-                <button onClick={() => build(k)} disabled={!can || max} style={{ padding: '8px 16px', background: can && !max ? '#4ade80' : 'rgba(100,100,100,0.5)', border: 'none', borderRadius: 6, color: '#1a1a2e', fontWeight: 'bold', cursor: can && !max ? 'pointer' : 'not-allowed' }}>{max ? 'Max' : 'Build'}</button>
-              </div>;
-            })}
-          </div>
-        )}
-
-        {tab === 8 && <SettingsTab onSave={manualSave} onDelete={handleDelete} lastSave={lastSave} />}
+        {tab === 6 && <SettingsTab onSave={manualSave} onDelete={handleDelete} lastSave={lastSave} />}
       </main>
 
       <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: 'rgba(0,0,0,0.95)', borderTop: '1px solid rgba(255,255,255,0.1)', maxHeight: 70, overflowY: 'auto', padding: 8 }}>
