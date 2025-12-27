@@ -750,7 +750,7 @@ export default function HiveQueenGame() {
   const [gameLoaded, setGameLoaded] = useState(false);
   const [welcomeBack, setWelcomeBack] = useState(null);
   
-  const [queen, setQueen] = useState({ level: 1, xp: 0 });
+  const [queen, setQueen] = useState({ level: 1 });
   const [bio, setBio] = useState(50);
   const [mats, setMats] = useState({});
   const [traits, setTraits] = useState({});
@@ -821,7 +821,7 @@ export default function HiveQueenGame() {
         setWelcomeBack(offline);
       } else {
         // Just load normally
-        setQueen(saved.queen || { level: 1, xp: 0 });
+        setQueen(saved.queen || { level: 1 });
         setBio(saved.bio || 50);
         setMats(saved.mats || {});
         setTraits(saved.traits || {});
@@ -862,7 +862,7 @@ export default function HiveQueenGame() {
   const handleDelete = () => {
     deleteSave();
     // Reset to defaults
-    setQueen({ level: 1, xp: 0 });
+    setQueen({ level: 1 });
     setBio(50);
     setMats({});
     setTraits({});
@@ -912,12 +912,36 @@ export default function HiveQueenGame() {
     log(`Reabsorbed ${sl.name}! +${biomassGained}🧬`);
   };
 
+  const levelUpQueen = () => {
+    const cost = queen.level * 100; // 100 biomass per level
+    if (bio < cost) return;
+    setBio(p => p - cost);
+    setQueen(q => ({ ...q, level: q.level + 1 }));
+    log(`Queen leveled up to ${queen.level + 1}!`);
+  };
+
   const [expDuration, setExpDuration] = useState('10'); // '10', '100', 'infinite'
   const [expSummary, setExpSummary] = useState(null);
 
   // Helper function to calculate current stats based on biomass
   const getSlimeStats = (slime) => {
     if (!slime) return { firmness: 0, slipperiness: 0, viscosity: 0 };
+
+    // Backward compatibility: if slime has old stats property, use it directly
+    if (slime.stats && !slime.baseStats) {
+      return slime.stats;
+    }
+
+    // If no baseStats, return defaults
+    if (!slime.baseStats) {
+      const tier = SLIME_TIERS[slime.tier];
+      return {
+        firmness: Math.floor(5 * (tier?.statMultiplier || 1)),
+        slipperiness: Math.floor(5 * (tier?.statMultiplier || 1)),
+        viscosity: Math.floor(5 * (tier?.statMultiplier || 1)),
+      };
+    }
+
     const tier = SLIME_TIERS[slime.tier];
     const biomass = slime.biomass || 0;
     const percentBonus = biomass / tier.biomassPerPercent; // How many percent increases
@@ -1453,13 +1477,23 @@ export default function HiveQueenGame() {
               <SlimeSprite tier="royal" size={80} isQueen />
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 18, fontWeight: 'bold' }}>The Hive Queen</div>
-                <div style={{ fontSize: 14, opacity: 0.7 }}>Level {queen.level}</div>
-                <div style={{ marginTop: 8 }}>
-                  <div style={{ height: 10, background: 'rgba(0,0,0,0.5)', borderRadius: 5, overflow: 'hidden' }}>
-                    <div style={{ width: `${(queen.xp / (queen.level * 100)) * 100}%`, height: '100%', background: 'linear-gradient(90deg, #ec4899, #f472b6)' }} />
-                  </div>
-                  <div style={{ fontSize: 11, opacity: 0.6, marginTop: 2 }}>{queen.xp}/{queen.level * 100} XP</div>
-                </div>
+                <div style={{ fontSize: 14, opacity: 0.7, marginBottom: 10 }}>Level {queen.level}</div>
+                <button
+                  onClick={levelUpQueen}
+                  disabled={bio < queen.level * 100}
+                  style={{
+                    padding: '10px 20px',
+                    background: bio >= queen.level * 100 ? 'linear-gradient(135deg, #ec4899, #f472b6)' : 'rgba(100,100,100,0.5)',
+                    border: 'none',
+                    borderRadius: 8,
+                    color: '#fff',
+                    fontWeight: 'bold',
+                    cursor: bio >= queen.level * 100 ? 'pointer' : 'not-allowed',
+                    fontSize: 12
+                  }}
+                >
+                  ⬆️ Level Up ({queen.level * 100}🧬)
+                </button>
               </div>
             </div>
             <SlimeForge traits={traits} biomass={bio} freeMag={freeMag} tiers={unlockedTiers} onSpawn={spawn} />
