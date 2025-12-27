@@ -750,7 +750,7 @@ export default function HiveQueenGame() {
   const [gameLoaded, setGameLoaded] = useState(false);
   const [welcomeBack, setWelcomeBack] = useState(null);
   
-  const [queen, setQueen] = useState({ level: 1, xp: 0 });
+  const [queen, setQueen] = useState({ level: 1 });
   const [bio, setBio] = useState(50);
   const [mats, setMats] = useState({});
   const [traits, setTraits] = useState({});
@@ -821,7 +821,7 @@ export default function HiveQueenGame() {
         setWelcomeBack(offline);
       } else {
         // Just load normally
-        setQueen(saved.queen || { level: 1, xp: 0 });
+        setQueen(saved.queen || { level: 1 });
         setBio(saved.bio || 50);
         setMats(saved.mats || {});
         setTraits(saved.traits || {});
@@ -862,7 +862,7 @@ export default function HiveQueenGame() {
   const handleDelete = () => {
     deleteSave();
     // Reset to defaults
-    setQueen({ level: 1, xp: 0 });
+    setQueen({ level: 1 });
     setBio(50);
     setMats({});
     setTraits({});
@@ -912,12 +912,38 @@ export default function HiveQueenGame() {
     log(`Reabsorbed ${sl.name}! +${biomassGained}🧬`);
   };
 
+  const levelUpQueen = () => {
+    const cost = queen.level * 100; // 100 biomass per level
+    if (bio < cost) return;
+    setBio(p => p - cost);
+    setQueen(q => ({ ...q, level: q.level + 1 }));
+    log(`Queen leveled up to ${queen.level + 1}!`);
+  };
+
   const [expDuration, setExpDuration] = useState('10'); // '10', '100', 'infinite'
-  const [expSummary, setExpSummary] = useState(null);
+  const [expSummaries, setExpSummaries] = useState([]); // Array of expedition summaries
+  const [expandedSections, setExpandedSections] = useState({ research: false, buildings: false }); // Collapsible sections
+  const [queenSlimeModal, setQueenSlimeModal] = useState(null); // Slime ID for modal on queen screen
 
   // Helper function to calculate current stats based on biomass
   const getSlimeStats = (slime) => {
     if (!slime) return { firmness: 0, slipperiness: 0, viscosity: 0 };
+
+    // Backward compatibility: if slime has old stats property, use it directly
+    if (slime.stats && !slime.baseStats) {
+      return slime.stats;
+    }
+
+    // If no baseStats, return defaults
+    if (!slime.baseStats) {
+      const tier = SLIME_TIERS[slime.tier];
+      return {
+        firmness: Math.floor(5 * (tier?.statMultiplier || 1)),
+        slipperiness: Math.floor(5 * (tier?.statMultiplier || 1)),
+        viscosity: Math.floor(5 * (tier?.statMultiplier || 1)),
+      };
+    }
+
     const tier = SLIME_TIERS[slime.tier];
     const biomass = slime.biomass || 0;
     const percentBonus = biomass / tier.biomassPerPercent; // How many percent increases
@@ -978,7 +1004,7 @@ export default function HiveQueenGame() {
       log(`Party wiped in ${ZONES[zone].name}! Materials lost.`);
     }
 
-    setExpSummary(summary);
+    setExpSummaries(s => [...s, { ...summary, id: Date.now() }]);
     setExps(p => { const n = { ...p }; delete n[zone]; return n; });
     setBLogs(p => { const n = { ...p }; delete n[zone]; return n; });
   };
@@ -1092,7 +1118,8 @@ export default function HiveQueenGame() {
         const next = { ...prev };
         Object.entries(next).forEach(([zone, exp]) => {
           const zd = ZONES[zone];
-          if (!exp.monster) {
+          // Only spawn new monsters if target not yet reached
+          if (!exp.monster && exp.kills < exp.targetKills) {
             const mt = zd.monsters[Math.floor(Math.random() * zd.monsters.length)];
             const md = MONSTER_TYPES[mt];
             exp.monster = { type: mt, hp: md.hp, maxHp: md.hp, dmg: md.dmg, status: [] };
@@ -1353,81 +1380,47 @@ export default function HiveQueenGame() {
     <div onTouchStart={onTouch} onTouchEnd={onTouchEnd} style={{ fontFamily: 'system-ui', background: 'linear-gradient(135deg, #1a1a2e, #16213e)', minHeight: '100vh', color: '#e0e0e0' }}>
       {welcomeBack && <WelcomeBackModal data={welcomeBack} onClose={() => setWelcomeBack(null)} />}
 
-      {expSummary && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-          <div style={{ background: 'linear-gradient(135deg, #1a1a2e, #16213e)', borderRadius: 15, padding: 25, maxWidth: 400, width: '100%', border: `2px solid ${expSummary.survivors.length > 0 ? '#4ade80' : '#ef4444'}` }}>
-            <h2 style={{ margin: '0 0 15px', fontSize: 20, color: expSummary.survivors.length > 0 ? '#4ade80' : '#ef4444', textAlign: 'center' }}>
-              {expSummary.survivors.length > 0 ? '✅ Expedition Complete!' : '💀 Party Wiped!'}
-            </h2>
-
-            <div style={{ background: 'rgba(0,0,0,0.3)', borderRadius: 10, padding: 15, marginBottom: 15 }}>
-              <div style={{ fontSize: 14, fontWeight: 'bold', marginBottom: 10 }}>📊 Expedition Stats</div>
-              <div style={{ display: 'grid', gap: 8, fontSize: 12 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span>Zone:</span>
-                  <strong>{expSummary.zone}</strong>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span>Enemies Defeated:</span>
-                  <strong style={{ color: '#f59e0b' }}>{expSummary.kills}</strong>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span>Survivors:</span>
-                  <strong style={{ color: expSummary.survivors.length > 0 ? '#4ade80' : '#ef4444' }}>
-                    {expSummary.survivors.length}/{expSummary.totalParty}
-                  </strong>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span>Biomass Distributed:</span>
-                  <strong style={{ color: '#22d3ee' }}>{Math.floor(expSummary.biomassDistributed)}</strong>
-                </div>
+      {/* Slime Examination Modal */}
+      {queenSlimeModal && (() => {
+        const sl = slimes.find(s => s.id === queenSlimeModal);
+        const onExp = sl ? Object.entries(exps).find(([_, e]) => e.party.some(p => p.id === sl.id)) : null;
+        const expS = onExp ? onExp[1].party.find(p => p.id === sl.id) : null;
+        if (!sl) return null;
+        return (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }} onClick={() => setQueenSlimeModal(null)}>
+            <div onClick={(e) => e.stopPropagation()} style={{ background: 'linear-gradient(135deg, #1a1a2e, #16213e)', borderRadius: 15, padding: 20, maxWidth: 500, width: '100%', maxHeight: '90vh', overflowY: 'auto' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 }}>
+                <h3 style={{ margin: 0, fontSize: 18 }}>Examine Slime</h3>
+                <button onClick={() => setQueenSlimeModal(null)} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 6, padding: '8px 16px', color: '#fff', cursor: 'pointer' }}>✕ Close</button>
               </div>
+              <SlimeDetail slime={sl} expState={expS} />
+              {!onExp && (
+                <button
+                  onClick={() => { reabsorb(sl.id); setQueenSlimeModal(null); }}
+                  style={{
+                    width: '100%',
+                    marginTop: 15,
+                    padding: 12,
+                    background: 'linear-gradient(135deg, #f59e0b, #ef4444)',
+                    border: 'none',
+                    borderRadius: 8,
+                    color: '#fff',
+                    fontWeight: 'bold',
+                    cursor: 'pointer'
+                  }}
+                >
+                  🔄 Reabsorb
+                </button>
+              )}
+              {onExp && (
+                <div style={{ marginTop: 15, padding: 10, background: 'rgba(34,211,238,0.1)', borderRadius: 8, fontSize: 12, color: '#22d3ee' }}>
+                  ⚠️ This slime is currently on an expedition in {ZONES[onExp[0]].name} and cannot be reabsorbed.
+                </div>
+              )}
             </div>
-
-            {expSummary.survivors.length > 0 ? (
-              <div style={{ background: 'rgba(74,222,128,0.2)', borderRadius: 10, padding: 15, marginBottom: 15 }}>
-                <div style={{ fontSize: 14, fontWeight: 'bold', marginBottom: 10, color: '#4ade80' }}>📦 Materials Secured</div>
-                {Object.keys(expSummary.materials).length > 0 ? (
-                  <div style={{ display: 'grid', gap: 6, fontSize: 12 }}>
-                    {Object.entries(expSummary.materials).map(([mat, count]) => (
-                      <div key={mat} style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span>{mat}:</span>
-                        <strong style={{ color: '#4ade80' }}>+{count}</strong>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div style={{ fontSize: 12, opacity: 0.7 }}>No materials found</div>
-                )}
-              </div>
-            ) : (
-              <div style={{ background: 'rgba(239,68,68,0.2)', borderRadius: 10, padding: 15, marginBottom: 15 }}>
-                <div style={{ fontSize: 14, fontWeight: 'bold', marginBottom: 8, color: '#ef4444' }}>💀 Total Loss</div>
-                <div style={{ fontSize: 12, opacity: 0.8 }}>
-                  All slimes perished. Materials and biomass lost.
-                </div>
-              </div>
-            )}
-
-            <button
-              onClick={() => setExpSummary(null)}
-              style={{
-                width: '100%',
-                padding: 12,
-                background: 'linear-gradient(135deg, #4ade80, #22d3ee)',
-                border: 'none',
-                borderRadius: 8,
-                color: '#fff',
-                fontWeight: 'bold',
-                cursor: 'pointer',
-                fontSize: 14
-              }}
-            >
-              Continue
-            </button>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       <Menu open={menu} close={() => setMenu(false)} tab={tab} setTab={setTab} tabs={tabs} />
       
@@ -1453,16 +1446,151 @@ export default function HiveQueenGame() {
               <SlimeSprite tier="royal" size={80} isQueen />
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 18, fontWeight: 'bold' }}>The Hive Queen</div>
-                <div style={{ fontSize: 14, opacity: 0.7 }}>Level {queen.level}</div>
-                <div style={{ marginTop: 8 }}>
-                  <div style={{ height: 10, background: 'rgba(0,0,0,0.5)', borderRadius: 5, overflow: 'hidden' }}>
-                    <div style={{ width: `${(queen.xp / (queen.level * 100)) * 100}%`, height: '100%', background: 'linear-gradient(90deg, #ec4899, #f472b6)' }} />
-                  </div>
-                  <div style={{ fontSize: 11, opacity: 0.6, marginTop: 2 }}>{queen.xp}/{queen.level * 100} XP</div>
-                </div>
+                <div style={{ fontSize: 14, opacity: 0.7, marginBottom: 10 }}>Level {queen.level}</div>
+                <button
+                  onClick={levelUpQueen}
+                  disabled={bio < queen.level * 100}
+                  style={{
+                    padding: '10px 20px',
+                    background: bio >= queen.level * 100 ? 'linear-gradient(135deg, #ec4899, #f472b6)' : 'rgba(100,100,100,0.5)',
+                    border: 'none',
+                    borderRadius: 8,
+                    color: '#fff',
+                    fontWeight: 'bold',
+                    cursor: bio >= queen.level * 100 ? 'pointer' : 'not-allowed',
+                    fontSize: 12
+                  }}
+                >
+                  ⬆️ Level Up ({queen.level * 100}🧬)
+                </button>
               </div>
             </div>
-            <SlimeForge traits={traits} biomass={bio} freeMag={freeMag} tiers={unlockedTiers} onSpawn={spawn} />
+
+            {/* Collapsible Research Section */}
+            <div style={{ background: 'rgba(0,0,0,0.2)', borderRadius: 10, marginBottom: 15, overflow: 'hidden' }}>
+              <button
+                onClick={() => setExpandedSections(s => ({ ...s, research: !s.research }))}
+                style={{
+                  width: '100%',
+                  padding: 15,
+                  background: 'rgba(34,211,238,0.1)',
+                  border: 'none',
+                  borderRadius: 0,
+                  color: '#fff',
+                  fontWeight: 'bold',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  fontSize: 14
+                }}
+              >
+                <span>🔬 Research</span>
+                <span>{expandedSections.research ? '▼' : '▶'}</span>
+              </button>
+              {expandedSections.research && (
+                <div style={{ padding: 15 }}>
+                  {activeRes && (
+                    <div style={{ background: 'rgba(34,211,238,0.1)', padding: 15, borderRadius: 10, marginBottom: 15 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}><span>{RESEARCH[activeRes.id].name}</span><span style={{ color: '#22d3ee', fontFamily: 'monospace' }}>⏱️ {getResTime()}</span></div>
+                      <div style={{ height: 12, background: 'rgba(0,0,0,0.5)', borderRadius: 6, overflow: 'hidden' }}><div style={{ width: `${activeRes.prog}%`, height: '100%', background: 'linear-gradient(90deg, #22d3ee, #4ade80)' }} /></div>
+                      <div style={{ fontSize: 11, opacity: 0.6, marginTop: 4, textAlign: 'right' }}>{Math.floor(activeRes.prog)}%</div>
+                    </div>
+                  )}
+                  <div style={{ display: 'grid', gap: 10 }}>
+                    {Object.entries(RESEARCH).map(([k, r]) => {
+                      const done = research.includes(k);
+                      return <div key={k} style={{ padding: 15, background: 'rgba(0,0,0,0.3)', borderRadius: 10, borderLeft: done ? '3px solid #4ade80' : activeRes?.id === k ? '3px solid #22d3ee' : '3px solid transparent' }}>
+                        <div style={{ fontWeight: 'bold', marginBottom: 4 }}>{r.name}</div>
+                        <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 8 }}>{r.desc}</div>
+                        <div style={{ fontSize: 11, opacity: 0.5, marginBottom: 8 }}>Time: {Math.floor(r.time / 60)}:{(r.time % 60).toString().padStart(2, '0')}</div>
+                        {!done && !activeRes && <button onClick={() => startRes(k)} disabled={bio < r.cost} style={{ padding: '8px 16px', background: bio >= r.cost ? '#4ade80' : 'rgba(100,100,100,0.5)', border: 'none', borderRadius: 6, color: '#1a1a2e', fontWeight: 'bold', cursor: bio >= r.cost ? 'pointer' : 'not-allowed' }}>Research ({r.cost}🧬)</button>}
+                        {done && <span style={{ color: '#4ade80' }}>✓ Complete</span>}
+                      </div>;
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Collapsible Buildings Section */}
+            <div style={{ background: 'rgba(0,0,0,0.2)', borderRadius: 10, marginBottom: 15, overflow: 'hidden' }}>
+              <button
+                onClick={() => setExpandedSections(s => ({ ...s, buildings: !s.buildings }))}
+                style={{
+                  width: '100%',
+                  padding: 15,
+                  background: 'rgba(245,158,11,0.1)',
+                  border: 'none',
+                  borderRadius: 0,
+                  color: '#fff',
+                  fontWeight: 'bold',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  fontSize: 14
+                }}
+              >
+                <span>🏗️ Buildings</span>
+                <span>{expandedSections.buildings ? '▼' : '▶'}</span>
+              </button>
+              {expandedSections.buildings && (
+                <div style={{ padding: 15 }}>
+                  <div style={{ display: 'grid', gap: 10 }}>
+                    {Object.entries(BUILDINGS).map(([k, b]) => {
+                      const can = Object.entries(b.cost).every(([m, c]) => (mats[m] || 0) >= c);
+                      const max = b.max && (builds[k] || 0) >= b.max;
+                      return <div key={k} style={{ padding: 15, background: 'rgba(0,0,0,0.3)', borderRadius: 10 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}><span style={{ fontSize: 28 }}>{b.icon}</span><div><div style={{ fontWeight: 'bold' }}>{b.name}</div><div style={{ fontSize: 12, opacity: 0.7 }}>{b.desc}</div></div><span style={{ marginLeft: 'auto', color: '#4ade80', fontSize: 18 }}>x{builds[k] || 0}</span></div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>{Object.entries(b.cost).map(([m, c]) => <span key={m} style={{ fontSize: 11, padding: '3px 8px', background: 'rgba(0,0,0,0.3)', borderRadius: 4, color: (mats[m] || 0) >= c ? '#4ade80' : '#ef4444' }}>{m}: {c}</span>)}</div>
+                        <button onClick={() => build(k)} disabled={!can || max} style={{ padding: '8px 16px', background: can && !max ? '#4ade80' : 'rgba(100,100,100,0.5)', border: 'none', borderRadius: 6, color: '#1a1a2e', fontWeight: 'bold', cursor: can && !max ? 'pointer' : 'not-allowed' }}>{max ? 'Max' : 'Build'}</button>
+                      </div>;
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Slime Management */}
+            <div style={{ background: 'rgba(0,0,0,0.2)', borderRadius: 10, padding: 15 }}>
+              <div style={{ fontSize: 16, fontWeight: 'bold', marginBottom: 15 }}>🧬 Slime Management</div>
+              {slimes.length ? (
+                <div style={{ display: 'grid', gap: 8 }}>
+                  {slimes.map(s => {
+                    const tier = SLIME_TIERS[s.tier];
+                    const onExp = Object.entries(exps).find(([_, e]) => e.party.some(p => p.id === s.id));
+                    const expS = onExp ? onExp[1].party.find(p => p.id === s.id) : null;
+                    const stats = getSlimeStats(s);
+                    const biomass = s.biomass || 0;
+                    return (
+                      <div key={s.id} onClick={() => setQueenSlimeModal(s.id)} style={{ background: 'rgba(0,0,0,0.3)', borderRadius: 8, padding: 10, border: `2px solid ${tier.color}33`, cursor: 'pointer' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <SlimeSprite tier={s.tier} size={40} hp={expS?.hp} maxHp={expS?.maxHp || s.maxHp} traits={s.traits} status={expS?.status} />
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontWeight: 'bold', fontSize: 13 }}>{s.name}</div>
+                            <div style={{ fontSize: 10, opacity: 0.7 }}>{tier.name}</div>
+                            <div style={{ display: 'flex', gap: 6, fontSize: 9, marginTop: 3 }}>
+                              {Object.entries(STAT_INFO).map(([k, v]) => <span key={k} style={{ color: v.color }}>{v.icon}{stats[k]}</span>)}
+                            </div>
+                          </div>
+                          <div style={{ textAlign: 'right', fontSize: 10 }}>
+                            <div style={{ opacity: 0.6 }}>❤️ {expS ? Math.ceil(expS.hp) : s.maxHp}/{s.maxHp}</div>
+                            <div style={{ opacity: 0.6 }}>🧬 {Math.floor(biomass)}</div>
+                            {onExp && <div style={{ fontSize: 9, color: '#22d3ee', marginTop: 2 }}>📍 {ZONES[onExp[0]].name}</div>}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div style={{ textAlign: 'center', padding: 20, opacity: 0.5 }}>
+                  <div style={{ fontSize: 40 }}>🥚</div>
+                  <div style={{ fontSize: 12 }}>No slimes yet! Create one in the Slimes tab.</div>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
@@ -1474,8 +1602,10 @@ export default function HiveQueenGame() {
               {!selExp && <button onClick={() => { reabsorb(selSl.id); setSelSlime(null); }} style={{ width: '100%', marginTop: 15, padding: 12, background: 'linear-gradient(135deg, #f59e0b, #ef4444)', border: 'none', borderRadius: 8, color: '#fff', fontWeight: 'bold', cursor: 'pointer' }}>🔄 Reabsorb</button>}
             </div>
           ) : (
-            slimes.length ? (
-              <div style={{ display: 'grid', gap: 10 }}>
+            <div>
+              <SlimeForge traits={traits} biomass={bio} freeMag={freeMag} tiers={unlockedTiers} onSpawn={spawn} />
+              {slimes.length ? (
+                <div style={{ display: 'grid', gap: 10 }}>
                 {slimes.map(s => {
                   const tier = SLIME_TIERS[s.tier];
                   const onExp = Object.entries(exps).find(([_, e]) => e.party.some(p => p.id === s.id));
@@ -1503,12 +1633,42 @@ export default function HiveQueenGame() {
                   );
                 })}
               </div>
-            ) : <div style={{ textAlign: 'center', padding: 40, opacity: 0.5 }}><div style={{ fontSize: 48 }}>🥚</div><div>No slimes yet!</div></div>
+              ) : <div style={{ textAlign: 'center', padding: 40, opacity: 0.5 }}><div style={{ fontSize: 48 }}>🥚</div><div>No slimes yet!</div></div>
+              }
+            </div>
           )
         )}
 
         {tab === 2 && (
           <div>
+            {/* Expedition Summaries */}
+            {expSummaries.length > 0 && (
+              <div style={{ marginBottom: 15 }}>
+                {expSummaries.map((summary, idx) => (
+                  <div key={summary.id} style={{ background: summary.survivors.length > 0 ? 'rgba(74,222,128,0.1)' : 'rgba(239,68,68,0.1)', border: `2px solid ${summary.survivors.length > 0 ? '#4ade80' : '#ef4444'}`, borderRadius: 10, padding: 15, marginBottom: 10 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                      <div style={{ fontSize: 14, fontWeight: 'bold', color: summary.survivors.length > 0 ? '#4ade80' : '#ef4444' }}>
+                        {summary.survivors.length > 0 ? '✅ Expedition Complete' : '💀 Party Wiped'} - {summary.zone}
+                      </div>
+                      <button onClick={() => setExpSummaries(s => s.filter((_, i) => i !== idx))} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 4, color: '#fff', cursor: 'pointer', padding: '4px 8px', fontSize: 12 }}>✕</button>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, fontSize: 11, marginBottom: summary.survivors.length > 0 ? 8 : 0 }}>
+                      <div><span style={{ opacity: 0.7 }}>Kills:</span> <strong style={{ color: '#f59e0b' }}>{summary.kills}</strong></div>
+                      <div><span style={{ opacity: 0.7 }}>Survivors:</span> <strong>{summary.survivors.length}/{summary.totalParty}</strong></div>
+                      <div><span style={{ opacity: 0.7 }}>Biomass:</span> <strong style={{ color: '#22d3ee' }}>{Math.floor(summary.biomassDistributed)}</strong></div>
+                      {summary.survivors.length > 0 && Object.keys(summary.materials).length > 0 && (
+                        <div><span style={{ opacity: 0.7 }}>Materials:</span> <strong style={{ color: '#4ade80' }}>{Object.values(summary.materials).reduce((a, b) => a + b, 0)}</strong></div>
+                      )}
+                    </div>
+                    {summary.survivors.length > 0 && Object.keys(summary.materials).length > 0 && (
+                      <div style={{ fontSize: 10, opacity: 0.7, marginTop: 4 }}>
+                        {Object.entries(summary.materials).map(([mat, count]) => `${mat} (${count})`).join(', ')}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 15 }}>
               {Object.entries(ZONES).map(([k, z]) => {
                 const ok = z.unlocked || queen.level >= (z.unlock || 0);
@@ -1654,10 +1814,12 @@ export default function HiveQueenGame() {
                     {towerDefense.deployedSlimes.map(ds => {
                       const sl = slimes.find(s => s.id === ds.id);
                       if (!sl) return null;
+                      const stats = getSlimeStats(sl);
+                      const biomass = sl.biomass || 0;
                       return <div key={ds.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: 6, background: 'rgba(74,222,128,0.1)', borderRadius: 6, fontSize: 9 }}>
                         <SlimeSprite tier={sl.tier} size={32} traits={sl.traits} />
                         <span style={{ marginTop: 2 }}>{sl.name.split(' ')[0]}</span>
-                        <span style={{ fontSize: 8, opacity: 0.7 }}>DPS: {Math.floor((sl.stats.firmness + sl.level * 1.2) * (1 + sl.stats.slipperiness * 0.1))}</span>
+                        <span style={{ fontSize: 8, opacity: 0.7 }}>DPS: {Math.floor((stats.firmness + biomass * 0.01) * (1 + stats.slipperiness * 0.1))}</span>
                       </div>;
                     })}
                   </div>
