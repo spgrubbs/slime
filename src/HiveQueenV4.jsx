@@ -1,166 +1,27 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 
-const TICK_RATE = 100;
-const BASE_SLIME_COST = 10;
-const TRAIT_MAGICKA_COST = 3;
-const BASE_MAGICKA = 50;
-const BATTLE_TICK_SPEED = 1000;
-const AUTO_SAVE_INTERVAL = 30000;
-const SAVE_KEY = 'hive_queen_save_v1';
+// Data imports
+import {
+  TICK_RATE,
+  BASE_SLIME_COST,
+  TRAIT_MAGICKA_COST,
+  BASE_MAGICKA,
+  BATTLE_TICK_SPEED,
+  AUTO_SAVE_INTERVAL,
+  TOWER_DEFENSE_COOLDOWN,
+  TD_TICK_SPEED,
+} from './data/gameConstants.js';
 
-const STAT_INFO = {
-  firmness: { name: 'Firmness', icon: '💪', desc: 'Attack damage & max HP', color: '#ef4444' },
-  slipperiness: { name: 'Slipperiness', icon: '💨', desc: 'Dodge & crit chance', color: '#22d3ee' },
-  viscosity: { name: 'Viscosity', icon: '🌀', desc: 'Effect damage & proc chance', color: '#a855f7' },
-};
+import { STAT_INFO, SLIME_TIERS } from './data/slimeData.js';
+import { TRAIT_LIBRARY, STATUS_EFFECTS } from './data/traitData.js';
+import { MONSTER_TYPES } from './data/monsterData.js';
+import { ZONES, EXPLORATION_EVENTS } from './data/zoneData.js';
+import { BUILDINGS, RESEARCH } from './data/buildingData.js';
+import { HUMAN_TYPES, TD_WAVES } from './data/towerDefenseData.js';
 
-const SLIME_TIERS = {
-  basic: { name: 'Basic', magickaCost: 5, statMultiplier: 1, traitSlots: 1, color: '#4ade80', baseHp: 50, biomassPerPercent: 10 },
-  enhanced: { name: 'Enhanced', magickaCost: 10, statMultiplier: 1.5, traitSlots: 2, color: '#22d3ee', unlockLevel: 5, baseHp: 80, biomassPerPercent: 100 },
-  elite: { name: 'Elite', magickaCost: 20, statMultiplier: 2, traitSlots: 3, color: '#a855f7', unlockLevel: 15, baseHp: 120, biomassPerPercent: 1000 },
-  royal: { name: 'Royal', magickaCost: 40, statMultiplier: 3, traitSlots: 4, color: '#f59e0b', unlockLevel: 30, baseHp: 200, biomassPerPercent: 10000 },
-};
-
-const TRAIT_LIBRARY = {
-  wolfFang: { name: 'Wolf Fang', icon: '🐺', stat: 'firmness', bonus: 3, passive: 'ferocity', passiveDesc: '+15% damage', color: '#94a3b8' },
-  goblinCunning: { name: 'Goblin Cunning', icon: '👺', stat: 'slipperiness', bonus: 3, passive: 'trickster', passiveDesc: '+8% dodge & crit', color: '#84cc16' },
-  turtleShell: { name: 'Turtle Shell', icon: '🐢', stat: 'firmness', bonus: 5, passive: 'armored', passiveDesc: '-20% damage taken', color: '#65a30d' },
-  batWing: { name: 'Bat Wing', icon: '🦇', stat: 'slipperiness', bonus: 4, passive: 'echolocation', passiveDesc: '+12% dodge', color: '#6366f1' },
-  boneArmor: { name: 'Bone Armor', icon: '💀', stat: 'firmness', bonus: 3, passive: 'undying', passiveDesc: 'Survive fatal blow once', color: '#d4d4d4' },
-  ogreStrength: { name: 'Ogre Might', icon: '👹', stat: 'firmness', bonus: 6, passive: 'crushing', passiveDesc: '+30% crit damage', color: '#dc2626' },
-  dragonHeart: { name: 'Dragon Heart', icon: '🐉', stat: 'viscosity', bonus: 5, passive: 'fireBreath', passiveDesc: 'Attacks apply Burn', color: '#f97316' },
-  wispGlow: { name: 'Wisp Essence', icon: '✨', stat: 'viscosity', bonus: 4, passive: 'manaLeech', passiveDesc: '+10% biomass/kill', color: '#8b5cf6' },
-  venomSac: { name: 'Venom Sac', icon: '🧪', stat: 'viscosity', bonus: 3, passive: 'poison', passiveDesc: 'Attacks apply Poison', color: '#22c55e' },
-  crystalCore: { name: 'Crystal Core', icon: '💎', stat: 'firmness', bonus: 4, passive: 'reflect', passiveDesc: 'Reflect 15% damage', color: '#06b6d4' },
-  shadowCloak: { name: 'Shadow Cloak', icon: '🌑', stat: 'slipperiness', bonus: 5, passive: 'ambush', passiveDesc: 'First attack crits', color: '#1f2937' },
-  phoenixFeather: { name: 'Phoenix Feather', icon: '🔥', stat: 'viscosity', bonus: 3, passive: 'rebirth', passiveDesc: 'Revive at 30% HP once', color: '#fb923c' },
-};
-
-const STATUS_EFFECTS = {
-  poison: { name: 'Poison', icon: '🧪', color: '#22c55e', dmg: 2, dur: 5 },
-  burn: { name: 'Burn', icon: '🔥', color: '#f97316', dmg: 3, dur: 4 },
-  bleed: { name: 'Bleed', icon: '🩸', color: '#ef4444', dmg: 4, dur: 3 },
-};
-
-const MONSTER_TYPES = {
-  wolf: { name: 'Wolf', icon: '🐺', diff: 1, hp: 40, dmg: 4, biomass: 5, mats: ['Wolf Fang', 'Wolf Pelt'], trait: 'wolfFang', drop: 0.025, abilities: ['Can apply Bleed'] },
-  goblin: { name: 'Goblin', icon: '👺', diff: 2, hp: 35, dmg: 6, biomass: 8, mats: ['Goblin Ear', 'Crude Iron'], trait: 'goblinCunning', drop: 0.025, abilities: ['High dodge'] },
-  turtle: { name: 'Giant Turtle', icon: '🐢', diff: 3, hp: 120, dmg: 5, biomass: 12, mats: ['Turtle Shell', 'Ancient Stone'], trait: 'turtleShell', drop: 0.02, abilities: ['Very tanky'] },
-  bat: { name: 'Cave Bat', icon: '🦇', diff: 1, hp: 25, dmg: 3, biomass: 4, mats: ['Bat Wing', 'Echo Crystal'], trait: 'batWing', drop: 0.03, abilities: ['Fast'] },
-  skeleton: { name: 'Skeleton', icon: '💀', diff: 2, hp: 45, dmg: 8, biomass: 7, mats: ['Bone Dust', 'Soul Fragment'], trait: 'boneArmor', drop: 0.025, abilities: ['Immune to Poison'] },
-  snake: { name: 'Venom Snake', icon: '🐍', diff: 2, hp: 30, dmg: 5, biomass: 9, mats: ['Snake Scale', 'Venom Gland'], trait: 'venomSac', drop: 0.025, abilities: ['Poisons'] },
-  golem: { name: 'Crystal Golem', icon: '🗿', diff: 4, hp: 180, dmg: 12, biomass: 18, mats: ['Crystal Shard', 'Golem Core'], trait: 'crystalCore', drop: 0.015, abilities: ['Very tanky'] },
-  shade: { name: 'Shadow Shade', icon: '👤', diff: 3, hp: 40, dmg: 15, biomass: 14, mats: ['Shadow Wisp', 'Dark Essence'], trait: 'shadowCloak', drop: 0.02, abilities: ['High dodge'] },
-  ogre: { name: 'Ogre', icon: '👹', diff: 5, hp: 200, dmg: 18, biomass: 25, mats: ['Ogre Hide', 'Ogre Club'], trait: 'ogreStrength', drop: 0.015, abilities: ['Massive damage'] },
-  dragon: { name: 'Young Dragon', icon: '🐉', diff: 8, hp: 350, dmg: 25, biomass: 50, mats: ['Dragon Scale', 'Dragon Bone'], trait: 'dragonHeart', drop: 0.01, abilities: ['Burns', 'Fire breath'] },
-  wisp: { name: 'Magic Wisp', icon: '✨', diff: 3, hp: 50, dmg: 10, biomass: 10, mats: ['Wisp Essence', 'Mana Crystal'], trait: 'wispGlow', drop: 0.025, abilities: ['Magic damage'] },
-  phoenix: { name: 'Phoenix Chick', icon: '🔥', diff: 6, hp: 150, dmg: 20, biomass: 35, mats: ['Phoenix Ash', 'Ember Core'], trait: 'phoenixFeather', drop: 0.012, abilities: ['Burns', 'Revives'] },
-};
-
-const ZONES = {
-  forest: { name: 'Dark Forest', icon: '🌲', monsters: ['wolf', 'bat', 'goblin'], unlocked: true, bg: '#1a3d1a', desc: 'Shadowy woodland with common creatures.' },
-  caves: { name: 'Crystal Caves', icon: '🕳️', monsters: ['bat', 'skeleton', 'golem'], unlock: 3, bg: '#1a2d4a', desc: 'Glittering caverns with dangerous foes.' },
-  swamp: { name: 'Poison Swamp', icon: '🌿', monsters: ['snake', 'turtle', 'goblin'], unlock: 6, bg: '#2d3a1a', desc: 'Toxic wetlands with venomous creatures.' },
-  ruins: { name: 'Shadow Ruins', icon: '🏛️', monsters: ['skeleton', 'shade', 'wisp'], unlock: 10, bg: '#2a1a3a', desc: 'Haunted ancient structures.' },
-  peaks: { name: 'Ogre Peaks', icon: '⛰️', monsters: ['ogre', 'golem', 'bat'], unlock: 15, bg: '#3a2a1a', desc: 'Mountains ruled by giants.' },
-  volcano: { name: 'Dragon Volcano', icon: '🌋', monsters: ['dragon', 'phoenix', 'wisp'], unlock: 25, bg: '#4a1a1a', desc: 'Blazing hellscape of fire.' },
-};
-
-const BUILDINGS = {
-  slimePit: { name: 'Slime Pit', icon: '🕳️', desc: '+10 max Magicka', cost: { 'Wolf Pelt': 5, 'Crude Iron': 3 } },
-  researchLab: { name: 'Research Chamber', icon: '🔬', desc: '+25% build speed', cost: { 'Mana Crystal': 3, 'Ancient Stone': 5 } },
-  hatchery: { name: 'Royal Hatchery', icon: '🥚', desc: 'Unlock Elite Slimes', cost: { 'Dragon Scale': 1, 'Soul Fragment': 10 }, max: 1 },
-  defenseSlot: { name: 'Defense Slot', icon: '🎯', desc: '+1 Tower Defense slot', cost: { 'Human Bone': 5, 'Iron Sword': 3 }, max: 6 },
-  efficientDigestion: { name: 'Biomass Pools', icon: '🧪', desc: '+20% biomass gain', cost: 50, time: 60, max: 1 },
-  enhancedAbsorption: { name: 'Absorption Nexus', icon: '🔮', desc: '+25% reabsorb XP', cost: 100, time: 120, max: 1 },
-  slimeVitality: { name: 'Vitality Chamber', icon: '💗', desc: '+15% max HP', cost: 150, time: 180, max: 1 },
-  swiftSlimes: { name: 'Training Arena', icon: '⚔️', desc: '+20% attack speed', cost: 200, time: 240, max: 1 },
-  extendedExpedition: { name: 'Expedition Depot', icon: '🗺️', desc: 'Unlock 100-enemy expeditions', cost: 250, time: 300, max: 1 },
-  infiniteExpedition: { name: 'Deep Exploration Hub', icon: '🌌', desc: 'Unlock infinite expeditions', cost: 500, time: 600, max: 1 },
-};
-
-const RESEARCH = {
-  efficientDigestion: { name: 'Efficient Digestion', desc: '+20% biomass', cost: 50, time: 60 },
-  enhancedAbsorption: { name: 'Enhanced Absorption', desc: '+25% reabsorb XP', cost: 100, time: 120 },
-  slimeVitality: { name: 'Slime Vitality', desc: '+15% max HP', cost: 150, time: 180 },
-  swiftSlimes: { name: 'Swift Strikes', desc: '+20% attack speed', cost: 200, time: 240 },
-};
-
-const TOWER_DEFENSE_COOLDOWN = 24 * 60 * 60 * 1000; // 24 hours
-const TD_TICK_SPEED = 100; // Combat tick rate
-
-const HUMAN_TYPES = {
-  warrior: { name: 'Human Warrior', icon: '⚔️', hp: 100, speed: 1, biomassReward: 20, mats: ['Human Bone', 'Iron Sword'] },
-};
-
-const TD_WAVES = [
-  { wave: 1, humans: 5, hpMultiplier: 1, reward: { biomass: 50, mats: { 'Human Bone': 3, 'Iron Sword': 2 } } },
-  { wave: 2, humans: 8, hpMultiplier: 1.5, reward: { biomass: 75, mats: { 'Human Bone': 5, 'Iron Sword': 3 } } },
-  { wave: 3, humans: 12, hpMultiplier: 2, reward: { biomass: 100, mats: { 'Human Bone': 8, 'Iron Sword': 5 } } },
-];
-
-const NAME_PRE = ['Glo', 'Spl', 'Oo', 'Squ', 'Blo', 'Jel', 'Wob', 'Bou', 'Dri', 'Sli', 'Goo', 'Muc', 'Pud', 'Glu', 'Flu', 'Gel', 'Mor', 'Gur', 'Bub'];
-const NAME_SUF = ['bby', 'osh', 'ize', 'orp', 'oop', 'elly', 'ubble', 'urt', 'ime', 'ick', 'ooey', 'uck', 'udge', 'op', 'ash', 'urp', 'oze', 'ish'];
-const NAME_TIT = ['', '', '', '', ' the Brave', ' the Squishy', ' the Mighty', ' the Swift', ' the Wise', ' the Gooey', ' the Bouncy', ' the Firm'];
-
-const EXPLORATION_EVENTS = [
-  { msg: 'The slimes discover a hidden grove...', type: 'flavor' },
-  { msg: 'Strange sounds echo in the distance.', type: 'flavor' },
-  { msg: 'The party finds ancient markings on a tree.', type: 'flavor' },
-  { msg: 'A gentle breeze carries unfamiliar scents.', type: 'flavor' },
-  { msg: 'The slimes spot movement in the shadows.', type: 'flavor' },
-  { msg: 'Mysterious lights flicker ahead.', type: 'flavor' },
-  { msg: 'The path winds deeper into unknown territory.', type: 'flavor' },
-  { msg: 'Rustling in the undergrowth keeps the party alert.', type: 'flavor' },
-  { msg: 'Found a small biomass deposit!', type: 'biomass', amount: 3 },
-  { msg: 'Discovered a cache of materials!', type: 'material' },
-];
-
-const genName = () => NAME_PRE[Math.floor(Math.random() * NAME_PRE.length)] + NAME_SUF[Math.floor(Math.random() * NAME_SUF.length)] + NAME_TIT[Math.floor(Math.random() * NAME_TIT.length)];
-const genId = () => Math.random().toString(36).substr(2, 9);
-const formatTime = (seconds) => {
-  const hrs = Math.floor(seconds / 3600);
-  const mins = Math.floor((seconds % 3600) / 60);
-  if (hrs > 0) return `${hrs}h ${mins}m`;
-  return `${mins} minutes`;
-};
-
-// ============== SAVE/LOAD SYSTEM ==============
-const getDefaultState = () => ({
-  queen: { level: 1, xp: 0 },
-  bio: 50,
-  mats: {},
-  traits: {},
-  slimes: [],
-  exps: {},
-  builds: {},
-  research: [],
-  activeRes: null,
-  lastTowerDefense: 0,
-  defeatedMonsters: [],
-  lastSave: Date.now(),
-});
-
-const saveGame = (state) => {
-  try {
-    const saveData = { ...state, lastSave: Date.now() };
-    localStorage.setItem(SAVE_KEY, JSON.stringify(saveData));
-    return true;
-  } catch (e) { console.error('Save failed:', e); return false; }
-};
-
-const loadGame = () => {
-  try {
-    const data = localStorage.getItem(SAVE_KEY);
-    if (!data) return null;
-    return JSON.parse(data);
-  } catch (e) { console.error('Load failed:', e); return null; }
-};
-
-const deleteSave = () => {
-  try { localStorage.removeItem(SAVE_KEY); return true; }
-  catch (e) { return false; }
-};
+// Utility imports
+import { genName, genId, formatTime } from './utils/helpers.js';
+import { saveGame, loadGame, deleteSave } from './utils/saveSystem.js';
 
 // ============== OFFLINE PROGRESS ==============
 const calculateOfflineProgress = (saved, bonuses) => {
