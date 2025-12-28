@@ -1,6 +1,7 @@
 import React from 'react';
-import { TRAIT_LIBRARY } from '../data/traitData.js';
+import { MUTATION_LIBRARY } from '../data/traitData.js';
 import { ZONES } from '../data/zoneData.js';
+import { MONSTER_TYPES } from '../data/monsterData.js';
 
 const WelcomeBackModal = ({ data, onClose }) => {
   const { offlineTime, results } = data;
@@ -27,7 +28,7 @@ const WelcomeBackModal = ({ data, onClose }) => {
             </div>
           )}
 
-          {Object.keys(results.matsGained).length > 0 && (
+          {Object.keys(results.matsGained || {}).length > 0 && (
             <div style={{ padding: '5px 0', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
               <div>📦 Materials Found:</div>
               <div style={{ fontSize: 12, opacity: 0.8, marginTop: 4 }}>
@@ -36,23 +37,32 @@ const WelcomeBackModal = ({ data, onClose }) => {
             </div>
           )}
 
-          {Object.keys(results.traitsGained).length > 0 && (
+          {Object.keys(results.monsterKillsGained || {}).length > 0 && (
             <div style={{ padding: '5px 0', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
-              <div style={{ color: '#a855f7' }}>✨ Rare Traits Found!</div>
-              <div style={{ fontSize: 12, marginTop: 4 }}>
-                {Object.entries(results.traitsGained).map(([t, c]) => `${TRAIT_LIBRARY[t]?.icon} ${TRAIT_LIBRARY[t]?.name} x${c}`).join(', ')}
+              <div>📊 Kill Progress:</div>
+              <div style={{ fontSize: 12, opacity: 0.8, marginTop: 4 }}>
+                {Object.entries(results.monsterKillsGained).map(([m, c]) => `${MONSTER_TYPES[m]?.icon || '?'} ${MONSTER_TYPES[m]?.name || m} +${c}`).join(', ')}
               </div>
             </div>
           )}
 
-          {results.slimesLost.length > 0 && (
+          {(results.mutationsUnlocked || []).length > 0 && (
+            <div style={{ padding: '5px 0', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+              <div style={{ color: '#a855f7' }}>🧬 Mutations Unlocked!</div>
+              <div style={{ fontSize: 12, marginTop: 4 }}>
+                {results.mutationsUnlocked.join(', ')}
+              </div>
+            </div>
+          )}
+
+          {(results.slimesLost || []).length > 0 && (
             <div style={{ padding: '5px 0', color: '#ef4444' }}>
               <div>💔 Slimes Lost:</div>
               <div style={{ fontSize: 12, marginTop: 4 }}>{results.slimesLost.join(', ')}</div>
             </div>
           )}
 
-          {results.expeditionsWiped.length > 0 && (
+          {(results.expeditionsWiped || []).length > 0 && (
             <div style={{ padding: '5px 0', color: '#ef4444' }}>
               ⚠️ Expeditions wiped: {results.expeditionsWiped.map(z => ZONES[z]?.name).join(', ')}
             </div>
