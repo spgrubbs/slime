@@ -1,6 +1,6 @@
 import React from 'react';
 import { SLIME_TIERS, STAT_INFO } from '../data/slimeData.js';
-import { MUTATION_LIBRARY } from '../data/traitData.js';
+import { TRAIT_LIBRARY } from '../data/traitData.js';
 import { ELEMENTS } from '../data/gameConstants.js';
 import SlimeSprite from './SlimeSprite.jsx';
 
@@ -104,11 +104,11 @@ const SlimeDetail = ({ slime, expState }) => {
         </div>
       </div>
 
-      {slime.mutations?.length > 0 && (
+      {slime.traits.length > 0 && (
         <div>
-          <div style={{ fontSize: 11, opacity: 0.7, marginBottom: 6 }}>Mutations</div>
-          {slime.mutations.map((t,i) => {
-            const tr = MUTATION_LIBRARY[t];
+          <div style={{ fontSize: 11, opacity: 0.7, marginBottom: 6 }}>Traits</div>
+          {slime.traits.map((t,i) => {
+            const tr = TRAIT_LIBRARY[t];
             return (
               <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: 8, background: `${tr.color}22`, borderRadius: 6, borderLeft: `3px solid ${tr.color}`, marginBottom: 4 }}>
                 <span style={{ fontSize: 18 }}>{tr.icon}</span>
