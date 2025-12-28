@@ -2,8 +2,9 @@ import React from 'react';
 import { SLIME_TIERS } from '../data/slimeData.js';
 import { STATUS_EFFECTS } from '../data/traitData.js';
 import { TRAIT_LIBRARY } from '../data/traitData.js';
+import { ELEMENTS } from '../data/gameConstants.js';
 
-const SlimeSprite = ({ tier, size = 40, isQueen, hp, maxHp, traits = [], anim = 'idle', status = [] }) => {
+const SlimeSprite = ({ tier, size = 40, isQueen, hp, maxHp, traits = [], anim = 'idle', status = [], primaryElement = null }) => {
   const color = isQueen ? '#ec4899' : (SLIME_TIERS[tier]?.color || '#4ade80');
   const hpPct = hp !== undefined && maxHp ? (hp / maxHp) * 100 : 100;
   const transform = anim === 'attack' ? 'translateX(15px) scale(1.1)' : anim === 'hurt' ? 'translateX(-5px) scale(0.9)' : 'scale(1)';
@@ -30,6 +31,25 @@ const SlimeSprite = ({ tier, size = 40, isQueen, hp, maxHp, traits = [], anim = 
           <div style={{position:'absolute',top:'30%',left:'30%',width:'50%',height:'50%',backgroundColor:'#333',borderRadius:'50%'}}/>
         </div>
         {isQueen && <div style={{position:'absolute',top:-size*0.3,left:'50%',transform:'translateX(-50%)',fontSize:size*0.4}}>👑</div>}
+        {primaryElement && ELEMENTS[primaryElement] && (
+          <div style={{
+            position: 'absolute',
+            bottom: -size * 0.15,
+            right: -size * 0.15,
+            fontSize: size * 0.35,
+            background: `${ELEMENTS[primaryElement].color}33`,
+            borderRadius: '50%',
+            width: size * 0.4,
+            height: size * 0.4,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            border: `2px solid ${ELEMENTS[primaryElement].color}`,
+            boxShadow: `0 0 ${size * 0.1}px ${ELEMENTS[primaryElement].color}66`,
+          }}>
+            {ELEMENTS[primaryElement].icon}
+          </div>
+        )}
       </div>
       {status?.length > 0 && <div style={{ display: 'flex', gap: 2, marginTop: 2 }}>{status.map((s,i) => <span key={i} style={{fontSize:size*0.3}}>{STATUS_EFFECTS[s.type]?.icon}</span>)}</div>}
       {traits?.length > 0 && <div style={{ display: 'flex', gap: 1, marginTop: 2 }}>{traits.slice(0,4).map((t,i) => <span key={i} style={{fontSize:size*0.25}}>{TRAIT_LIBRARY[t]?.icon}</span>)}</div>}
