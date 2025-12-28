@@ -1,11 +1,13 @@
 import React from 'react';
 import { MONSTER_TYPES } from '../data/monsterData.js';
 import { STATUS_EFFECTS } from '../data/traitData.js';
+import { ELEMENTS } from '../data/gameConstants.js';
 
 const MonsterSprite = ({ monster, hp, maxHp, anim = 'idle', status = [] }) => {
   const m = MONSTER_TYPES[monster];
   const hpPct = (hp / maxHp) * 100;
   const transform = anim === 'attack' ? 'translateX(-15px) scale(1.1)' : anim === 'hurt' ? 'translateX(5px) scale(0.9)' : 'scale(1)';
+  const element = m?.element ? ELEMENTS[m.element] : null;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
@@ -13,7 +15,27 @@ const MonsterSprite = ({ monster, hp, maxHp, anim = 'idle', status = [] }) => {
         <div style={{ width: `${hpPct}%`, height: '100%', background: '#ef4444', transition: 'width 0.3s' }} />
       </div>
       <div style={{ fontSize: 10, marginBottom: 2, opacity: 0.8 }}>{Math.ceil(hp)}/{maxHp}</div>
-      <div style={{ fontSize: 48, transform, transition: 'transform 0.15s', filter: anim === 'hurt' ? 'brightness(1.5)' : 'none' }}>{m?.icon}</div>
+      <div style={{ fontSize: 48, transform, transition: 'transform 0.15s', filter: anim === 'hurt' ? 'brightness(1.5)' : 'none', position: 'relative' }}>
+        {m?.icon}
+        {element && (
+          <span style={{
+            position: 'absolute',
+            bottom: -4,
+            right: -8,
+            fontSize: 16,
+            background: `${element.color}33`,
+            borderRadius: '50%',
+            width: 24,
+            height: 24,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            border: `2px solid ${element.color}`,
+          }}>
+            {element.icon}
+          </span>
+        )}
+      </div>
       <div style={{ fontSize: 11, marginTop: 4 }}>{m?.name}</div>
       {status?.length > 0 && (
         <div style={{ display: 'flex', gap: 3, marginTop: 4 }}>

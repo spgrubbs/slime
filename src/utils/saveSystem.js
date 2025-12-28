@@ -1,4 +1,4 @@
-import { SAVE_KEY } from '../data/gameConstants.js';
+import { SAVE_KEY, DEFAULT_ELEMENTS } from '../data/gameConstants.js';
 
 // Default game state
 export const getDefaultState = () => ({
@@ -15,6 +15,35 @@ export const getDefaultState = () => ({
   defeatedMonsters: [],
   lastSave: Date.now(),
 });
+
+// Migrate old slime data to include element system
+const migrateSlimeData = (slime) => {
+  const migrated = { ...slime };
+
+  // Add elements if missing (new element system)
+  if (!migrated.elements) {
+    migrated.elements = { ...DEFAULT_ELEMENTS };
+  }
+
+  // Add primaryElement if missing
+  if (migrated.primaryElement === undefined) {
+    migrated.primaryElement = null;
+  }
+
+  return migrated;
+};
+
+// Migrate save data to current version
+const migrateSaveData = (data) => {
+  const migrated = { ...data };
+
+  // Migrate slimes to include element data
+  if (migrated.slimes && Array.isArray(migrated.slimes)) {
+    migrated.slimes = migrated.slimes.map(migrateSlimeData);
+  }
+
+  return migrated;
+};
 
 // Save game to localStorage
 export const saveGame = (state) => {
@@ -33,7 +62,9 @@ export const loadGame = () => {
   try {
     const data = localStorage.getItem(SAVE_KEY);
     if (!data) return null;
-    return JSON.parse(data);
+    const parsed = JSON.parse(data);
+    // Apply migrations to ensure compatibility
+    return migrateSaveData(parsed);
   } catch (e) {
     console.error('Load failed:', e);
     return null;
