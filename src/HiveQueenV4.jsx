@@ -14,7 +14,7 @@ import {
 } from './data/gameConstants.js';
 
 import { STAT_INFO, SLIME_TIERS } from './data/slimeData.js';
-import { TRAIT_LIBRARY, STATUS_EFFECTS } from './data/traitData.js';
+import { MUTATION_LIBRARY, TRAIT_LIBRARY, STATUS_EFFECTS } from './data/traitData.js';
 import { MONSTER_TYPES } from './data/monsterData.js';
 import { ZONES, EXPLORATION_EVENTS } from './data/zoneData.js';
 import { BUILDINGS, RESEARCH } from './data/buildingData.js';
@@ -180,7 +180,6 @@ export default function HiveQueenGame() {
   const [queen, setQueen] = useState({ level: 1 });
   const [bio, setBio] = useState(50);
   const [mats, setMats] = useState({});
-  const [traits, setTraits] = useState({});
   const [slimes, setSlimes] = useState([]);
   const [exps, setExps] = useState({});
   const [bLogs, setBLogs] = useState({});
@@ -193,7 +192,9 @@ export default function HiveQueenGame() {
   const [lastSave, setLastSave] = useState(null);
   const [lastTowerDefense, setLastTowerDefense] = useState(0);
   const [towerDefense, setTowerDefense] = useState(null);
-  const [defeatedMonsters, setDefeatedMonsters] = useState([]);
+  // Mutation system - tracks kills per monster type and unlocked mutations
+  const [monsterKills, setMonsterKills] = useState({});
+  const [unlockedMutations, setUnlockedMutations] = useState([]);
 
   const [tab, setTab] = useState(0);
   const [menu, setMenu] = useState(false);
@@ -236,27 +237,27 @@ export default function HiveQueenGame() {
         setSlimes(offline.newState.slimes);
         setExps(offline.newState.exps);
         setMats(offline.newState.mats);
-        setTraits(offline.newState.traits);
         setActiveRes(offline.newState.activeRes);
         setResearch(offline.newState.research);
         setQueen(saved.queen);
         setBuilds(saved.builds || {});
         setLastTowerDefense(saved.lastTowerDefense || 0);
-        setDefeatedMonsters(saved.defeatedMonsters || []);
+        setMonsterKills(offline.newState.monsterKills || saved.monsterKills || {});
+        setUnlockedMutations(offline.newState.unlockedMutations || saved.unlockedMutations || []);
         setWelcomeBack(offline);
       } else {
         // Just load normally
         setQueen(saved.queen || { level: 1 });
         setBio(saved.bio || 50);
         setMats(saved.mats || {});
-        setTraits(saved.traits || {});
         setSlimes(saved.slimes || []);
         setExps(saved.exps || {});
         setBuilds(saved.builds || {});
         setResearch(saved.research || []);
         setActiveRes(saved.activeRes);
         setLastTowerDefense(saved.lastTowerDefense || 0);
-        setDefeatedMonsters(saved.defeatedMonsters || []);
+        setMonsterKills(saved.monsterKills || {});
+        setUnlockedMutations(saved.unlockedMutations || []);
       }
       setLastSave(saved.lastSave);
       setLogs([{ t: new Date().toLocaleTimeString(), m: '💾 Game loaded!' }]);
@@ -268,16 +269,16 @@ export default function HiveQueenGame() {
   useEffect(() => {
     if (!gameLoaded) return;
     const interval = setInterval(() => {
-      const state = { queen, bio, mats, traits, slimes, exps, builds, research, activeRes, lastTowerDefense, defeatedMonsters, lastSave: Date.now() };
+      const state = { queen, bio, mats, slimes, exps, builds, research, activeRes, lastTowerDefense, monsterKills, unlockedMutations, lastSave: Date.now() };
       if (saveGame(state)) {
         setLastSave(Date.now());
       }
     }, AUTO_SAVE_INTERVAL);
     return () => clearInterval(interval);
-  }, [gameLoaded, queen, bio, mats, traits, slimes, exps, builds, research, activeRes, lastTowerDefense, defeatedMonsters]);
+  }, [gameLoaded, queen, bio, mats, slimes, exps, builds, research, activeRes, lastTowerDefense, monsterKills, unlockedMutations]);
 
   const manualSave = () => {
-    const state = { queen, bio, mats, traits, slimes, exps, builds, research, activeRes, lastTowerDefense, defeatedMonsters, lastSave: Date.now() };
+    const state = { queen, bio, mats, slimes, exps, builds, research, activeRes, lastTowerDefense, monsterKills, unlockedMutations, lastSave: Date.now() };
     if (saveGame(state)) {
       setLastSave(Date.now());
       log('💾 Game saved!');
@@ -290,7 +291,6 @@ export default function HiveQueenGame() {
     setQueen({ level: 1 });
     setBio(50);
     setMats({});
-    setTraits({});
     setSlimes([]);
     setExps({});
     setBuilds({});
@@ -299,7 +299,8 @@ export default function HiveQueenGame() {
     setLastSave(null);
     setLastTowerDefense(0);
     setTowerDefense(null);
-    setDefeatedMonsters([]);
+    setMonsterKills({});
+    setUnlockedMutations([]);
     log('🗑️ Save deleted. Starting fresh!');
   };
 
@@ -314,30 +315,44 @@ export default function HiveQueenGame() {
     touchX.current = null;
   };
 
-  const spawn = (tier, selT, name, magCost) => {
+  const spawn = (tier, selMutations, name, magCost) => {
     const td = SLIME_TIERS[tier];
-    const bioCost = BASE_SLIME_COST + selT.length * 5;
+    const bioCost = BASE_SLIME_COST + selMutations.length * 5;
     if (bio < bioCost || freeMag < magCost) return;
     const baseStats = { firmness: Math.floor(5 * td.statMultiplier), slipperiness: Math.floor(5 * td.statMultiplier), viscosity: Math.floor(5 * td.statMultiplier) };
     const pass = [];
-    selT.forEach(id => { const t = TRAIT_LIBRARY[id]; if (t) { baseStats[t.stat] += t.bonus; pass.push(t.passive); } });
+    const startElements = createDefaultElements();
+    // Apply mutation bonuses
+    selMutations.forEach(id => {
+      const m = MUTATION_LIBRARY[id];
+      if (m) {
+        baseStats[m.stat] += m.bonus;
+        pass.push(m.passive);
+        // Apply elementBonus from mutation
+        if (m.elementBonus) {
+          Object.entries(m.elementBonus).forEach(([elem, bonus]) => {
+            startElements[elem] = Math.min(100, (startElements[elem] || 0) + bonus);
+          });
+        }
+      }
+    });
     const maxHp = Math.floor((td.baseHp + baseStats.firmness * 3) * bon.hp);
     setSlimes(p => [...p, {
       id: genId(),
       name,
       tier,
       biomass: 0,
-      traits: selT,
+      mutations: selMutations,  // Combat abilities from MUTATION_LIBRARY
+      traits: [],               // Personality traits (Phase 3)
       pass,
       baseStats,
       maxHp,
       magCost,
-      // Element system - new slimes start with no element affinity
-      elements: createDefaultElements(),
+      elements: startElements,
       primaryElement: null,
     }]);
     setBio(p => p - bioCost);
-    setTraits(p => { const n = { ...p }; selT.forEach(t => { n[t]--; if (n[t] <= 0) delete n[t]; }); return n; });
+    // Mutations are unlimited once unlocked - no inventory to decrease
     log(`${name} emerges!`);
   };
 
@@ -398,7 +413,7 @@ export default function HiveQueenGame() {
     if (exps[zone] || !party.length) return;
     const p = party.map(id => { const sl = slimes.find(s => s.id === id); return { id, hp: sl.maxHp, maxHp: sl.maxHp, status: [], usedUndying: false, usedRebirth: false, usedAmbush: false, biomassGained: 0 }; });
     const targetKills = duration === '10' ? 10 : duration === '100' ? 100 : Infinity;
-    setExps(pr => ({ ...pr, [zone]: { party: p, monster: null, kills: 0, targetKills, materials: {}, timer: 0, turn: 0, currentAttacker: 0, exploring: false, animSlime: null, slimeAnim: 'idle', monAnim: 'idle' } }));
+    setExps(pr => ({ ...pr, [zone]: { party: p, monster: null, kills: 0, targetKills, materials: {}, monsterKillCounts: {}, timer: 0, turn: 0, currentAttacker: 0, exploring: false, animSlime: null, slimeAnim: 'idle', monAnim: 'idle' } }));
     setBLogs(pr => ({ ...pr, [zone]: [{ m: `Entering ${ZONES[zone].name}... (Target: ${duration === 'infinite' ? '∞' : targetKills})`, c: '#22d3ee' }] }));
     log(`Party sent to ${ZONES[zone].name}!`);
     setParty([]);
@@ -456,6 +471,34 @@ export default function HiveQueenGame() {
         }
         return sl;
       }));
+
+      // Apply monster kill counts and check for mutation unlocks
+      Object.entries(exp.monsterKillCounts || {}).forEach(([monsterType, count]) => {
+        if (count <= 0) return;
+
+        setMonsterKills(prev => {
+          const newTotal = (prev[monsterType] || 0) + count;
+          const md = MONSTER_TYPES[monsterType];
+
+          // Check if this monster has an associated mutation
+          if (md && md.trait) {
+            const mutation = MUTATION_LIBRARY[md.trait];
+            if (mutation && newTotal >= mutation.requiredKills) {
+              // Check if not already unlocked
+              setUnlockedMutations(unlocked => {
+                if (!unlocked.includes(md.trait)) {
+                  log(`🧬 Mutation Unlocked: ${mutation.name}!`);
+                  bLog(zone, `🧬 NEW MUTATION: ${mutation.icon} ${mutation.name}!`, mutation.color);
+                  return [...unlocked, md.trait];
+                }
+                return unlocked;
+              });
+            }
+          }
+
+          return { ...prev, [monsterType]: newTotal };
+        });
+      });
 
       log(`Recalled from ${ZONES[zone].name}! Materials secured.`);
     } else {
@@ -670,6 +713,10 @@ export default function HiveQueenGame() {
               }
               if (mon.hp <= 0) {
                 exp.kills++;
+                // Track kills per monster type for mutation unlock progress
+                exp.monsterKillCounts = exp.monsterKillCounts || {};
+                exp.monsterKillCounts[mon.type] = (exp.monsterKillCounts[mon.type] || 0) + 1;
+
                 let bioG = Math.floor(md.biomass * bon.bio);
                 living.forEach(p => { const sl = slimes.find(s => s.id === p.id); if (sl?.pass?.includes('manaLeech')) bioG = Math.floor(bioG * 1.1); });
 
@@ -680,9 +727,6 @@ export default function HiveQueenGame() {
                 });
                 bLog(zone, `${md.name} defeated! +${Math.floor(bioPerSlime)}🧬 each`, '#4ade80');
 
-                // Track defeated monsters for compendium
-                setDefeatedMonsters(dm => dm.includes(mon.type) ? dm : [...dm, mon.type]);
-
                 // Material drops (50% chance) - add to expedition materials
                 if (Math.random() < 0.5) {
                   const mat = md.mats[Math.floor(Math.random() * md.mats.length)];
@@ -690,12 +734,8 @@ export default function HiveQueenGame() {
                   bLog(zone, `Found ${mat}! 📦`, '#f59e0b');
                 }
 
-                // Trait drops (existing drop rate) - add immediately
-                if (Math.random() < md.drop) {
-                  setTraits(t => ({ ...t, [md.trait]: (t[md.trait] || 0) + 1 }));
-                  bLog(zone, `✨ RARE: ${TRAIT_LIBRARY[md.trait].name}! ✨`, '#a855f7');
-                  log(`Got ${TRAIT_LIBRARY[md.trait].name}!`);
-                }
+                // Note: Mutations are now learned through kill counts, not drops
+                // Mutation progress is tracked via monsterKillCounts and applied on recall
 
                 // Element accumulation - slimes gain element affinity from zone
                 if (zd.element && zd.elementGainRate > 0) {
@@ -1156,7 +1196,7 @@ export default function HiveQueenGame() {
             </div>
           ) : (
             <div>
-              <SlimeForge traits={traits} biomass={bio} freeMag={freeMag} tiers={unlockedTiers} onSpawn={spawn} />
+              <SlimeForge unlockedMutations={unlockedMutations} biomass={bio} freeMag={freeMag} tiers={unlockedTiers} onSpawn={spawn} />
               {slimes.length ? (
                 <div style={{ display: 'grid', gap: 10 }}>
                 {slimes.map(s => {
@@ -1481,7 +1521,7 @@ export default function HiveQueenGame() {
           </div>
         )}
 
-        {tab === 5 && <Compendium queen={queen} defeatedMonsters={defeatedMonsters} />}
+        {tab === 5 && <Compendium queen={queen} monsterKills={monsterKills} unlockedMutations={unlockedMutations} />}
 
         {tab === 6 && <SettingsTab onSave={manualSave} onDelete={handleDelete} lastSave={lastSave} />}
       </main>
