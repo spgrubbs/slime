@@ -1,6 +1,6 @@
 import React from 'react';
 import { SLIME_TIERS, STAT_INFO } from '../data/slimeData.js';
-import { TRAIT_LIBRARY } from '../data/traitData.js';
+import { MUTATION_LIBRARY } from '../data/traitData.js';
 import { ELEMENTS } from '../data/gameConstants.js';
 import SlimeSprite from './SlimeSprite.jsx';
 
@@ -18,10 +18,13 @@ const SlimeDetail = ({ slime, expState }) => {
     viscosity: Math.floor(slime.baseStats.viscosity * multiplier),
   };
 
+  // Get mutations array (with backward compatibility for old 'traits' field)
+  const mutations = slime.mutations || slime.traits || [];
+
   return (
     <div style={{ background: 'rgba(0,0,0,0.3)', borderRadius: 10, padding: 15, border: `2px solid ${tier.color}33` }}>
       <div style={{ display: 'flex', gap: 15, marginBottom: 15 }}>
-        <SlimeSprite tier={slime.tier} size={60} hp={hp} maxHp={slime.maxHp} traits={slime.traits} status={expState?.status} primaryElement={slime.primaryElement} />
+        <SlimeSprite tier={slime.tier} size={60} hp={hp} maxHp={slime.maxHp} mutations={mutations} status={expState?.status} primaryElement={slime.primaryElement} />
         <div style={{ flex: 1 }}>
           <div style={{ fontWeight: 'bold', fontSize: 16 }}>{slime.name}</div>
           <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 8 }}>{tier.name}</div>
@@ -104,18 +107,29 @@ const SlimeDetail = ({ slime, expState }) => {
         </div>
       </div>
 
-      {slime.traits.length > 0 && (
+      {/* Mutations Section (Combat Abilities) */}
+      {mutations.length > 0 && (
         <div>
-          <div style={{ fontSize: 11, opacity: 0.7, marginBottom: 6 }}>Traits</div>
-          {slime.traits.map((t,i) => {
-            const tr = TRAIT_LIBRARY[t];
+          <div style={{ fontSize: 11, opacity: 0.7, marginBottom: 6 }}>Mutations</div>
+          {mutations.map((m,i) => {
+            const mut = MUTATION_LIBRARY[m];
+            if (!mut) return null;
             return (
-              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: 8, background: `${tr.color}22`, borderRadius: 6, borderLeft: `3px solid ${tr.color}`, marginBottom: 4 }}>
-                <span style={{ fontSize: 18 }}>{tr.icon}</span>
-                <div>
-                  <div style={{ fontSize: 12, fontWeight: 'bold' }}>{tr.name}</div>
-                  <div style={{ fontSize: 10, color: tr.color }}>{tr.passiveDesc}</div>
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: 8, background: `${mut.color}22`, borderRadius: 6, borderLeft: `3px solid ${mut.color}`, marginBottom: 4 }}>
+                <span style={{ fontSize: 18 }}>{mut.icon}</span>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 12, fontWeight: 'bold' }}>{mut.name}</div>
+                  <div style={{ fontSize: 10, color: mut.color }}>{mut.passiveDesc}</div>
                 </div>
+                {mut.elementBonus && (
+                  <div style={{ fontSize: 10 }}>
+                    {Object.entries(mut.elementBonus).map(([elem, bonus]) => (
+                      <span key={elem} style={{ color: ELEMENTS[elem]?.color }}>
+                        {ELEMENTS[elem]?.icon}+{bonus}%
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
             );
           })}

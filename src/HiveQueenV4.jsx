@@ -14,7 +14,7 @@ import {
 } from './data/gameConstants.js';
 
 import { STAT_INFO, SLIME_TIERS } from './data/slimeData.js';
-import { TRAIT_LIBRARY, STATUS_EFFECTS } from './data/traitData.js';
+import { MUTATION_LIBRARY, TRAIT_LIBRARY, STATUS_EFFECTS } from './data/traitData.js';
 import { MONSTER_TYPES } from './data/monsterData.js';
 import { ZONES, EXPLORATION_EVENTS } from './data/zoneData.js';
 import { BUILDINGS, RESEARCH } from './data/buildingData.js';
@@ -42,21 +42,36 @@ const calculateOfflineProgress = (saved, bonuses) => {
   const now = Date.now();
   const offlineMs = now - (saved.lastSave || now);
   const offlineSec = Math.min(offlineMs / 1000, 24 * 3600); // Cap at 24h
-  
+
   if (offlineSec < 60) return { hadProgress: false };
 
   const results = {
     biomassGained: 0,
     matsGained: {},
-    traitsGained: {},
+    monsterKillsGained: {},
     slimesLost: [],
     monstersKilled: 0,
     expeditionsWiped: [],
     researchCompleted: null,
   };
 
-  let { bio, slimes, exps, mats, traits, activeRes, research } = JSON.parse(JSON.stringify(saved));
+  let { bio, slimes, exps, mats, activeRes, research } = JSON.parse(JSON.stringify(saved));
   const battleTicks = Math.floor(offlineSec / 2.5);
+
+  // Helper to get slime stats (handles both old and new format)
+  const getStats = (sl) => {
+    if (sl.baseStats) {
+      const tier = SLIME_TIERS[sl.tier];
+      const biomass = sl.biomass || 0;
+      const mult = 1 + ((biomass / tier.biomassPerPercent) / 100);
+      return {
+        firmness: Math.floor(sl.baseStats.firmness * mult),
+        slipperiness: Math.floor(sl.baseStats.slipperiness * mult),
+        viscosity: Math.floor(sl.baseStats.viscosity * mult),
+      };
+    }
+    return sl.stats || { firmness: 5, slipperiness: 5, viscosity: 5 };
+  };
 
   // Simulate expeditions
   Object.entries(exps || {}).forEach(([zone, exp]) => {
@@ -81,15 +96,21 @@ const calculateOfflineProgress = (saved, bonuses) => {
       living.forEach(p => {
         const sl = slimes.find(s => s.id === p.id);
         if (!sl || monster.hp <= 0) return;
-        let dmg = sl.stats.firmness + sl.level * 1.2;
+        const stats = getStats(sl);
+        let dmg = stats.firmness;
         if (sl.pass?.includes('ferocity')) dmg *= 1.15;
-        if (Math.random() < 0.1 + sl.stats.slipperiness * 0.01) dmg *= 1.5;
+        if (Math.random() < 0.1 + stats.slipperiness * 0.01) dmg *= 1.5;
         monster.hp -= Math.floor(dmg);
       });
 
       if (monster.hp <= 0) {
         results.monstersKilled++;
         exp.kills = (exp.kills || 0) + 1;
+        // Track monster kills for mutation system
+        exp.monsterKillCounts = exp.monsterKillCounts || {};
+        exp.monsterKillCounts[monster.type] = (exp.monsterKillCounts[monster.type] || 0) + 1;
+        results.monsterKillsGained[monster.type] = (results.monsterKillsGained[monster.type] || 0) + 1;
+
         const bioG = Math.floor(md.biomass * (bonuses?.bio || 1));
         results.biomassGained += bioG;
         bio += bioG;
@@ -98,10 +119,7 @@ const calculateOfflineProgress = (saved, bonuses) => {
           results.matsGained[mat] = (results.matsGained[mat] || 0) + 1;
           mats[mat] = (mats[mat] || 0) + 1;
         }
-        if (Math.random() < md.drop) {
-          results.traitsGained[md.trait] = (results.traitsGained[md.trait] || 0) + 1;
-          traits[md.trait] = (traits[md.trait] || 0) + 1;
-        }
+        // Mutations are now unlocked via kill counts, not drops
         // Element accumulation during offline progress
         if (zd.element && zd.elementGainRate > 0) {
           living.forEach(p => {
@@ -116,18 +134,13 @@ const calculateOfflineProgress = (saved, bonuses) => {
             }
           });
         }
-        living.forEach(p => {
-          const sl = slimes.find(s => s.id === p.id);
-          if (!sl) return;
-          sl.xp += md.diff * 3 + 2;
-          while (sl.xp >= sl.level * 50) { sl.xp -= sl.level * 50; sl.level++; }
-        });
         monster = null;
       } else {
         const tgt = living[Math.floor(Math.random() * living.length)];
         const tgtSl = slimes.find(s => s.id === tgt.id);
+        const tgtStats = tgtSl ? getStats(tgtSl) : { slipperiness: 0 };
         let inc = md.dmg;
-        if (Math.random() < 0.05 + (tgtSl?.stats.slipperiness || 0) * 0.01) inc = 0;
+        if (Math.random() < 0.05 + tgtStats.slipperiness * 0.01) inc = 0;
         if (tgtSl?.pass?.includes('armored')) inc *= 0.8;
         tgt.hp -= Math.floor(inc);
         if (tgt.hp <= 0) {
@@ -168,7 +181,7 @@ const calculateOfflineProgress = (saved, bonuses) => {
     hadProgress: true,
     offlineTime: formatTime(offlineSec),
     results,
-    newState: { bio, slimes, exps, mats, traits, activeRes, research, lastSave: now }
+    newState: { bio, slimes, exps, mats, activeRes, research, lastSave: now }
   };
 };
 
@@ -180,7 +193,6 @@ export default function HiveQueenGame() {
   const [queen, setQueen] = useState({ level: 1 });
   const [bio, setBio] = useState(50);
   const [mats, setMats] = useState({});
-  const [traits, setTraits] = useState({});
   const [slimes, setSlimes] = useState([]);
   const [exps, setExps] = useState({});
   const [bLogs, setBLogs] = useState({});
@@ -193,7 +205,8 @@ export default function HiveQueenGame() {
   const [lastSave, setLastSave] = useState(null);
   const [lastTowerDefense, setLastTowerDefense] = useState(0);
   const [towerDefense, setTowerDefense] = useState(null);
-  const [defeatedMonsters, setDefeatedMonsters] = useState([]);
+  const [monsterKills, setMonsterKills] = useState({});
+  const [unlockedMutations, setUnlockedMutations] = useState([]);
 
   const [tab, setTab] = useState(0);
   const [menu, setMenu] = useState(false);
@@ -236,27 +249,27 @@ export default function HiveQueenGame() {
         setSlimes(offline.newState.slimes);
         setExps(offline.newState.exps);
         setMats(offline.newState.mats);
-        setTraits(offline.newState.traits);
         setActiveRes(offline.newState.activeRes);
         setResearch(offline.newState.research);
         setQueen(saved.queen);
         setBuilds(saved.builds || {});
         setLastTowerDefense(saved.lastTowerDefense || 0);
-        setDefeatedMonsters(saved.defeatedMonsters || []);
+        setMonsterKills(saved.monsterKills || {});
+        setUnlockedMutations(saved.unlockedMutations || []);
         setWelcomeBack(offline);
       } else {
         // Just load normally
         setQueen(saved.queen || { level: 1 });
         setBio(saved.bio || 50);
         setMats(saved.mats || {});
-        setTraits(saved.traits || {});
         setSlimes(saved.slimes || []);
         setExps(saved.exps || {});
         setBuilds(saved.builds || {});
         setResearch(saved.research || []);
         setActiveRes(saved.activeRes);
         setLastTowerDefense(saved.lastTowerDefense || 0);
-        setDefeatedMonsters(saved.defeatedMonsters || []);
+        setMonsterKills(saved.monsterKills || {});
+        setUnlockedMutations(saved.unlockedMutations || []);
       }
       setLastSave(saved.lastSave);
       setLogs([{ t: new Date().toLocaleTimeString(), m: '💾 Game loaded!' }]);
@@ -268,16 +281,16 @@ export default function HiveQueenGame() {
   useEffect(() => {
     if (!gameLoaded) return;
     const interval = setInterval(() => {
-      const state = { queen, bio, mats, traits, slimes, exps, builds, research, activeRes, lastTowerDefense, defeatedMonsters, lastSave: Date.now() };
+      const state = { queen, bio, mats, slimes, exps, builds, research, activeRes, lastTowerDefense, monsterKills, unlockedMutations, lastSave: Date.now() };
       if (saveGame(state)) {
         setLastSave(Date.now());
       }
     }, AUTO_SAVE_INTERVAL);
     return () => clearInterval(interval);
-  }, [gameLoaded, queen, bio, mats, traits, slimes, exps, builds, research, activeRes, lastTowerDefense, defeatedMonsters]);
+  }, [gameLoaded, queen, bio, mats, slimes, exps, builds, research, activeRes, lastTowerDefense, monsterKills, unlockedMutations]);
 
   const manualSave = () => {
-    const state = { queen, bio, mats, traits, slimes, exps, builds, research, activeRes, lastTowerDefense, defeatedMonsters, lastSave: Date.now() };
+    const state = { queen, bio, mats, slimes, exps, builds, research, activeRes, lastTowerDefense, monsterKills, unlockedMutations, lastSave: Date.now() };
     if (saveGame(state)) {
       setLastSave(Date.now());
       log('💾 Game saved!');
@@ -290,7 +303,6 @@ export default function HiveQueenGame() {
     setQueen({ level: 1 });
     setBio(50);
     setMats({});
-    setTraits({});
     setSlimes([]);
     setExps({});
     setBuilds({});
@@ -299,7 +311,8 @@ export default function HiveQueenGame() {
     setLastSave(null);
     setLastTowerDefense(0);
     setTowerDefense(null);
-    setDefeatedMonsters([]);
+    setMonsterKills({});
+    setUnlockedMutations([]);
     log('🗑️ Save deleted. Starting fresh!');
   };
 
@@ -314,30 +327,41 @@ export default function HiveQueenGame() {
     touchX.current = null;
   };
 
-  const spawn = (tier, selT, name, magCost) => {
+  const spawn = (tier, selMutations, name, magCost) => {
     const td = SLIME_TIERS[tier];
-    const bioCost = BASE_SLIME_COST + selT.length * 5;
+    const bioCost = BASE_SLIME_COST + selMutations.length * 5;
     if (bio < bioCost || freeMag < magCost) return;
     const baseStats = { firmness: Math.floor(5 * td.statMultiplier), slipperiness: Math.floor(5 * td.statMultiplier), viscosity: Math.floor(5 * td.statMultiplier) };
     const pass = [];
-    selT.forEach(id => { const t = TRAIT_LIBRARY[id]; if (t) { baseStats[t.stat] += t.bonus; pass.push(t.passive); } });
+    // Apply mutation stat bonuses and passives
+    selMutations.forEach(id => { const m = MUTATION_LIBRARY[id]; if (m) { baseStats[m.stat] += m.bonus; pass.push(m.passive); } });
     const maxHp = Math.floor((td.baseHp + baseStats.firmness * 3) * bon.hp);
+    // Apply element bonuses from selected mutations
+    const startingElements = createDefaultElements();
+    selMutations.forEach(id => {
+      const m = MUTATION_LIBRARY[id];
+      if (m?.elementBonus) {
+        Object.entries(m.elementBonus).forEach(([elem, bonus]) => {
+          startingElements[elem] = Math.min(100, (startingElements[elem] || 0) + bonus);
+        });
+      }
+    });
     setSlimes(p => [...p, {
       id: genId(),
       name,
       tier,
       biomass: 0,
-      traits: selT,
+      mutations: selMutations,  // Combat abilities from MUTATION_LIBRARY
+      traits: [],                // Personality traits from SLIME_TRAITS (Phase 3)
       pass,
       baseStats,
       maxHp,
       magCost,
-      // Element system - new slimes start with no element affinity
-      elements: createDefaultElements(),
+      elements: startingElements,
       primaryElement: null,
     }]);
     setBio(p => p - bioCost);
-    setTraits(p => { const n = { ...p }; selT.forEach(t => { n[t]--; if (n[t] <= 0) delete n[t]; }); return n; });
+    // Mutations are unlimited once unlocked - no inventory consumption
     log(`${name} emerges!`);
   };
 
@@ -398,7 +422,7 @@ export default function HiveQueenGame() {
     if (exps[zone] || !party.length) return;
     const p = party.map(id => { const sl = slimes.find(s => s.id === id); return { id, hp: sl.maxHp, maxHp: sl.maxHp, status: [], usedUndying: false, usedRebirth: false, usedAmbush: false, biomassGained: 0 }; });
     const targetKills = duration === '10' ? 10 : duration === '100' ? 100 : Infinity;
-    setExps(pr => ({ ...pr, [zone]: { party: p, monster: null, kills: 0, targetKills, materials: {}, timer: 0, turn: 0, currentAttacker: 0, exploring: false, animSlime: null, slimeAnim: 'idle', monAnim: 'idle' } }));
+    setExps(pr => ({ ...pr, [zone]: { party: p, monster: null, kills: 0, targetKills, materials: {}, monsterKillCounts: {}, timer: 0, turn: 0, currentAttacker: 0, exploring: false, animSlime: null, slimeAnim: 'idle', monAnim: 'idle' } }));
     setBLogs(pr => ({ ...pr, [zone]: [{ m: `Entering ${ZONES[zone].name}... (Target: ${duration === 'infinite' ? '∞' : targetKills})`, c: '#22d3ee' }] }));
     log(`Party sent to ${ZONES[zone].name}!`);
     setParty([]);
@@ -458,8 +482,35 @@ export default function HiveQueenGame() {
       }));
 
       log(`Recalled from ${ZONES[zone].name}! Materials secured.`);
+
+      // Count kills toward mutation unlocks (only on successful recall)
+      Object.entries(exp.monsterKillCounts || {}).forEach(([monsterType, count]) => {
+        if (count <= 0) return;
+
+        setMonsterKills(prev => {
+          const newTotal = (prev[monsterType] || 0) + count;
+          const md = MONSTER_TYPES[monsterType];
+
+          if (md && md.trait) {
+            const mutation = MUTATION_LIBRARY[md.trait];
+            if (mutation && newTotal >= mutation.requiredKills) {
+              // Check if not already unlocked (use functional update to avoid stale closure)
+              setUnlockedMutations(p => {
+                if (!p.includes(md.trait)) {
+                  log(`🧬 Mutation Unlocked: ${mutation.name}!`);
+                  return [...p, md.trait];
+                }
+                return p;
+              });
+            }
+          }
+
+          return { ...prev, [monsterType]: newTotal };
+        });
+      });
     } else {
       log(`Party wiped in ${ZONES[zone].name}! Materials lost.`);
+      // Kills are NOT counted on party wipe
     }
 
     setExpSummaries(s => [...s, { ...summary, id: Date.now() }]);
@@ -670,6 +721,10 @@ export default function HiveQueenGame() {
               }
               if (mon.hp <= 0) {
                 exp.kills++;
+                // Track kills per monster type for mutation unlocks
+                exp.monsterKillCounts = exp.monsterKillCounts || {};
+                exp.monsterKillCounts[mon.type] = (exp.monsterKillCounts[mon.type] || 0) + 1;
+
                 let bioG = Math.floor(md.biomass * bon.bio);
                 living.forEach(p => { const sl = slimes.find(s => s.id === p.id); if (sl?.pass?.includes('manaLeech')) bioG = Math.floor(bioG * 1.1); });
 
@@ -680,9 +735,6 @@ export default function HiveQueenGame() {
                 });
                 bLog(zone, `${md.name} defeated! +${Math.floor(bioPerSlime)}🧬 each`, '#4ade80');
 
-                // Track defeated monsters for compendium
-                setDefeatedMonsters(dm => dm.includes(mon.type) ? dm : [...dm, mon.type]);
-
                 // Material drops (50% chance) - add to expedition materials
                 if (Math.random() < 0.5) {
                   const mat = md.mats[Math.floor(Math.random() * md.mats.length)];
@@ -690,12 +742,7 @@ export default function HiveQueenGame() {
                   bLog(zone, `Found ${mat}! 📦`, '#f59e0b');
                 }
 
-                // Trait drops (existing drop rate) - add immediately
-                if (Math.random() < md.drop) {
-                  setTraits(t => ({ ...t, [md.trait]: (t[md.trait] || 0) + 1 }));
-                  bLog(zone, `✨ RARE: ${TRAIT_LIBRARY[md.trait].name}! ✨`, '#a855f7');
-                  log(`Got ${TRAIT_LIBRARY[md.trait].name}!`);
-                }
+                // Mutations are now unlocked via kill counts on recall, not drops
 
                 // Element accumulation - slimes gain element affinity from zone
                 if (zd.element && zd.elementGainRate > 0) {
@@ -1119,7 +1166,7 @@ export default function HiveQueenGame() {
                     return (
                       <div key={s.id} onClick={() => setQueenSlimeModal(s.id)} style={{ background: 'rgba(0,0,0,0.3)', borderRadius: 8, padding: 10, border: `2px solid ${tier.color}33`, cursor: 'pointer' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                          <SlimeSprite tier={s.tier} size={40} hp={expS?.hp} maxHp={expS?.maxHp || s.maxHp} traits={s.traits} status={expS?.status} primaryElement={s.primaryElement} />
+                          <SlimeSprite tier={s.tier} size={40} hp={expS?.hp} maxHp={expS?.maxHp || s.maxHp} mutations={s.mutations || s.traits} status={expS?.status} primaryElement={s.primaryElement} />
                           <div style={{ flex: 1 }}>
                             <div style={{ fontWeight: 'bold', fontSize: 13 }}>{s.name}</div>
                             <div style={{ fontSize: 10, opacity: 0.7 }}>{tier.name}</div>
@@ -1156,7 +1203,7 @@ export default function HiveQueenGame() {
             </div>
           ) : (
             <div>
-              <SlimeForge traits={traits} biomass={bio} freeMag={freeMag} tiers={unlockedTiers} onSpawn={spawn} />
+              <SlimeForge unlockedMutations={unlockedMutations} biomass={bio} freeMag={freeMag} tiers={unlockedTiers} onSpawn={spawn} />
               {slimes.length ? (
                 <div style={{ display: 'grid', gap: 10 }}>
                 {slimes.map(s => {
@@ -1168,7 +1215,7 @@ export default function HiveQueenGame() {
                   return (
                     <div key={s.id} onClick={() => setSelSlime(s.id)} style={{ background: 'rgba(0,0,0,0.3)', borderRadius: 10, padding: 12, border: `2px solid ${tier.color}33`, cursor: 'pointer' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                        <SlimeSprite tier={s.tier} size={45} hp={expS?.hp} maxHp={expS?.maxHp || s.maxHp} traits={s.traits} status={expS?.status} primaryElement={s.primaryElement} />
+                        <SlimeSprite tier={s.tier} size={45} hp={expS?.hp} maxHp={expS?.maxHp || s.maxHp} mutations={s.mutations || s.traits} status={expS?.status} primaryElement={s.primaryElement} />
                         <div style={{ flex: 1 }}>
                           <div style={{ fontWeight: 'bold', fontSize: 14 }}>{s.name}</div>
                           <div style={{ fontSize: 11, opacity: 0.7 }}>{tier.name}</div>
@@ -1283,12 +1330,12 @@ export default function HiveQueenGame() {
                     const sid = party[i];
                     const sl = slimes.find(s => s.id === sid);
                     return <div key={i} onClick={() => sid && setParty(p => p.filter(id => id !== sid))} style={{ width: 60, height: 70, background: 'rgba(0,0,0,0.3)', border: '2px dashed rgba(255,255,255,0.2)', borderRadius: 8, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', cursor: sl ? 'pointer' : 'default' }}>
-                      {sl ? <><SlimeSprite tier={sl.tier} size={30} traits={sl.traits} primaryElement={sl.primaryElement} /><div style={{ fontSize: 9, marginTop: 2 }}>🧬{Math.floor(sl.biomass || 0)}</div></> : <span style={{ fontSize: 24, opacity: 0.3 }}>+</span>}
+                      {sl ? <><SlimeSprite tier={sl.tier} size={30} mutations={sl.mutations || sl.traits} primaryElement={sl.primaryElement} /><div style={{ fontSize: 9, marginTop: 2 }}>🧬{Math.floor(sl.biomass || 0)}</div></> : <span style={{ fontSize: 24, opacity: 0.3 }}>+</span>}
                     </div>;
                   })}
                 </div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 15, maxHeight: 100, overflowY: 'auto' }}>
-                  {avail.map(s => <div key={s.id} onClick={() => party.length < 4 && setParty(p => [...p, s.id])} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: 6, background: 'rgba(0,0,0,0.3)', borderRadius: 6, cursor: 'pointer', fontSize: 9 }}><SlimeSprite tier={s.tier} size={24} traits={s.traits} primaryElement={s.primaryElement} /><span style={{ marginTop: 2 }}>{s.name.split(' ')[0]}</span></div>)}
+                  {avail.map(s => <div key={s.id} onClick={() => party.length < 4 && setParty(p => [...p, s.id])} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: 6, background: 'rgba(0,0,0,0.3)', borderRadius: 6, cursor: 'pointer', fontSize: 9 }}><SlimeSprite tier={s.tier} size={24} mutations={s.mutations || s.traits} primaryElement={s.primaryElement} /><span style={{ marginTop: 2 }}>{s.name.split(' ')[0]}</span></div>)}
                   {!avail.length && slimes.length > 0 && <div style={{ opacity: 0.5, fontSize: 11 }}>All busy</div>}
                 </div>
                 <button onClick={() => startExp(selZone)} disabled={!party.length} style={{ width: '100%', padding: 12, background: party.length ? 'linear-gradient(135deg, #4ade80, #22d3ee)' : 'rgba(100,100,100,0.5)', border: 'none', borderRadius: 8, color: '#fff', fontWeight: 'bold', cursor: party.length ? 'pointer' : 'not-allowed' }}>⚔️ Start</button>
@@ -1337,12 +1384,12 @@ export default function HiveQueenGame() {
                         const sid = party[i];
                         const sl = slimes.find(s => s.id === sid);
                         return <div key={i} onClick={() => sid && setParty(p => p.filter(id => id !== sid))} style={{ width: 60, height: 70, background: 'rgba(0,0,0,0.3)', border: '2px dashed rgba(255,255,255,0.2)', borderRadius: 8, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', cursor: sl ? 'pointer' : 'default' }}>
-                          {sl ? <><SlimeSprite tier={sl.tier} size={30} traits={sl.traits} primaryElement={sl.primaryElement} /><div style={{ fontSize: 9, marginTop: 2 }}>🧬{Math.floor(sl.biomass || 0)}</div></> : <span style={{ fontSize: 24, opacity: 0.3 }}>+</span>}
+                          {sl ? <><SlimeSprite tier={sl.tier} size={30} mutations={sl.mutations || sl.traits} primaryElement={sl.primaryElement} /><div style={{ fontSize: 9, marginTop: 2 }}>🧬{Math.floor(sl.biomass || 0)}</div></> : <span style={{ fontSize: 24, opacity: 0.3 }}>+</span>}
                         </div>;
                       })}
                     </div>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 15, maxHeight: 150, overflowY: 'auto' }}>
-                      {avail.map(s => <div key={s.id} onClick={() => party.length < tdSlots && setParty(p => [...p, s.id])} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: 6, background: 'rgba(0,0,0,0.3)', borderRadius: 6, cursor: 'pointer', fontSize: 9 }}><SlimeSprite tier={s.tier} size={24} traits={s.traits} primaryElement={s.primaryElement} /><span style={{ marginTop: 2 }}>{s.name.split(' ')[0]}</span></div>)}
+                      {avail.map(s => <div key={s.id} onClick={() => party.length < tdSlots && setParty(p => [...p, s.id])} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: 6, background: 'rgba(0,0,0,0.3)', borderRadius: 6, cursor: 'pointer', fontSize: 9 }}><SlimeSprite tier={s.tier} size={24} mutations={s.mutations || s.traits} primaryElement={s.primaryElement} /><span style={{ marginTop: 2 }}>{s.name.split(' ')[0]}</span></div>)}
                       {!avail.length && slimes.length > 0 && <div style={{ opacity: 0.5, fontSize: 11 }}>All busy</div>}
                     </div>
                     <button onClick={() => { startTowerDefense(party); setParty([]); }} disabled={!party.length} style={{ width: '100%', padding: 12, background: party.length ? 'linear-gradient(135deg, #ec4899, #a855f7)' : 'rgba(100,100,100,0.5)', border: 'none', borderRadius: 8, color: '#fff', fontWeight: 'bold', cursor: party.length ? 'pointer' : 'not-allowed' }}>🎯 Start Defense</button>
@@ -1381,7 +1428,7 @@ export default function HiveQueenGame() {
                       const stats = getSlimeStats(sl);
                       const biomass = sl.biomass || 0;
                       return <div key={ds.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: 6, background: 'rgba(74,222,128,0.1)', borderRadius: 6, fontSize: 9 }}>
-                        <SlimeSprite tier={sl.tier} size={32} traits={sl.traits} primaryElement={sl.primaryElement} />
+                        <SlimeSprite tier={sl.tier} size={32} mutations={sl.mutations || sl.traits} primaryElement={sl.primaryElement} />
                         <span style={{ marginTop: 2 }}>{sl.name.split(' ')[0]}</span>
                         <span style={{ fontSize: 8, opacity: 0.7 }}>DPS: {Math.floor((stats.firmness + biomass * 0.01) * (1 + stats.slipperiness * 0.1))}</span>
                       </div>;
@@ -1466,22 +1513,32 @@ export default function HiveQueenGame() {
               {Object.entries(mats).map(([n, c]) => <div key={n} style={{ padding: 10, background: 'rgba(0,0,0,0.3)', borderRadius: 8, fontSize: 12 }}>{n} <strong style={{ float: 'right' }}>x{c}</strong></div>)}
               {!Object.keys(mats).length && <div style={{ opacity: 0.5, fontStyle: 'italic', gridColumn: '1/-1' }}>No materials</div>}
             </div>
-            <h3 style={{ margin: '0 0 10px', fontSize: 14, opacity: 0.7 }}>Trait Essences</h3>
+            <h3 style={{ margin: '0 0 10px', fontSize: 14, opacity: 0.7 }}>Unlocked Mutations ({unlockedMutations.length}/{Object.keys(MUTATION_LIBRARY).length})</h3>
             <div style={{ display: 'grid', gap: 8 }}>
-              {Object.entries(traits).map(([id, cnt]) => {
-                const t = TRAIT_LIBRARY[id];
-                return <div key={id} style={{ padding: 12, background: `${t.color}22`, borderRadius: 8, border: `1px solid ${t.color}44` }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}><span style={{ fontSize: 20 }}>{t.icon}</span><span style={{ fontSize: 14, fontWeight: 'bold' }}>{t.name}</span><span style={{ marginLeft: 'auto', fontSize: 14, fontWeight: 'bold' }}>x{cnt}</span></div>
-                  <div style={{ fontSize: 11, opacity: 0.7 }}>+{t.bonus} {STAT_INFO[t.stat]?.name}</div>
-                  <div style={{ fontSize: 11, color: t.color }}>{t.passiveDesc}</div>
+              {unlockedMutations.map((id) => {
+                const m = MUTATION_LIBRARY[id];
+                if (!m) return null;
+                return <div key={id} style={{ padding: 12, background: `${m.color}22`, borderRadius: 8, border: `1px solid ${m.color}44` }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}><span style={{ fontSize: 20 }}>{m.icon}</span><span style={{ fontSize: 14, fontWeight: 'bold' }}>{m.name}</span></div>
+                  <div style={{ fontSize: 11, opacity: 0.7 }}>+{m.bonus} {STAT_INFO[m.stat]?.name}</div>
+                  <div style={{ fontSize: 11, color: m.color }}>{m.passiveDesc}</div>
+                  {m.elementBonus && (
+                    <div style={{ fontSize: 10, marginTop: 4 }}>
+                      {Object.entries(m.elementBonus).map(([elem, bonus]) => (
+                        <span key={elem} style={{ color: ELEMENTS[elem]?.color, marginRight: 8 }}>
+                          {ELEMENTS[elem]?.icon}+{bonus}%
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>;
               })}
-              {!Object.keys(traits).length && <div style={{ opacity: 0.5, fontStyle: 'italic' }}>No traits. They're rare!</div>}
+              {!unlockedMutations.length && <div style={{ opacity: 0.5, fontStyle: 'italic' }}>No mutations unlocked. Defeat 100 of any monster type!</div>}
             </div>
           </div>
         )}
 
-        {tab === 5 && <Compendium queen={queen} defeatedMonsters={defeatedMonsters} />}
+        {tab === 5 && <Compendium queen={queen} monsterKills={monsterKills} unlockedMutations={unlockedMutations} />}
 
         {tab === 6 && <SettingsTab onSave={manualSave} onDelete={handleDelete} lastSave={lastSave} />}
       </main>
@@ -1498,7 +1555,8 @@ export default function HiveQueenGame() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             <button onClick={() => setBio(b => b + 100)} style={{ padding: 8, background: '#4ade80', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 12 }}>+100🧬</button>
             <button onClick={() => setMats(m => ({ ...m, 'Dragon Scale': (m['Dragon Scale'] || 0) + 3, 'Soul Fragment': (m['Soul Fragment'] || 0) + 10, 'Wolf Pelt': (m['Wolf Pelt'] || 0) + 10, 'Crude Iron': (m['Crude Iron'] || 0) + 10, 'Mana Crystal': (m['Mana Crystal'] || 0) + 5, 'Ancient Stone': (m['Ancient Stone'] || 0) + 8, 'Human Bone': (m['Human Bone'] || 0) + 10, 'Iron Sword': (m['Iron Sword'] || 0) + 10 }))} style={{ padding: 8, background: '#f59e0b', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 12 }}>+Mats</button>
-            <button onClick={() => setTraits(t => ({ ...t, wolfFang: (t.wolfFang || 0) + 2, dragonHeart: (t.dragonHeart || 0) + 1, turtleShell: (t.turtleShell || 0) + 2, venomSac: (t.venomSac || 0) + 2, phoenixFeather: (t.phoenixFeather || 0) + 1 }))} style={{ padding: 8, background: '#a855f7', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 12 }}>+Traits</button>
+            <button onClick={() => setUnlockedMutations(['wolfFang', 'dragonHeart', 'turtleShell', 'venomSac', 'phoenixFeather', 'goblinCunning', 'batWing', 'boneArmor'])} style={{ padding: 8, background: '#a855f7', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 12 }}>Unlock Mutations</button>
+            <button onClick={() => setMonsterKills(k => ({ ...k, wolf: (k.wolf || 0) + 50, goblin: (k.goblin || 0) + 50, turtle: (k.turtle || 0) + 50, bat: (k.bat || 0) + 50 }))} style={{ padding: 8, background: '#22c55e', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 12 }}>+50 Kills</button>
             <button onClick={() => setQueen(q => ({ ...q, level: q.level + 5 }))} style={{ padding: 8, background: '#ec4899', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 12 }}>+5 Queen Lv</button>
             <button onClick={() => { setLastTowerDefense(0); setTowerDefense(null); log('🎯 Tower Defense reset!'); }} style={{ padding: 8, background: '#22d3ee', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 12 }}>Reset TD Timer</button>
           </div>

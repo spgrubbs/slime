@@ -1,11 +1,10 @@
-import { NAME_PRE, NAME_SUF, NAME_TIT } from '../data/slimeData.js';
+import { NAME_PRE, NAME_SUF } from '../data/slimeData.js';
 import { ELEMENTS, ELEMENT_STRONG_MULTIPLIER, ELEMENT_WEAK_MULTIPLIER, DEFAULT_ELEMENTS } from '../data/gameConstants.js';
 
-// Generate a random slime name
+// Generate a random slime name (titles added separately based on personality traits)
 export const genName = () =>
   NAME_PRE[Math.floor(Math.random() * NAME_PRE.length)] +
-  NAME_SUF[Math.floor(Math.random() * NAME_SUF.length)] +
-  NAME_TIT[Math.floor(Math.random() * NAME_TIT.length)];
+  NAME_SUF[Math.floor(Math.random() * NAME_SUF.length)];
 
 // Generate a random unique ID
 export const genId = () => Math.random().toString(36).substr(2, 9);
