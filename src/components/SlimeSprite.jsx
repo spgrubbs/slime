@@ -1,7 +1,6 @@
 import React from 'react';
 import { SLIME_TIERS } from '../data/slimeData.js';
-import { STATUS_EFFECTS } from '../data/traitData.js';
-import { TRAIT_LIBRARY } from '../data/traitData.js';
+import { STATUS_EFFECTS, MUTATION_LIBRARY } from '../data/traitData.js';
 import { ELEMENTS } from '../data/gameConstants.js';
 
 const SlimeSprite = ({ tier, size = 40, isQueen, hp, maxHp, traits = [], anim = 'idle', status = [], primaryElement = null }) => {
@@ -52,7 +51,7 @@ const SlimeSprite = ({ tier, size = 40, isQueen, hp, maxHp, traits = [], anim = 
         )}
       </div>
       {status?.length > 0 && <div style={{ display: 'flex', gap: 2, marginTop: 2 }}>{status.map((s,i) => <span key={i} style={{fontSize:size*0.3}}>{STATUS_EFFECTS[s.type]?.icon}</span>)}</div>}
-      {traits?.length > 0 && <div style={{ display: 'flex', gap: 1, marginTop: 2 }}>{traits.slice(0,4).map((t,i) => <span key={i} style={{fontSize:size*0.25}}>{TRAIT_LIBRARY[t]?.icon}</span>)}</div>}
+      {traits?.length > 0 && <div style={{ display: 'flex', gap: 1, marginTop: 2 }}>{traits.slice(0,4).map((t,i) => <span key={i} style={{fontSize:size*0.25}}>{MUTATION_LIBRARY[t]?.icon}</span>)}</div>}
     </div>
   );
 };

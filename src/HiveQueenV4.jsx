@@ -48,14 +48,15 @@ const calculateOfflineProgress = (saved, bonuses) => {
   const results = {
     biomassGained: 0,
     matsGained: {},
-    traitsGained: {},
+    monsterKillsGained: {},
+    mutationsUnlocked: [],
     slimesLost: [],
     monstersKilled: 0,
     expeditionsWiped: [],
     researchCompleted: null,
   };
 
-  let { bio, slimes, exps, mats, traits, activeRes, research } = JSON.parse(JSON.stringify(saved));
+  let { bio, slimes, exps, mats, monsterKills, unlockedMutations, activeRes, research } = JSON.parse(JSON.stringify(saved));
   const battleTicks = Math.floor(offlineSec / 2.5);
 
   // Simulate expeditions
@@ -98,9 +99,18 @@ const calculateOfflineProgress = (saved, bonuses) => {
           results.matsGained[mat] = (results.matsGained[mat] || 0) + 1;
           mats[mat] = (mats[mat] || 0) + 1;
         }
-        if (Math.random() < md.drop) {
-          results.traitsGained[md.trait] = (results.traitsGained[md.trait] || 0) + 1;
-          traits[md.trait] = (traits[md.trait] || 0) + 1;
+        // Track kills per monster type for mutation progress
+        results.monsterKillsGained[monster.type] = (results.monsterKillsGained[monster.type] || 0) + 1;
+        monsterKills = monsterKills || {};
+        monsterKills[monster.type] = (monsterKills[monster.type] || 0) + 1;
+        // Check for mutation unlock
+        if (md.trait) {
+          const mutation = MUTATION_LIBRARY[md.trait];
+          unlockedMutations = unlockedMutations || [];
+          if (mutation && monsterKills[monster.type] >= mutation.requiredKills && !unlockedMutations.includes(md.trait)) {
+            unlockedMutations.push(md.trait);
+            results.mutationsUnlocked.push(mutation.name);
+          }
         }
         // Element accumulation during offline progress
         if (zd.element && zd.elementGainRate > 0) {
@@ -168,7 +178,7 @@ const calculateOfflineProgress = (saved, bonuses) => {
     hadProgress: true,
     offlineTime: formatTime(offlineSec),
     results,
-    newState: { bio, slimes, exps, mats, traits, activeRes, research, lastSave: now }
+    newState: { bio, slimes, exps, mats, monsterKills, unlockedMutations, activeRes, research, lastSave: now }
   };
 };
 
@@ -1159,7 +1169,7 @@ export default function HiveQueenGame() {
                     return (
                       <div key={s.id} onClick={() => setQueenSlimeModal(s.id)} style={{ background: 'rgba(0,0,0,0.3)', borderRadius: 8, padding: 10, border: `2px solid ${tier.color}33`, cursor: 'pointer' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                          <SlimeSprite tier={s.tier} size={40} hp={expS?.hp} maxHp={expS?.maxHp || s.maxHp} traits={s.traits} status={expS?.status} primaryElement={s.primaryElement} />
+                          <SlimeSprite tier={s.tier} size={40} hp={expS?.hp} maxHp={expS?.maxHp || s.maxHp} traits={s.mutations} status={expS?.status} primaryElement={s.primaryElement} />
                           <div style={{ flex: 1 }}>
                             <div style={{ fontWeight: 'bold', fontSize: 13 }}>{s.name}</div>
                             <div style={{ fontSize: 10, opacity: 0.7 }}>{tier.name}</div>
@@ -1208,7 +1218,7 @@ export default function HiveQueenGame() {
                   return (
                     <div key={s.id} onClick={() => setSelSlime(s.id)} style={{ background: 'rgba(0,0,0,0.3)', borderRadius: 10, padding: 12, border: `2px solid ${tier.color}33`, cursor: 'pointer' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                        <SlimeSprite tier={s.tier} size={45} hp={expS?.hp} maxHp={expS?.maxHp || s.maxHp} traits={s.traits} status={expS?.status} primaryElement={s.primaryElement} />
+                        <SlimeSprite tier={s.tier} size={45} hp={expS?.hp} maxHp={expS?.maxHp || s.maxHp} traits={s.mutations} status={expS?.status} primaryElement={s.primaryElement} />
                         <div style={{ flex: 1 }}>
                           <div style={{ fontWeight: 'bold', fontSize: 14 }}>{s.name}</div>
                           <div style={{ fontSize: 11, opacity: 0.7 }}>{tier.name}</div>
@@ -1323,12 +1333,12 @@ export default function HiveQueenGame() {
                     const sid = party[i];
                     const sl = slimes.find(s => s.id === sid);
                     return <div key={i} onClick={() => sid && setParty(p => p.filter(id => id !== sid))} style={{ width: 60, height: 70, background: 'rgba(0,0,0,0.3)', border: '2px dashed rgba(255,255,255,0.2)', borderRadius: 8, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', cursor: sl ? 'pointer' : 'default' }}>
-                      {sl ? <><SlimeSprite tier={sl.tier} size={30} traits={sl.traits} primaryElement={sl.primaryElement} /><div style={{ fontSize: 9, marginTop: 2 }}>🧬{Math.floor(sl.biomass || 0)}</div></> : <span style={{ fontSize: 24, opacity: 0.3 }}>+</span>}
+                      {sl ? <><SlimeSprite tier={sl.tier} size={30} traits={sl.mutations} primaryElement={sl.primaryElement} /><div style={{ fontSize: 9, marginTop: 2 }}>🧬{Math.floor(sl.biomass || 0)}</div></> : <span style={{ fontSize: 24, opacity: 0.3 }}>+</span>}
                     </div>;
                   })}
                 </div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 15, maxHeight: 100, overflowY: 'auto' }}>
-                  {avail.map(s => <div key={s.id} onClick={() => party.length < 4 && setParty(p => [...p, s.id])} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: 6, background: 'rgba(0,0,0,0.3)', borderRadius: 6, cursor: 'pointer', fontSize: 9 }}><SlimeSprite tier={s.tier} size={24} traits={s.traits} primaryElement={s.primaryElement} /><span style={{ marginTop: 2 }}>{s.name.split(' ')[0]}</span></div>)}
+                  {avail.map(s => <div key={s.id} onClick={() => party.length < 4 && setParty(p => [...p, s.id])} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: 6, background: 'rgba(0,0,0,0.3)', borderRadius: 6, cursor: 'pointer', fontSize: 9 }}><SlimeSprite tier={s.tier} size={24} traits={s.mutations} primaryElement={s.primaryElement} /><span style={{ marginTop: 2 }}>{s.name.split(' ')[0]}</span></div>)}
                   {!avail.length && slimes.length > 0 && <div style={{ opacity: 0.5, fontSize: 11 }}>All busy</div>}
                 </div>
                 <button onClick={() => startExp(selZone)} disabled={!party.length} style={{ width: '100%', padding: 12, background: party.length ? 'linear-gradient(135deg, #4ade80, #22d3ee)' : 'rgba(100,100,100,0.5)', border: 'none', borderRadius: 8, color: '#fff', fontWeight: 'bold', cursor: party.length ? 'pointer' : 'not-allowed' }}>⚔️ Start</button>
@@ -1377,12 +1387,12 @@ export default function HiveQueenGame() {
                         const sid = party[i];
                         const sl = slimes.find(s => s.id === sid);
                         return <div key={i} onClick={() => sid && setParty(p => p.filter(id => id !== sid))} style={{ width: 60, height: 70, background: 'rgba(0,0,0,0.3)', border: '2px dashed rgba(255,255,255,0.2)', borderRadius: 8, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', cursor: sl ? 'pointer' : 'default' }}>
-                          {sl ? <><SlimeSprite tier={sl.tier} size={30} traits={sl.traits} primaryElement={sl.primaryElement} /><div style={{ fontSize: 9, marginTop: 2 }}>🧬{Math.floor(sl.biomass || 0)}</div></> : <span style={{ fontSize: 24, opacity: 0.3 }}>+</span>}
+                          {sl ? <><SlimeSprite tier={sl.tier} size={30} traits={sl.mutations} primaryElement={sl.primaryElement} /><div style={{ fontSize: 9, marginTop: 2 }}>🧬{Math.floor(sl.biomass || 0)}</div></> : <span style={{ fontSize: 24, opacity: 0.3 }}>+</span>}
                         </div>;
                       })}
                     </div>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 15, maxHeight: 150, overflowY: 'auto' }}>
-                      {avail.map(s => <div key={s.id} onClick={() => party.length < tdSlots && setParty(p => [...p, s.id])} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: 6, background: 'rgba(0,0,0,0.3)', borderRadius: 6, cursor: 'pointer', fontSize: 9 }}><SlimeSprite tier={s.tier} size={24} traits={s.traits} primaryElement={s.primaryElement} /><span style={{ marginTop: 2 }}>{s.name.split(' ')[0]}</span></div>)}
+                      {avail.map(s => <div key={s.id} onClick={() => party.length < tdSlots && setParty(p => [...p, s.id])} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: 6, background: 'rgba(0,0,0,0.3)', borderRadius: 6, cursor: 'pointer', fontSize: 9 }}><SlimeSprite tier={s.tier} size={24} traits={s.mutations} primaryElement={s.primaryElement} /><span style={{ marginTop: 2 }}>{s.name.split(' ')[0]}</span></div>)}
                       {!avail.length && slimes.length > 0 && <div style={{ opacity: 0.5, fontSize: 11 }}>All busy</div>}
                     </div>
                     <button onClick={() => { startTowerDefense(party); setParty([]); }} disabled={!party.length} style={{ width: '100%', padding: 12, background: party.length ? 'linear-gradient(135deg, #ec4899, #a855f7)' : 'rgba(100,100,100,0.5)', border: 'none', borderRadius: 8, color: '#fff', fontWeight: 'bold', cursor: party.length ? 'pointer' : 'not-allowed' }}>🎯 Start Defense</button>
@@ -1421,7 +1431,7 @@ export default function HiveQueenGame() {
                       const stats = getSlimeStats(sl);
                       const biomass = sl.biomass || 0;
                       return <div key={ds.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: 6, background: 'rgba(74,222,128,0.1)', borderRadius: 6, fontSize: 9 }}>
-                        <SlimeSprite tier={sl.tier} size={32} traits={sl.traits} primaryElement={sl.primaryElement} />
+                        <SlimeSprite tier={sl.tier} size={32} traits={sl.mutations} primaryElement={sl.primaryElement} />
                         <span style={{ marginTop: 2 }}>{sl.name.split(' ')[0]}</span>
                         <span style={{ fontSize: 8, opacity: 0.7 }}>DPS: {Math.floor((stats.firmness + biomass * 0.01) * (1 + stats.slipperiness * 0.1))}</span>
                       </div>;
@@ -1506,17 +1516,23 @@ export default function HiveQueenGame() {
               {Object.entries(mats).map(([n, c]) => <div key={n} style={{ padding: 10, background: 'rgba(0,0,0,0.3)', borderRadius: 8, fontSize: 12 }}>{n} <strong style={{ float: 'right' }}>x{c}</strong></div>)}
               {!Object.keys(mats).length && <div style={{ opacity: 0.5, fontStyle: 'italic', gridColumn: '1/-1' }}>No materials</div>}
             </div>
-            <h3 style={{ margin: '0 0 10px', fontSize: 14, opacity: 0.7 }}>Trait Essences</h3>
+            <h3 style={{ margin: '0 0 10px', fontSize: 14, opacity: 0.7 }}>Unlocked Mutations</h3>
             <div style={{ display: 'grid', gap: 8 }}>
-              {Object.entries(traits).map(([id, cnt]) => {
-                const t = TRAIT_LIBRARY[id];
-                return <div key={id} style={{ padding: 12, background: `${t.color}22`, borderRadius: 8, border: `1px solid ${t.color}44` }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}><span style={{ fontSize: 20 }}>{t.icon}</span><span style={{ fontSize: 14, fontWeight: 'bold' }}>{t.name}</span><span style={{ marginLeft: 'auto', fontSize: 14, fontWeight: 'bold' }}>x{cnt}</span></div>
-                  <div style={{ fontSize: 11, opacity: 0.7 }}>+{t.bonus} {STAT_INFO[t.stat]?.name}</div>
-                  <div style={{ fontSize: 11, color: t.color }}>{t.passiveDesc}</div>
+              {unlockedMutations.map(id => {
+                const m = MUTATION_LIBRARY[id];
+                if (!m) return null;
+                const elemBonus = m.elementBonus ? Object.entries(m.elementBonus)[0] : null;
+                return <div key={id} style={{ padding: 12, background: `${m.color}22`, borderRadius: 8, border: `1px solid ${m.color}44` }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                    <span style={{ fontSize: 20 }}>{m.icon}</span>
+                    <span style={{ fontSize: 14, fontWeight: 'bold' }}>{m.name}</span>
+                    {elemBonus && <span style={{ marginLeft: 'auto', fontSize: 12, color: ELEMENTS[elemBonus[0]]?.color }}>{ELEMENTS[elemBonus[0]]?.icon}+{elemBonus[1]}</span>}
+                  </div>
+                  <div style={{ fontSize: 11, opacity: 0.7 }}>+{m.bonus} {STAT_INFO[m.stat]?.name}</div>
+                  <div style={{ fontSize: 11, color: m.color }}>{m.passiveDesc}</div>
                 </div>;
               })}
-              {!Object.keys(traits).length && <div style={{ opacity: 0.5, fontStyle: 'italic' }}>No traits. They're rare!</div>}
+              {!unlockedMutations.length && <div style={{ opacity: 0.5, fontStyle: 'italic' }}>No mutations unlocked. Defeat 100 of a monster type!</div>}
             </div>
           </div>
         )}
