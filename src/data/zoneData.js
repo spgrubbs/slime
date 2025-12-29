@@ -22,4 +22,7 @@ export const EXPLORATION_EVENTS = [
   { msg: 'Rustling in the undergrowth keeps the party alert.', type: 'flavor' },
   { msg: 'Found a small biomass deposit!', type: 'biomass', amount: 3 },
   { msg: 'Discovered a cache of materials!', type: 'material' },
+  // Rare trait events (very low weight)
+  { msg: 'experienced a moment of clarity!', type: 'trait', traitPool: ['wise', 'cautious'], weight: 1 },
+  { msg: 'faced danger and grew from it!', type: 'trait', traitPool: ['brave', 'fierce'], weight: 1 },
 ];

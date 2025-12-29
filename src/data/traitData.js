@@ -156,3 +156,45 @@ export const STATUS_EFFECTS = {
   burn: { name: 'Burn', icon: '🔥', color: '#f97316', dmg: 3, dur: 4 },
   bleed: { name: 'Bleed', icon: '🩸', color: '#ef4444', dmg: 4, dur: 3 },
 };
+
+// Personality traits - behavioral modifiers that slimes can acquire
+// Separate from mutations (combat abilities)
+export const SLIME_TRAITS = {
+  // Common positive traits
+  brave: { name: 'Brave', icon: '🦁', desc: '+5% damage when HP below 50%', rarity: 'common', title: ' the Brave' },
+  cautious: { name: 'Cautious', icon: '🛡️', desc: '+5% dodge when HP below 50%', rarity: 'common', title: ' the Cautious' },
+  hardy: { name: 'Hardy', icon: '💪', desc: '+3% max HP', rarity: 'common', title: ' the Mighty' },
+  swift: { name: 'Swift', icon: '⚡', desc: '+3% crit chance', rarity: 'common', title: ' the Swift' },
+  wise: { name: 'Wise', icon: '🧠', desc: '+5% element gain rate', rarity: 'common', title: ' the Wise' },
+
+  // Uncommon positive traits
+  lucky: { name: 'Lucky', icon: '🍀', desc: '+5% material drop rate', rarity: 'uncommon', title: ' the Lucky' },
+  greedy: { name: 'Greedy', icon: '💰', desc: '+5% biomass gain', rarity: 'uncommon' },
+  resilient: { name: 'Resilient', icon: '🔄', desc: 'Recover 1 HP per kill', rarity: 'uncommon' },
+  fierce: { name: 'Fierce', icon: '😤', desc: '+8% damage on first attack', rarity: 'uncommon', title: ' the Fierce' },
+
+  // Common neutral/negative traits (add flavor)
+  lazy: { name: 'Lazy', icon: '😴', desc: '-5% damage, +10% ranch effectiveness', rarity: 'common' },
+  timid: { name: 'Timid', icon: '😰', desc: '+10% dodge, -5% damage', rarity: 'common' },
+  curious: { name: 'Curious', icon: '🔍', desc: '+10% exploration event chance', rarity: 'common' },
+
+  // Uncommon mixed traits
+  reckless: { name: 'Reckless', icon: '💥', desc: '+10% damage, +5% damage taken', rarity: 'uncommon', title: ' the Reckless' },
+  glutton: { name: 'Glutton', icon: '🍖', desc: '+10% biomass gain, -3% max HP', rarity: 'uncommon' },
+
+  // Rare traits (from specific ranches only)
+  void: { name: 'Void', icon: '🕳️', desc: 'Cannot gain elemental affinity', rarity: 'rare', source: 'nullifier' },
+  adaptable: { name: 'Adaptable', icon: '🔀', desc: '+50% elemental affinity gain', rarity: 'rare' },
+
+  // Legendary traits (premium currency only)
+  ancient: { name: 'Ancient', icon: '📜', desc: '+1 mutation slot', rarity: 'legendary', title: ' the Ancient' },
+  primordial: { name: 'Primordial', icon: '🌟', desc: '+10% all stats', rarity: 'legendary', title: ' the Primordial' },
+};
+
+// Rarity colors for traits
+export const TRAIT_RARITY_COLORS = {
+  common: '#9ca3af',
+  uncommon: '#22c55e',
+  rare: '#a855f7',
+  legendary: '#f59e0b',
+};

@@ -14,7 +14,7 @@ import {
 } from './data/gameConstants.js';
 
 import { STAT_INFO, SLIME_TIERS } from './data/slimeData.js';
-import { MUTATION_LIBRARY, TRAIT_LIBRARY, STATUS_EFFECTS } from './data/traitData.js';
+import { MUTATION_LIBRARY, TRAIT_LIBRARY, STATUS_EFFECTS, SLIME_TRAITS } from './data/traitData.js';
 import { MONSTER_TYPES } from './data/monsterData.js';
 import { ZONES, EXPLORATION_EVENTS } from './data/zoneData.js';
 import { BUILDINGS, RESEARCH } from './data/buildingData.js';
@@ -354,7 +354,36 @@ export default function HiveQueenGame() {
     const pass = [];
     // Apply mutation stat bonuses and passives
     selMutations.forEach(id => { const m = MUTATION_LIBRARY[id]; if (m) { baseStats[m.stat] += m.bonus; pass.push(m.passive); } });
-    const maxHp = Math.floor((td.baseHp + baseStats.firmness * 3) * bon.hp);
+
+    // Random personality trait at spawn
+    let spawnTraits = [];
+    const traitRoll = Math.random();
+    if (traitRoll < 0.05) {
+      // 5% chance for uncommon trait
+      const uncommonTraits = Object.entries(SLIME_TRAITS)
+        .filter(([_, t]) => t.rarity === 'uncommon' && !t.source)
+        .map(([id]) => id);
+      if (uncommonTraits.length > 0) {
+        spawnTraits = [uncommonTraits[Math.floor(Math.random() * uncommonTraits.length)]];
+      }
+    } else if (traitRoll < 0.25) {
+      // 20% chance for common trait
+      const commonTraits = Object.entries(SLIME_TRAITS)
+        .filter(([_, t]) => t.rarity === 'common' && !t.source)
+        .map(([id]) => id);
+      if (commonTraits.length > 0) {
+        spawnTraits = [commonTraits[Math.floor(Math.random() * commonTraits.length)]];
+      }
+    }
+
+    // Generate name with potential title from trait
+    const slimeName = spawnTraits.length > 0 ? genName(spawnTraits) : name;
+
+    // Apply hardy trait HP bonus and glutton HP penalty
+    let maxHp = Math.floor((td.baseHp + baseStats.firmness * 3) * bon.hp);
+    if (spawnTraits.includes('hardy')) maxHp = Math.floor(maxHp * 1.03);
+    if (spawnTraits.includes('glutton')) maxHp = Math.floor(maxHp * 0.97);
+
     // Apply element bonuses from selected mutations
     const startingElements = createDefaultElements();
     selMutations.forEach(id => {
@@ -367,11 +396,11 @@ export default function HiveQueenGame() {
     });
     setSlimes(p => [...p, {
       id: genId(),
-      name,
+      name: slimeName,
       tier,
       biomass: 0,
       mutations: selMutations,  // Combat abilities from MUTATION_LIBRARY
-      traits: [],                // Personality traits from SLIME_TRAITS (Phase 3)
+      traits: spawnTraits,      // Personality traits from SLIME_TRAITS
       pass,
       baseStats,
       maxHp,
@@ -381,7 +410,12 @@ export default function HiveQueenGame() {
     }]);
     setBio(p => p - bioCost);
     // Mutations are unlimited once unlocked - no inventory consumption
-    log(`${name} emerges!`);
+    if (spawnTraits.length > 0) {
+      const trait = SLIME_TRAITS[spawnTraits[0]];
+      log(`${slimeName} emerges with ${trait.icon} ${trait.name} trait!`);
+    } else {
+      log(`${slimeName} emerges!`);
+    }
   };
 
   const reabsorb = (id) => {
@@ -661,6 +695,25 @@ export default function HiveQueenGame() {
                 const mat = zoneMats[Math.floor(Math.random() * zoneMats.length)];
                 exp.materials[mat] = (exp.materials[mat] || 0) + 1;
                 bLog(zone, `Found ${mat}!`, '#f59e0b');
+              } else if (event.type === 'trait') {
+                // Rare event: grant a trait to a random party member
+                const eligible = living.filter(p => {
+                  const sl = slimes.find(s => s.id === p.id);
+                  return sl && (!sl.traits || sl.traits.length === 0);
+                });
+                if (eligible.length > 0) {
+                  const target = eligible[Math.floor(Math.random() * eligible.length)];
+                  const sl = slimes.find(s => s.id === target.id);
+                  const trait = event.traitPool[Math.floor(Math.random() * event.traitPool.length)];
+                  const traitData = SLIME_TRAITS[trait];
+                  if (sl && traitData) {
+                    setSlimes(prev => prev.map(s =>
+                      s.id === sl.id ? { ...s, traits: [...(s.traits || []), trait] } : s
+                    ));
+                    bLog(zone, `${sl.name} ${event.msg} Gained ${traitData.icon} ${traitData.name}!`, '#f59e0b');
+                    log(`${sl.name} developed the ${traitData.name} trait!`);
+                  }
+                }
               }
             } else {
               // Spawn monster immediately
@@ -717,8 +770,19 @@ export default function HiveQueenGame() {
                   const stats = getSlimeStats(sl);
                   let dmg = stats.firmness;
                   let crit = false;
+                  // Primordial trait: +10% all stats (applied to damage)
+                  if (sl.traits?.includes('primordial')) dmg = Math.floor(dmg * 1.10);
+                  // Mutation passives
                   if (sl.pass?.includes('ferocity')) dmg *= 1.15;
-                  const critCh = 0.05 + stats.slipperiness * 0.01 + (sl.pass?.includes('trickster') ? 0.08 : 0);
+                  // Personality traits affecting damage
+                  if (sl.traits?.includes('brave') && p.hp < p.maxHp * 0.5) dmg = Math.floor(dmg * 1.05);
+                  if (sl.traits?.includes('lazy')) dmg = Math.floor(dmg * 0.95);
+                  if (sl.traits?.includes('timid')) dmg = Math.floor(dmg * 0.95);
+                  if (sl.traits?.includes('reckless')) dmg = Math.floor(dmg * 1.10);
+                  if (sl.traits?.includes('fierce') && !p.usedFierce) { dmg = Math.floor(dmg * 1.08); p.usedFierce = true; }
+                  // Crit chance calculation
+                  let critCh = 0.05 + stats.slipperiness * 0.01 + (sl.pass?.includes('trickster') ? 0.08 : 0);
+                  if (sl.traits?.includes('swift')) critCh += 0.03;
                   if (sl.pass?.includes('ambush') && !p.usedAmbush) { crit = true; p.usedAmbush = true; }
                   else if (Math.random() < critCh) crit = true;
                   if (crit) dmg *= (1.5 + (sl.pass?.includes('crushing') ? 0.3 : 0));
@@ -746,6 +810,22 @@ export default function HiveQueenGame() {
 
                 let bioG = Math.floor(md.biomass * bon.bio);
                 living.forEach(p => { const sl = slimes.find(s => s.id === p.id); if (sl?.pass?.includes('manaLeech')) bioG = Math.floor(bioG * 1.1); });
+                // Personality traits affecting biomass gain
+                let bioMultiplier = 1;
+                living.forEach(p => {
+                  const sl = slimes.find(s => s.id === p.id);
+                  if (sl?.traits?.includes('greedy')) bioMultiplier += 0.05;
+                  if (sl?.traits?.includes('glutton')) bioMultiplier += 0.10;
+                });
+                bioG = Math.floor(bioG * bioMultiplier);
+
+                // Resilient trait: recover 1 HP per kill
+                living.forEach(p => {
+                  const sl = slimes.find(s => s.id === p.id);
+                  if (sl?.traits?.includes('resilient')) {
+                    p.hp = Math.min(p.maxHp, p.hp + 1);
+                  }
+                });
 
                 // Distribute biomass evenly among living party members
                 const bioPerSlime = bioG / living.length;
@@ -754,8 +834,13 @@ export default function HiveQueenGame() {
                 });
                 bLog(zone, `${md.name} defeated! +${Math.floor(bioPerSlime)}🧬 each`, '#4ade80');
 
-                // Material drops (50% chance) - add to expedition materials
-                if (Math.random() < 0.5) {
+                // Material drops - check for lucky trait bonus
+                let matDropChance = 0.5;
+                living.forEach(p => {
+                  const sl = slimes.find(s => s.id === p.id);
+                  if (sl?.traits?.includes('lucky')) matDropChance += 0.05;
+                });
+                if (Math.random() < matDropChance) {
                   const mat = md.mats[Math.floor(Math.random() * md.mats.length)];
                   exp.materials[mat] = (exp.materials[mat] || 0) + 1;
                   bLog(zone, `Found ${mat}! 📦`, '#f59e0b');
@@ -797,10 +882,17 @@ export default function HiveQueenGame() {
                 const tgtSl = slimes.find(s => s.id === tgt.id);
                 const tgtStats = tgtSl ? getSlimeStats(tgtSl) : { slipperiness: 0 };
                 let inc = md.dmg;
-                const dodgeCh = 0.05 + (tgtStats.slipperiness || 0) * 0.015 + (tgtSl?.pass?.includes('echolocation') ? 0.12 : 0) + (tgtSl?.pass?.includes('trickster') ? 0.08 : 0);
+                // Calculate dodge chance with trait bonuses
+                let dodgeCh = 0.05 + (tgtStats.slipperiness || 0) * 0.015 + (tgtSl?.pass?.includes('echolocation') ? 0.12 : 0) + (tgtSl?.pass?.includes('trickster') ? 0.08 : 0);
+                // Cautious: +5% dodge when HP below 50%
+                if (tgtSl?.traits?.includes('cautious') && tgt.hp < tgt.maxHp * 0.5) dodgeCh += 0.05;
+                // Timid: +10% dodge
+                if (tgtSl?.traits?.includes('timid')) dodgeCh += 0.10;
                 if (Math.random() < dodgeCh) { bLog(zone, `${tgtSl?.name} dodges! 💨`, '#22d3ee'); }
                 else {
                   if (tgtSl?.pass?.includes('armored')) inc *= 0.8;
+                  // Reckless trait: +5% damage taken
+                  if (tgtSl?.traits?.includes('reckless')) inc = Math.floor(inc * 1.05);
                   // Apply elemental damage modifier (monster element vs slime element)
                   const preInc = Math.floor(inc);
                   inc = calculateElementalDamage(Math.floor(inc), md.element, tgtSl?.primaryElement);

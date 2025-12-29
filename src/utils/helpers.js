@@ -1,10 +1,22 @@
 import { NAME_PRE, NAME_SUF } from '../data/slimeData.js';
 import { ELEMENTS, ELEMENT_STRONG_MULTIPLIER, ELEMENT_WEAK_MULTIPLIER, DEFAULT_ELEMENTS } from '../data/gameConstants.js';
+import { SLIME_TRAITS } from '../data/traitData.js';
 
-// Generate a random slime name (titles added separately based on personality traits)
-export const genName = () =>
-  NAME_PRE[Math.floor(Math.random() * NAME_PRE.length)] +
-  NAME_SUF[Math.floor(Math.random() * NAME_SUF.length)];
+// Generate a random slime name with optional title based on personality traits
+export const genName = (traits = []) => {
+  const base = NAME_PRE[Math.floor(Math.random() * NAME_PRE.length)] +
+               NAME_SUF[Math.floor(Math.random() * NAME_SUF.length)];
+
+  // Check if any trait has a title
+  for (const traitId of traits) {
+    const trait = SLIME_TRAITS[traitId];
+    if (trait && trait.title) {
+      return base + trait.title;
+    }
+  }
+
+  return base;
+};
 
 // Generate a random unique ID
 export const genId = () => Math.random().toString(36).substr(2, 9);
@@ -58,17 +70,21 @@ export const createDefaultElements = () => ({ ...DEFAULT_ELEMENTS });
 export const canGainElement = (slime) => {
   // Cannot gain if already locked to an element
   if (slime.primaryElement) return false;
-  // Cannot gain if has void trait (to be implemented in Phase 3)
-  if (slime.pass?.includes('void')) return false;
+  // Cannot gain if has void personality trait
+  if (slime.traits?.includes('void')) return false;
   return true;
 };
 
 // Calculate element gain with modifiers
 export const calculateElementGain = (baseGain, slime) => {
   let gain = baseGain;
-  // Adaptable trait increases gain rate by 50%
-  if (slime.pass?.includes('adaptable')) {
+  // Adaptable personality trait increases gain rate by 50%
+  if (slime.traits?.includes('adaptable')) {
     gain *= 1.5;
+  }
+  // Wise personality trait increases gain rate by 5%
+  if (slime.traits?.includes('wise')) {
+    gain *= 1.05;
   }
   return gain;
 };
