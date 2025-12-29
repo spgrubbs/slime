@@ -19,6 +19,7 @@ import { MONSTER_TYPES } from './data/monsterData.js';
 import { ZONES, EXPLORATION_EVENTS } from './data/zoneData.js';
 import { BUILDINGS, RESEARCH } from './data/buildingData.js';
 import { HUMAN_TYPES, TD_WAVES } from './data/towerDefenseData.js';
+import { RANCH_TYPES, RANCH_EVENTS, RANCH_UPGRADE_BONUSES, MAX_RANCH_LEVEL } from './data/ranchData.js';
 
 // Utility imports
 import { genName, genId, formatTime, calculateElementalDamage, createDefaultElements, canGainElement, calculateElementGain } from './utils/helpers.js';
@@ -35,6 +36,7 @@ import {
   Menu,
   WelcomeBackModal,
   SettingsTab,
+  Ranch,
 } from './components';
 
 // ============== OFFLINE PROGRESS ==============
@@ -208,6 +210,13 @@ export default function HiveQueenGame() {
   const [monsterKills, setMonsterKills] = useState({});
   const [unlockedMutations, setUnlockedMutations] = useState([]);
 
+  // Ranch system state
+  const [prisms, setPrisms] = useState(0);
+  const [ranchBuildings, setRanchBuildings] = useState({});
+  const [ranchAssignments, setRanchAssignments] = useState({});
+  const [ranchProgress, setRanchProgress] = useState({});
+  const [ranchEvents, setRanchEvents] = useState([]);
+
   const [tab, setTab] = useState(0);
   const [menu, setMenu] = useState(false);
   const [dev, setDev] = useState(false);
@@ -220,10 +229,11 @@ export default function HiveQueenGame() {
     { id: 0, icon: '👑', label: 'Queen' },
     { id: 1, icon: '🟢', label: 'Slimes', badge: slimes.length },
     { id: 2, icon: '🗺️', label: 'Explore' },
-    { id: 3, icon: '🎯', label: 'Defense' },
-    { id: 4, icon: '📦', label: 'Inventory' },
-    { id: 5, icon: '📖', label: 'Compendium' },
-    { id: 6, icon: '⚙️', label: 'Settings' },
+    { id: 3, icon: '🏠', label: 'Ranch', unlock: 3 },
+    { id: 4, icon: '🎯', label: 'Defense' },
+    { id: 5, icon: '📦', label: 'Inventory' },
+    { id: 6, icon: '📖', label: 'Compendium' },
+    { id: 7, icon: '⚙️', label: 'Settings' },
   ];
 
   const maxMag = BASE_MAGICKA + (builds.slimePit || 0) * 10;
@@ -275,6 +285,12 @@ export default function HiveQueenGame() {
         });
         setUnlockedMutations(newUnlocks);
 
+        // Load ranch state
+        setPrisms(saved.prisms || 0);
+        setRanchBuildings(saved.ranchBuildings || {});
+        setRanchAssignments(saved.ranchAssignments || {});
+        setRanchProgress(saved.ranchProgress || {});
+
         setWelcomeBack(offline);
       } else {
         // Just load normally
@@ -289,6 +305,10 @@ export default function HiveQueenGame() {
         setLastTowerDefense(saved.lastTowerDefense || 0);
         setMonsterKills(saved.monsterKills || {});
         setUnlockedMutations(saved.unlockedMutations || []);
+        setPrisms(saved.prisms || 0);
+        setRanchBuildings(saved.ranchBuildings || {});
+        setRanchAssignments(saved.ranchAssignments || {});
+        setRanchProgress(saved.ranchProgress || {});
       }
       setLastSave(saved.lastSave);
       setLogs([{ t: new Date().toLocaleTimeString(), m: '💾 Game loaded!' }]);
@@ -300,16 +320,16 @@ export default function HiveQueenGame() {
   useEffect(() => {
     if (!gameLoaded) return;
     const interval = setInterval(() => {
-      const state = { queen, bio, mats, slimes, exps, builds, research, activeRes, lastTowerDefense, monsterKills, unlockedMutations, lastSave: Date.now() };
+      const state = { queen, bio, mats, slimes, exps, builds, research, activeRes, lastTowerDefense, monsterKills, unlockedMutations, prisms, ranchBuildings, ranchAssignments, ranchProgress, lastSave: Date.now() };
       if (saveGame(state)) {
         setLastSave(Date.now());
       }
     }, AUTO_SAVE_INTERVAL);
     return () => clearInterval(interval);
-  }, [gameLoaded, queen, bio, mats, slimes, exps, builds, research, activeRes, lastTowerDefense, monsterKills, unlockedMutations]);
+  }, [gameLoaded, queen, bio, mats, slimes, exps, builds, research, activeRes, lastTowerDefense, monsterKills, unlockedMutations, prisms, ranchBuildings, ranchAssignments, ranchProgress]);
 
   const manualSave = () => {
-    const state = { queen, bio, mats, slimes, exps, builds, research, activeRes, lastTowerDefense, monsterKills, unlockedMutations, lastSave: Date.now() };
+    const state = { queen, bio, mats, slimes, exps, builds, research, activeRes, lastTowerDefense, monsterKills, unlockedMutations, prisms, ranchBuildings, ranchAssignments, ranchProgress, lastSave: Date.now() };
     if (saveGame(state)) {
       setLastSave(Date.now());
       log('💾 Game saved!');
@@ -332,6 +352,11 @@ export default function HiveQueenGame() {
     setTowerDefense(null);
     setMonsterKills({});
     setUnlockedMutations([]);
+    setPrisms(0);
+    setRanchBuildings({});
+    setRanchAssignments({});
+    setRanchProgress({});
+    setRanchEvents([]);
     log('🗑️ Save deleted. Starting fresh!');
   };
 
@@ -433,6 +458,136 @@ export default function HiveQueenGame() {
     setBio(p => p - cost);
     setQueen(q => ({ ...q, level: q.level + 1 }));
     log(`Queen leveled up to ${queen.level + 1}!`);
+  };
+
+  // ============== RANCH FUNCTIONS ==============
+  const canBuildRanch = (ranchId) => {
+    const ranch = RANCH_TYPES[ranchId];
+    if (!ranch) return false;
+    if (ranchBuildings[ranchId]) return false; // Already built
+
+    // Check unlock requirements
+    if (ranch.unlock.type === 'level' && queen.level < ranch.unlock.value) return false;
+    if (ranch.unlock.type === 'prisms' && prisms < ranch.unlock.value) return false;
+
+    // Check costs
+    if (ranch.cost.biomass && bio < ranch.cost.biomass) return false;
+    if (ranch.cost.prisms && prisms < ranch.cost.prisms) return false;
+    if (ranch.cost.mats) {
+      for (const [mat, count] of Object.entries(ranch.cost.mats)) {
+        if ((mats[mat] || 0) < count) return false;
+      }
+    }
+    return true;
+  };
+
+  const buildRanch = (ranchId) => {
+    if (!canBuildRanch(ranchId)) return;
+    const ranch = RANCH_TYPES[ranchId];
+
+    // Deduct costs
+    if (ranch.cost.biomass) setBio(p => p - ranch.cost.biomass);
+    if (ranch.cost.prisms) setPrisms(p => p - ranch.cost.prisms);
+    if (ranch.cost.mats) {
+      setMats(p => {
+        const newMats = { ...p };
+        for (const [mat, count] of Object.entries(ranch.cost.mats)) {
+          newMats[mat] = (newMats[mat] || 0) - count;
+        }
+        return newMats;
+      });
+    }
+
+    setRanchBuildings(p => ({ ...p, [ranchId]: { level: 1 } }));
+    setRanchAssignments(p => ({ ...p, [ranchId]: [] }));
+    setRanchProgress(p => ({ ...p, [ranchId]: 0 }));
+    log(`${ranch.icon} ${ranch.name} built!`);
+  };
+
+  const canUpgradeRanch = (ranchId) => {
+    const ranch = RANCH_TYPES[ranchId];
+    const building = ranchBuildings[ranchId];
+    if (!ranch || !building) return false;
+    if (building.level >= MAX_RANCH_LEVEL) return false;
+
+    const costMult = Math.pow(ranch.upgradeCost.multiplier, building.level - 1);
+    if (ranch.upgradeCost.biomass && bio < ranch.upgradeCost.biomass * costMult) return false;
+    if (ranch.upgradeCost.prisms && prisms < ranch.upgradeCost.prisms * costMult) return false;
+    return true;
+  };
+
+  const upgradeRanch = (ranchId) => {
+    if (!canUpgradeRanch(ranchId)) return;
+    const ranch = RANCH_TYPES[ranchId];
+    const building = ranchBuildings[ranchId];
+    const costMult = Math.pow(ranch.upgradeCost.multiplier, building.level - 1);
+
+    if (ranch.upgradeCost.biomass) setBio(p => p - Math.floor(ranch.upgradeCost.biomass * costMult));
+    if (ranch.upgradeCost.prisms) setPrisms(p => p - Math.floor(ranch.upgradeCost.prisms * costMult));
+
+    setRanchBuildings(p => ({ ...p, [ranchId]: { ...p[ranchId], level: p[ranchId].level + 1 } }));
+    log(`${ranch.icon} ${ranch.name} upgraded to level ${building.level + 1}!`);
+  };
+
+  const getRanchCapacity = (ranchId) => {
+    const ranch = RANCH_TYPES[ranchId];
+    const building = ranchBuildings[ranchId];
+    if (!ranch || !building) return 0;
+    return ranch.capacity + (building.level - 1) * RANCH_UPGRADE_BONUSES.capacity;
+  };
+
+  const canAssignToRanch = (slimeId, ranchId) => {
+    const ranch = RANCH_TYPES[ranchId];
+    const building = ranchBuildings[ranchId];
+    if (!ranch || !building) return false;
+
+    const slime = slimes.find(s => s.id === slimeId);
+    if (!slime) return false;
+
+    // Check if slime is on expedition
+    if (Object.values(exps).some(e => e.party.some(p => p.id === slimeId))) return false;
+
+    // Check if already assigned to any ranch
+    for (const [rid, assigned] of Object.entries(ranchAssignments)) {
+      if (assigned.includes(slimeId)) return false;
+    }
+
+    // Check capacity
+    const capacity = getRanchCapacity(ranchId);
+    if ((ranchAssignments[ranchId]?.length || 0) >= capacity) return false;
+
+    return true;
+  };
+
+  const assignToRanch = (slimeId, ranchId) => {
+    if (!canAssignToRanch(slimeId, ranchId)) return;
+    const slime = slimes.find(s => s.id === slimeId);
+    const ranch = RANCH_TYPES[ranchId];
+
+    setRanchAssignments(p => ({
+      ...p,
+      [ranchId]: [...(p[ranchId] || []), slimeId]
+    }));
+    log(`${slime.name} assigned to ${ranch.icon} ${ranch.name}`);
+  };
+
+  const removeFromRanch = (slimeId, ranchId) => {
+    const slime = slimes.find(s => s.id === slimeId);
+    const ranch = RANCH_TYPES[ranchId];
+    if (!slime || !ranch) return;
+
+    setRanchAssignments(p => ({
+      ...p,
+      [ranchId]: (p[ranchId] || []).filter(id => id !== slimeId)
+    }));
+    log(`${slime.name} removed from ${ranch.icon} ${ranch.name}`);
+  };
+
+  const getSlimeRanch = (slimeId) => {
+    for (const [ranchId, assigned] of Object.entries(ranchAssignments)) {
+      if (assigned.includes(slimeId)) return ranchId;
+    }
+    return null;
   };
 
   const [expDuration, setExpDuration] = useState('10'); // '10', '100', 'infinite'
@@ -930,9 +1085,133 @@ export default function HiveQueenGame() {
           return { ...p, prog: np };
         });
       }
+
+      // Ranch tick - process ranch cycles
+      setRanchProgress(prev => {
+        const next = { ...prev };
+        Object.entries(ranchBuildings).forEach(([ranchId, building]) => {
+          const ranch = RANCH_TYPES[ranchId];
+          const assigned = ranchAssignments[ranchId] || [];
+          if (!ranch || !building || assigned.length === 0) return;
+
+          // Calculate cycle time with upgrades
+          const cycleReduction = 1 - Math.min(0.5, (building.level - 1) * RANCH_UPGRADE_BONUSES.cycleReduction);
+          const effectiveCycleTime = ranch.cycleTime * cycleReduction;
+          const effectMult = 1 + (building.level - 1) * RANCH_UPGRADE_BONUSES.effectMultiplier;
+
+          next[ranchId] = (next[ranchId] || 0) + dt;
+
+          // Check if cycle completes
+          if (next[ranchId] >= effectiveCycleTime) {
+            next[ranchId] = 0;
+
+            // Roll for random event
+            const eventRoll = Math.random();
+            let eventMult = 1;
+            if (eventRoll < 0.15) {
+              const validEvents = RANCH_EVENTS.filter(e => !e.ranchTypes || e.ranchTypes.includes(ranchId));
+              const totalWeight = validEvents.reduce((sum, e) => sum + (e.weight || 1), 0);
+              let roll = Math.random() * totalWeight;
+              for (const event of validEvents) {
+                roll -= (event.weight || 1);
+                if (roll <= 0) {
+                  if (event.type === 'bonus') {
+                    if (event.effect === 'biomass') {
+                      setBio(b => b + event.value);
+                      setRanchEvents(e => [...e.slice(-9), { msg: event.msg, ranchId, time: Date.now() }]);
+                    } else if (event.effect === 'elementBoost' || event.effect === 'statsBoost') {
+                      eventMult = event.value;
+                      setRanchEvents(e => [...e.slice(-9), { msg: event.msg, ranchId, time: Date.now() }]);
+                    }
+                  } else if (event.type === 'penalty') {
+                    eventMult = event.value;
+                    setRanchEvents(e => [...e.slice(-9), { msg: event.msg, ranchId, time: Date.now() }]);
+                  } else if (event.type === 'flavor') {
+                    setRanchEvents(e => [...e.slice(-9), { msg: event.msg, ranchId, time: Date.now() }]);
+                  }
+                  break;
+                }
+              }
+            }
+
+            // Apply ranch effects to assigned slimes
+            assigned.forEach(slimeId => {
+              const slime = slimes.find(s => s.id === slimeId);
+              if (!slime) return;
+
+              // Calculate lazy trait bonus
+              const lazyBonus = slime.traits?.includes('lazy') ? 1.1 : 1;
+              const totalMult = effectMult * eventMult * lazyBonus;
+
+              if (ranch.effect === 'biomass') {
+                const bioGain = Math.floor(ranch.effectValue * totalMult);
+                setSlimes(prev => prev.map(s =>
+                  s.id === slimeId ? { ...s, biomass: (s.biomass || 0) + bioGain } : s
+                ));
+              } else if (ranch.effect === 'element' && ranch.element) {
+                if (canGainElement(slime)) {
+                  const elemGain = ranch.effectValue * totalMult;
+                  setSlimes(prev => prev.map(s => {
+                    if (s.id !== slimeId) return s;
+                    const newElements = { ...(s.elements || createDefaultElements()) };
+                    newElements[ranch.element] = Math.min(100, (newElements[ranch.element] || 0) + elemGain);
+                    let primaryElement = s.primaryElement;
+                    if (newElements[ranch.element] >= 100 && !primaryElement) {
+                      primaryElement = ranch.element;
+                      log(`${s.name} fully attuned to ${ELEMENTS[ranch.element].icon} ${ELEMENTS[ranch.element].name}!`);
+                    }
+                    return { ...s, elements: newElements, primaryElement };
+                  }));
+                }
+              } else if (ranch.effect === 'stats') {
+                const statGain = ranch.effectValue * totalMult;
+                setSlimes(prev => prev.map(s => {
+                  if (s.id !== slimeId || !s.baseStats) return s;
+                  const stats = ['firmness', 'slipperiness', 'viscosity'];
+                  const targetStat = stats[Math.floor(Math.random() * stats.length)];
+                  return {
+                    ...s,
+                    baseStats: { ...s.baseStats, [targetStat]: s.baseStats[targetStat] + statGain }
+                  };
+                }));
+              } else if (ranch.effect === 'trait') {
+                if (ranch.grantsTrait === 'void') {
+                  // Nullifier: Strip elements and grant void trait
+                  setSlimes(prev => prev.map(s => {
+                    if (s.id !== slimeId) return s;
+                    if (s.traits?.includes('void')) return s;
+                    return {
+                      ...s,
+                      elements: createDefaultElements(),
+                      primaryElement: null,
+                      traits: [...(s.traits || []), 'void']
+                    };
+                  }));
+                  log(`${slime.name} gained the ${SLIME_TRAITS.void.icon} Void trait!`);
+                  removeFromRanch(slimeId, ranchId);
+                } else if (ranch.traitPool && Math.random() < ranch.effectValue) {
+                  // Luxury Lounge: Chance to grant random trait from pool
+                  const existingTraits = slime.traits || [];
+                  const availableTraits = ranch.traitPool.filter(t => !existingTraits.includes(t));
+                  if (availableTraits.length > 0) {
+                    const newTrait = availableTraits[Math.floor(Math.random() * availableTraits.length)];
+                    const traitData = SLIME_TRAITS[newTrait];
+                    setSlimes(prev => prev.map(s =>
+                      s.id === slimeId ? { ...s, traits: [...(s.traits || []), newTrait] } : s
+                    ));
+                    log(`${slime.name} gained the ${traitData.icon} ${traitData.name} trait!`);
+                    setRanchEvents(e => [...e.slice(-9), { msg: `${slime.name} developed ${traitData.name}!`, ranchId, time: Date.now() }]);
+                  }
+                }
+              }
+            });
+          }
+        });
+        return next;
+      });
     }, TICK_RATE);
     return () => clearInterval(iv);
-  }, [gameLoaded, lastTick, speed, slimes, bon, activeRes, log, bLog]);
+  }, [gameLoaded, lastTick, speed, slimes, bon, activeRes, log, bLog, ranchBuildings, ranchAssignments]);
 
   // Tower Defense Combat Loop
   useEffect(() => {
@@ -1462,6 +1741,39 @@ export default function HiveQueenGame() {
         )}
 
         {tab === 3 && (
+          queen.level >= 3 ? (
+            <Ranch
+              queen={queen}
+              bio={bio}
+              mats={mats}
+              prisms={prisms}
+              slimes={slimes}
+              exps={exps}
+              ranchBuildings={ranchBuildings}
+              ranchAssignments={ranchAssignments}
+              ranchProgress={ranchProgress}
+              ranchEvents={ranchEvents}
+              canBuildRanch={canBuildRanch}
+              buildRanch={buildRanch}
+              canUpgradeRanch={canUpgradeRanch}
+              upgradeRanch={upgradeRanch}
+              getRanchCapacity={getRanchCapacity}
+              canAssignToRanch={canAssignToRanch}
+              assignToRanch={assignToRanch}
+              removeFromRanch={removeFromRanch}
+              getSlimeRanch={getSlimeRanch}
+            />
+          ) : (
+            <div style={{ textAlign: 'center', padding: 40 }}>
+              <div style={{ fontSize: 48, marginBottom: 15 }}>🏠</div>
+              <div style={{ fontSize: 16, fontWeight: 'bold', marginBottom: 10 }}>Slime Ranch</div>
+              <div style={{ opacity: 0.7, marginBottom: 15 }}>Unlock at Queen Level 3</div>
+              <div style={{ fontSize: 12, color: '#f59e0b' }}>Current Level: {queen.level}</div>
+            </div>
+          )
+        )}
+
+        {tab === 4 && (
           <div>
             {/* Tower Defense */}
             {!towerDefense ? (
@@ -1617,7 +1929,7 @@ export default function HiveQueenGame() {
           </div>
         )}
 
-        {tab === 4 && (
+        {tab === 5 && (
           <div>
             <h3 style={{ margin: '0 0 10px', fontSize: 14, opacity: 0.7 }}>Materials</h3>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8, marginBottom: 20 }}>
@@ -1649,9 +1961,9 @@ export default function HiveQueenGame() {
           </div>
         )}
 
-        {tab === 5 && <Compendium queen={queen} monsterKills={monsterKills} unlockedMutations={unlockedMutations} />}
+        {tab === 6 && <Compendium queen={queen} monsterKills={monsterKills} unlockedMutations={unlockedMutations} />}
 
-        {tab === 6 && <SettingsTab onSave={manualSave} onDelete={handleDelete} lastSave={lastSave} />}
+        {tab === 7 && <SettingsTab onSave={manualSave} onDelete={handleDelete} lastSave={lastSave} />}
       </main>
 
       <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: 'rgba(0,0,0,0.95)', borderTop: '1px solid rgba(255,255,255,0.1)', maxHeight: 70, overflowY: 'auto', padding: 8 }}>
@@ -1670,6 +1982,7 @@ export default function HiveQueenGame() {
             <button onClick={() => setMonsterKills(k => ({ ...k, wolf: (k.wolf || 0) + 50, goblin: (k.goblin || 0) + 50, turtle: (k.turtle || 0) + 50, bat: (k.bat || 0) + 50 }))} style={{ padding: 8, background: '#22c55e', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 12 }}>+50 Kills</button>
             <button onClick={() => setQueen(q => ({ ...q, level: q.level + 5 }))} style={{ padding: 8, background: '#ec4899', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 12 }}>+5 Queen Lv</button>
             <button onClick={() => { setLastTowerDefense(0); setTowerDefense(null); log('🎯 Tower Defense reset!'); }} style={{ padding: 8, background: '#22d3ee', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 12 }}>Reset TD Timer</button>
+            <button onClick={() => setPrisms(p => p + 100)} style={{ padding: 8, background: '#8b5cf6', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 12 }}>+100 Prisms</button>
           </div>
         </div>
       )}
