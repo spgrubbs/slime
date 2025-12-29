@@ -12,7 +12,7 @@ const Compendium = ({ queen, monsterKills, unlockedMutations }) => {
     <div>
       <div style={{ display: 'flex', gap: 6, marginBottom: 15, flexWrap: 'wrap' }}>
         {Object.entries(ZONES).map(([k,zn]) => {
-          const ok = zn.unlocked || queen.level >= (zn.unlock || 0);
+          const ok = zn.unlocked || (queen?.level || 1) >= (zn.unlock || 0);
           return <button key={k} onClick={() => ok && setZone(k)} style={{ padding: '8px 12px', background: zone===k ? 'rgba(34,211,238,0.2)' : 'rgba(0,0,0,0.3)', border: `2px solid ${zone===k?'#22d3ee':'transparent'}`, borderRadius: 6, color: '#fff', cursor: ok?'pointer':'not-allowed', opacity: ok?1:0.4, fontSize: 12 }}>{zn.icon} {zn.name}</button>;
         })}
       </div>
@@ -30,9 +30,11 @@ const Compendium = ({ queen, monsterKills, unlockedMutations }) => {
       <div style={{ fontSize: 14, fontWeight: 'bold', marginBottom: 10 }}>Monsters</div>
       {z.monsters.map(mid => {
         const m = MONSTER_TYPES[mid];
+        if (!m) return null;
         const mutation = MUTATION_LIBRARY[m.trait];
-        const kills = monsterKills[mid] || 0;
-        const isUnlocked = unlockedMutations.includes(m.trait);
+        if (!mutation) return null;
+        const kills = monsterKills?.[mid] || 0;
+        const isUnlocked = unlockedMutations?.includes(m.trait) || false;
         const progress = Math.min(100, (kills / mutation.requiredKills) * 100);
         const discovered = kills > 0;
 
