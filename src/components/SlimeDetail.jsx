@@ -1,6 +1,6 @@
 import React from 'react';
 import { SLIME_TIERS, STAT_INFO } from '../data/slimeData.js';
-import { MUTATION_LIBRARY } from '../data/traitData.js';
+import { MUTATION_LIBRARY, SLIME_TRAITS, TRAIT_RARITY_COLORS } from '../data/traitData.js';
 import { ELEMENTS } from '../data/gameConstants.js';
 import SlimeSprite from './SlimeSprite.jsx';
 
@@ -106,6 +106,30 @@ const SlimeDetail = ({ slime, expState }) => {
           })}
         </div>
       </div>
+
+      {/* Personality Traits Section */}
+      {slime.traits?.length > 0 && (
+        <div style={{ marginBottom: 15 }}>
+          <div style={{ fontSize: 11, opacity: 0.7, marginBottom: 6 }}>Personality Traits</div>
+          {slime.traits.map((t, i) => {
+            const trait = SLIME_TRAITS[t];
+            if (!trait) return null;
+            const color = TRAIT_RARITY_COLORS[trait.rarity] || '#9ca3af';
+            return (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: 8, background: `${color}22`, borderRadius: 6, borderLeft: `3px solid ${color}`, marginBottom: 4 }}>
+                <span style={{ fontSize: 18 }}>{trait.icon}</span>
+                <div style={{ flex: 1 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ fontSize: 12, fontWeight: 'bold' }}>{trait.name}</span>
+                    <span style={{ fontSize: 9, padding: '1px 4px', background: `${color}33`, color: color, borderRadius: 3, textTransform: 'uppercase' }}>{trait.rarity}</span>
+                  </div>
+                  <div style={{ fontSize: 10, opacity: 0.8 }}>{trait.desc}</div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* Mutations Section (Combat Abilities) */}
       {mutations.length > 0 && (
