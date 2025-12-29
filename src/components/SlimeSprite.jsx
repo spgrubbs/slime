@@ -1,10 +1,10 @@
 import React from 'react';
 import { SLIME_TIERS } from '../data/slimeData.js';
-import { STATUS_EFFECTS } from '../data/traitData.js';
-import { TRAIT_LIBRARY } from '../data/traitData.js';
+import { STATUS_EFFECTS, MUTATION_LIBRARY } from '../data/traitData.js';
 import { ELEMENTS } from '../data/gameConstants.js';
 
-const SlimeSprite = ({ tier, size = 40, isQueen, hp, maxHp, traits = [], anim = 'idle', status = [], primaryElement = null }) => {
+// Note: 'mutations' prop displays mutation icons below the slime
+const SlimeSprite = ({ tier, size = 40, isQueen, hp, maxHp, traits = [], mutations = [], anim = 'idle', status = [], primaryElement = null }) => {
   const color = isQueen ? '#ec4899' : (SLIME_TIERS[tier]?.color || '#4ade80');
   const hpPct = hp !== undefined && maxHp ? (hp / maxHp) * 100 : 100;
   const transform = anim === 'attack' ? 'translateX(15px) scale(1.1)' : anim === 'hurt' ? 'translateX(-5px) scale(0.9)' : 'scale(1)';
@@ -52,7 +52,14 @@ const SlimeSprite = ({ tier, size = 40, isQueen, hp, maxHp, traits = [], anim = 
         )}
       </div>
       {status?.length > 0 && <div style={{ display: 'flex', gap: 2, marginTop: 2 }}>{status.map((s,i) => <span key={i} style={{fontSize:size*0.3}}>{STATUS_EFFECTS[s.type]?.icon}</span>)}</div>}
-      {traits?.length > 0 && <div style={{ display: 'flex', gap: 1, marginTop: 2 }}>{traits.slice(0,4).map((t,i) => <span key={i} style={{fontSize:size*0.25}}>{TRAIT_LIBRARY[t]?.icon}</span>)}</div>}
+      {(mutations?.length > 0 || traits?.length > 0) && (
+        <div style={{ display: 'flex', gap: 1, marginTop: 2 }}>
+          {/* Show mutations (combat abilities) */}
+          {mutations.slice(0,4).map((m,i) => <span key={`m-${i}`} style={{fontSize:size*0.25}}>{MUTATION_LIBRARY[m]?.icon}</span>)}
+          {/* Legacy: also check traits prop for backwards compatibility */}
+          {!mutations?.length && traits?.slice(0,4).map((t,i) => <span key={`t-${i}`} style={{fontSize:size*0.25}}>{MUTATION_LIBRARY[t]?.icon}</span>)}
+        </div>
+      )}
     </div>
   );
 };
