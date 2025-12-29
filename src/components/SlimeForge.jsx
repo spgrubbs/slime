@@ -47,7 +47,7 @@ const SlimeForge = ({ unlockedMutations, biomass, freeMag, tiers, onSpawn }) => 
     <div style={{ background: 'rgba(0,0,0,0.2)', borderRadius: 10, padding: 15 }}>
       <h3 style={{ margin: '0 0 15px', fontSize: 16 }}>🧪 Slime Forge</h3>
       <div style={{ display: 'flex', alignItems: 'center', gap: 15, marginBottom: 15, padding: 15, background: 'rgba(236,72,153,0.1)', borderRadius: 10 }}>
-        <SlimeSprite tier={tier} size={60} traits={selMutations} />
+        <SlimeSprite tier={tier} size={60} mutations={selMutations} />
         <div style={{ flex: 1 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
             <input type="text" value={name} onChange={e => setName(e.target.value)} style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: 5, padding: '5px 10px', color: '#fff', fontSize: 14, flex: 1 }} />

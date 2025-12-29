@@ -254,8 +254,27 @@ export default function HiveQueenGame() {
         setQueen(saved.queen);
         setBuilds(saved.builds || {});
         setLastTowerDefense(saved.lastTowerDefense || 0);
-        setMonsterKills(saved.monsterKills || {});
-        setUnlockedMutations(saved.unlockedMutations || []);
+
+        // Apply monster kills gained from offline progress
+        const newMonsterKills = { ...(saved.monsterKills || {}) };
+        Object.entries(offline.results.monsterKillsGained || {}).forEach(([type, count]) => {
+          newMonsterKills[type] = (newMonsterKills[type] || 0) + count;
+        });
+        setMonsterKills(newMonsterKills);
+
+        // Check for new mutation unlocks from offline kills
+        const newUnlocks = [...(saved.unlockedMutations || [])];
+        Object.entries(newMonsterKills).forEach(([monsterType, kills]) => {
+          const md = MONSTER_TYPES[monsterType];
+          if (md?.trait && !newUnlocks.includes(md.trait)) {
+            const mutation = MUTATION_LIBRARY[md.trait];
+            if (mutation && kills >= mutation.requiredKills) {
+              newUnlocks.push(md.trait);
+            }
+          }
+        });
+        setUnlockedMutations(newUnlocks);
+
         setWelcomeBack(offline);
       } else {
         // Just load normally
