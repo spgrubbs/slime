@@ -21,6 +21,7 @@ import { ZONES, EXPLORATION_EVENTS } from './data/zoneData.js';
 import { BUILDINGS, RESEARCH } from './data/buildingData.js';
 import { HUMAN_TYPES, TD_WAVES, getTDScaling } from './data/towerDefenseData.js';
 import { RANCH_TYPES, RANCH_EVENTS, RANCH_UPGRADE_BONUSES, MAX_RANCH_LEVEL, RANCH_MAX_ACCUMULATION_TIME } from './data/ranchData.js';
+import { HIVE_ABILITIES, PRISM_SHOP, PHEROMONE_UPDATE_INTERVAL, PHEROMONES_PER_SLIME_PER_HOUR } from './data/hiveData.js';
 
 // Utility imports
 import { genName, genId, formatTime, calculateElementalDamage, createDefaultElements, canGainElement, calculateElementGain } from './utils/helpers.js';
@@ -218,6 +219,12 @@ export default function HiveQueenGame() {
   const [ranchProgress, setRanchProgress] = useState({});
   const [ranchEvents, setRanchEvents] = useState([]);
 
+  // Pheromone and Hive Ability system
+  const [pheromones, setPheromones] = useState(0);
+  const [lastPheromoneUpdate, setLastPheromoneUpdate] = useState(Date.now());
+  const [activeHiveAbilities, setActiveHiveAbilities] = useState({});
+  // Format: { abilityId: expirationTimestamp, ... }
+
   const [tab, setTab] = useState(0);
   const [menu, setMenu] = useState(false);
   const [dev, setDev] = useState(false);
@@ -247,6 +254,134 @@ export default function HiveQueenGame() {
     spd: 1 + (research.includes('swiftSlimes') ? 0.2 : 0),
     hp: 1 + (research.includes('slimeVitality') ? 0.15 : 0),
     res: 1 + (builds.researchLab || 0) * 0.25,
+  };
+
+  // Hive Ability Functions
+  const isHiveAbilityActive = (abilityId) => {
+    const expiration = activeHiveAbilities[abilityId];
+    return expiration && Date.now() < expiration;
+  };
+
+  const activateHiveAbility = (abilityId) => {
+    const ability = HIVE_ABILITIES[abilityId];
+    if (!ability || pheromones < ability.cost) return;
+    if (isHiveAbilityActive(abilityId)) return; // Already active
+
+    setPheromones(p => p - ability.cost);
+    setActiveHiveAbilities(prev => ({
+      ...prev,
+      [abilityId]: Date.now() + ability.duration
+    }));
+    log(`🧪 Activated ${ability.name}!`);
+  };
+
+  const getAbilityTimeRemaining = (abilityId) => {
+    const expiration = activeHiveAbilities[abilityId];
+    if (!expiration || Date.now() >= expiration) return 0;
+    return expiration - Date.now();
+  };
+
+  // Prism Shop Functions
+  const applyTimeSkip = (ms) => {
+    // Advance ranch progress for all assigned slimes
+    setRanchAssignments(prev => {
+      const updated = {};
+      Object.entries(prev).forEach(([ranchId, assignments]) => {
+        updated[ranchId] = assignments.map(a => ({
+          ...a,
+          startTime: a.startTime - ms // Make it appear as if started earlier
+        }));
+      });
+      return updated;
+    });
+
+    // Advance research progress (if activeRes exists)
+    if (activeRes) {
+      const rd = RESEARCH[activeRes.id];
+      const addedProgress = (100 / rd.time) * bon.res * (ms / 1000);
+      setActiveRes(prev => {
+        if (!prev) return null;
+        const newProg = prev.prog + addedProgress;
+        if (newProg >= 100) {
+          setResearch(r => [...r, prev.id]);
+          log(`✅ ${rd.name} completed!`);
+          return null;
+        }
+        return { ...prev, prog: newProg };
+      });
+    }
+
+    log(`⏰ Time advanced by ${Math.round(ms / 3600000)} hours!`);
+  };
+
+  const purchasePrismItem = (itemId, targetSlimeId = null) => {
+    const item = PRISM_SHOP[itemId];
+    if (!item || prisms < item.cost) return;
+
+    setPrisms(p => p - item.cost);
+
+    switch(itemId) {
+      case 'timeSkip1h':
+        applyTimeSkip(3600000);
+        break;
+      case 'timeSkip24h':
+        applyTimeSkip(86400000);
+        break;
+      case 'ancientTrait':
+        if (targetSlimeId) {
+          setSlimes(prev => prev.map(s =>
+            s.id === targetSlimeId && !s.traits?.includes('ancient')
+              ? { ...s, traits: [...(s.traits || []), 'ancient'] }
+              : s
+          ));
+          log(`📜 Granted Ancient trait!`);
+        }
+        break;
+      case 'primordialTrait':
+        if (targetSlimeId) {
+          setSlimes(prev => prev.map(s =>
+            s.id === targetSlimeId && !s.traits?.includes('primordial')
+              ? { ...s, traits: [...(s.traits || []), 'primordial'] }
+              : s
+          ));
+          log(`🌟 Granted Primordial trait!`);
+        }
+        break;
+      case 'mutationReset':
+        if (targetSlimeId) {
+          setSlimes(prev => prev.map(s =>
+            s.id === targetSlimeId
+              ? { ...s, mutations: [], pass: [] }
+              : s
+          ));
+          log(`🔄 Mutations reset!`);
+        }
+        break;
+      case 'elementReset':
+        if (targetSlimeId) {
+          setSlimes(prev => prev.map(s =>
+            s.id === targetSlimeId
+              ? { ...s, elements: { fire: 0, water: 0, nature: 0, earth: 0 }, primaryElement: null }
+              : s
+          ));
+          log(`💫 Elements cleansed!`);
+        }
+        break;
+      case 'instantMutation':
+        const lockedMutations = Object.keys(MUTATION_LIBRARY).filter(m => !unlockedMutations.includes(m));
+        if (lockedMutations.length > 0) {
+          const newMutation = lockedMutations[Math.floor(Math.random() * lockedMutations.length)];
+          setUnlockedMutations(p => [...p, newMutation]);
+          log(`🧬 Unlocked mutation: ${MUTATION_LIBRARY[newMutation].name}!`);
+        } else {
+          // Refund if no mutations to unlock
+          setPrisms(p => p + item.cost);
+          log(`Already unlocked all mutations!`);
+        }
+        break;
+      default:
+        break;
+    }
   };
 
   // Load game on mount
@@ -292,6 +427,11 @@ export default function HiveQueenGame() {
         setRanchAssignments(saved.ranchAssignments || {});
         setRanchProgress(saved.ranchProgress || {});
 
+        // Load pheromone/hive ability state
+        setPheromones(saved.pheromones || 0);
+        setLastPheromoneUpdate(saved.lastPheromoneUpdate || Date.now());
+        setActiveHiveAbilities(saved.activeHiveAbilities || {});
+
         setWelcomeBack(offline);
       } else {
         // Just load normally
@@ -310,6 +450,9 @@ export default function HiveQueenGame() {
         setRanchBuildings(saved.ranchBuildings || {});
         setRanchAssignments(saved.ranchAssignments || {});
         setRanchProgress(saved.ranchProgress || {});
+        setPheromones(saved.pheromones || 0);
+        setLastPheromoneUpdate(saved.lastPheromoneUpdate || Date.now());
+        setActiveHiveAbilities(saved.activeHiveAbilities || {});
       }
       setLastSave(saved.lastSave);
       setLogs([{ t: new Date().toLocaleTimeString(), m: '💾 Game loaded!' }]);
@@ -321,16 +464,16 @@ export default function HiveQueenGame() {
   useEffect(() => {
     if (!gameLoaded) return;
     const interval = setInterval(() => {
-      const state = { queen, bio, mats, slimes, exps, builds, research, activeRes, lastTowerDefense, monsterKills, unlockedMutations, prisms, ranchBuildings, ranchAssignments, ranchProgress, lastSave: Date.now() };
+      const state = { queen, bio, mats, slimes, exps, builds, research, activeRes, lastTowerDefense, monsterKills, unlockedMutations, prisms, ranchBuildings, ranchAssignments, ranchProgress, pheromones, lastPheromoneUpdate, activeHiveAbilities, lastSave: Date.now() };
       if (saveGame(state)) {
         setLastSave(Date.now());
       }
     }, AUTO_SAVE_INTERVAL);
     return () => clearInterval(interval);
-  }, [gameLoaded, queen, bio, mats, slimes, exps, builds, research, activeRes, lastTowerDefense, monsterKills, unlockedMutations, prisms, ranchBuildings, ranchAssignments, ranchProgress]);
+  }, [gameLoaded, queen, bio, mats, slimes, exps, builds, research, activeRes, lastTowerDefense, monsterKills, unlockedMutations, prisms, ranchBuildings, ranchAssignments, ranchProgress, pheromones, lastPheromoneUpdate, activeHiveAbilities]);
 
   const manualSave = () => {
-    const state = { queen, bio, mats, slimes, exps, builds, research, activeRes, lastTowerDefense, monsterKills, unlockedMutations, prisms, ranchBuildings, ranchAssignments, ranchProgress, lastSave: Date.now() };
+    const state = { queen, bio, mats, slimes, exps, builds, research, activeRes, lastTowerDefense, monsterKills, unlockedMutations, prisms, ranchBuildings, ranchAssignments, ranchProgress, pheromones, lastPheromoneUpdate, activeHiveAbilities, lastSave: Date.now() };
     if (saveGame(state)) {
       setLastSave(Date.now());
       log('💾 Game saved!');
@@ -358,6 +501,9 @@ export default function HiveQueenGame() {
     setRanchAssignments({});
     setRanchProgress({});
     setRanchEvents([]);
+    setPheromones(0);
+    setLastPheromoneUpdate(Date.now());
+    setActiveHiveAbilities({});
     log('🗑️ Save deleted. Starting fresh!');
   };
 
@@ -899,7 +1045,10 @@ export default function HiveQueenGame() {
         });
         return n;
       });
-      log(`🎉 Victory! +${rewards.biomass} biomass, materials gained!`);
+      // Guaranteed Prism on TD victory
+      setPrisms(p => p + 1);
+      rewards.prisms = 1;
+      log(`🎉 Victory! +${rewards.biomass} biomass, +1💎 Prism, materials gained!`);
     } else {
       // Lose half biomass
       losses.biomass = Math.floor(bio / 2);
@@ -934,6 +1083,26 @@ export default function HiveQueenGame() {
       const now = Date.now();
       const dt = ((now - lastTick) / TICK_RATE) * speed;
       setLastTick(now);
+
+      // Pheromone generation - 1 per slime per hour, updated every minute
+      const timeSincePheromoneUpdate = now - lastPheromoneUpdate;
+      if (timeSincePheromoneUpdate >= PHEROMONE_UPDATE_INTERVAL) {
+        const hoursElapsed = timeSincePheromoneUpdate / 3600000;
+        const pheromoneGain = Math.floor(slimes.length * hoursElapsed * PHEROMONES_PER_SLIME_PER_HOUR);
+        if (pheromoneGain > 0) {
+          setPheromones(p => p + pheromoneGain);
+        }
+        setLastPheromoneUpdate(now);
+      }
+
+      // Clean up expired hive abilities
+      setActiveHiveAbilities(prev => {
+        const active = {};
+        Object.entries(prev).forEach(([id, expiration]) => {
+          if (expiration > now) active[id] = expiration;
+        });
+        return active;
+      });
 
       setExps(prev => {
         const next = { ...prev };
@@ -1076,6 +1245,8 @@ export default function HiveQueenGame() {
                   if (sl?.traits?.includes('greedy')) bioMultiplier += 0.05;
                   if (sl?.traits?.includes('glutton')) bioMultiplier += 0.10;
                 });
+                // Bountiful Harvest hive ability: +25% biomass
+                if (isHiveAbilityActive('bountifulHarvest')) bioMultiplier += 0.25;
                 bioG = Math.floor(bioG * bioMultiplier);
 
                 // Resilient trait: recover 1 HP per kill
@@ -1093,12 +1264,21 @@ export default function HiveQueenGame() {
                 });
                 bLog(zone, `${md.name} defeated! +${Math.floor(bioPerSlime)}🧬 each`, '#4ade80');
 
+                // Rare Prism drop (0.1% per kill)
+                if (Math.random() < 0.001) {
+                  setPrisms(p => p + 1);
+                  bLog(zone, '💎 Found a Prism!', '#f59e0b');
+                  log('💎 Prism discovered!');
+                }
+
                 // Material drops - check for lucky trait bonus
                 let matDropChance = 0.5;
                 living.forEach(p => {
                   const sl = slimes.find(s => s.id === p.id);
                   if (sl?.traits?.includes('lucky')) matDropChance += 0.05;
                 });
+                // Bountiful Harvest hive ability: +25% material drops
+                if (isHiveAbilityActive('bountifulHarvest')) matDropChance *= 1.25;
                 if (Math.random() < matDropChance) {
                   const mat = md.mats[Math.floor(Math.random() * md.mats.length)];
                   exp.materials[mat] = (exp.materials[mat] || 0) + 1;
@@ -1112,7 +1292,9 @@ export default function HiveQueenGame() {
                   living.forEach(p => {
                     const sl = slimes.find(s => s.id === p.id);
                     if (sl && canGainElement(sl)) {
-                      const gain = calculateElementGain(zd.elementGainRate, sl);
+                      let gain = calculateElementGain(zd.elementGainRate, sl);
+                      // Evolution Pulse hive ability: +50% element gain
+                      if (isHiveAbilityActive('evolutionPulse')) gain *= 1.5;
                       const newValue = Math.min(100, (sl.elements?.[zd.element] || 0) + gain);
                       // Store element gain in party member for batch update on recall
                       if (!p.elementGains) p.elementGains = {};
@@ -1177,6 +1359,18 @@ export default function HiveQueenGame() {
           }
         });
         Object.keys(next).forEach(z => { if (!next[z].party.filter(p => p.hp > 0).length) { bLog(z, 'Party wiped!', '#ef4444'); log(`Expedition wiped!`); delete next[z]; } });
+
+        // Shared Vigor hive ability: regenerate 1 HP per minute (~0.017 per tick at dt=1)
+        if (isHiveAbilityActive('sharedVigor')) {
+          Object.values(next).forEach(exp => {
+            exp.party.forEach(p => {
+              if (p.hp > 0) {
+                p.hp = Math.min(p.maxHp, p.hp + dt * 0.0167); // ~1 HP per minute
+              }
+            });
+          });
+        }
+
         return next;
       });
 
@@ -1203,7 +1397,9 @@ export default function HiveQueenGame() {
           const effectiveCycleTime = ranch.cycleTime * cycleReduction;
           const effectMult = 1 + (building.level - 1) * RANCH_UPGRADE_BONUSES.effectMultiplier;
 
-          next[ranchId] = (next[ranchId] || 0) + dt;
+          // Nurturing Aura hive ability: double ranch tick speed
+          const ranchSpeedMult = isHiveAbilityActive('nurturingAura') ? 2 : 1;
+          next[ranchId] = (next[ranchId] || 0) + dt * ranchSpeedMult;
 
           // Check if cycle completes
           if (next[ranchId] >= effectiveCycleTime) {
@@ -1495,9 +1691,11 @@ export default function HiveQueenGame() {
       
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 15px', background: 'rgba(0,0,0,0.3)', position: 'sticky', top: 0, zIndex: 100 }}>
         <button onClick={() => setMenu(true)} style={{ background: 'none', border: 'none', color: '#fff', fontSize: 24, cursor: 'pointer' }}>☰</button>
-        <div style={{ display: 'flex', gap: 12 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'rgba(0,0,0,0.3)', padding: '4px 10px', borderRadius: 12, fontSize: 13 }}>🧬 <strong>{Math.floor(bio)}</strong></div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'rgba(0,0,0,0.3)', padding: '4px 10px', borderRadius: 12, fontSize: 13 }}>🍯 <strong>{freeJelly}/{maxJelly}</strong></div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'rgba(0,0,0,0.3)', padding: '4px 10px', borderRadius: 12, fontSize: 12 }}>🧬 <strong>{Math.floor(bio)}</strong></div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'rgba(0,0,0,0.3)', padding: '4px 10px', borderRadius: 12, fontSize: 12 }}>🍯 <strong>{freeJelly}/{maxJelly}</strong></div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'rgba(0,0,0,0.3)', padding: '4px 10px', borderRadius: 12, fontSize: 12 }}>🧪 <strong>{pheromones}</strong></div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'rgba(0,0,0,0.3)', padding: '4px 10px', borderRadius: 12, fontSize: 12 }}>💎 <strong>{prisms}</strong></div>
         </div>
         <button onClick={() => setDev(!dev)} style={{ background: 'none', border: 'none', color: '#fff', fontSize: 20, cursor: 'pointer' }}>🛠️</button>
       </header>
@@ -1589,6 +1787,88 @@ export default function HiveQueenGame() {
                 }
                 return null;
               })()}
+            </div>
+
+            {/* Hive Pheromones & Abilities */}
+            <div style={{ background: 'rgba(168,85,247,0.1)', borderRadius: 12, marginBottom: 20, padding: 20 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 }}>
+                <div>
+                  <div style={{ fontSize: 16, fontWeight: 'bold' }}>🧪 Hive Pheromones</div>
+                  <div style={{ fontSize: 12, opacity: 0.7 }}>Generated by your slime population</div>
+                </div>
+                <div style={{ background: 'rgba(0,0,0,0.3)', padding: '8px 16px', borderRadius: 8, fontSize: 18, fontWeight: 'bold' }}>
+                  🧪 {pheromones}
+                </div>
+              </div>
+              <div style={{ fontSize: 11, opacity: 0.6, marginBottom: 15 }}>
+                +{slimes.length} pheromones/hour ({slimes.length} slimes × 1/hour)
+              </div>
+
+              {/* Active Abilities */}
+              {Object.keys(activeHiveAbilities).length > 0 && (
+                <div style={{ background: 'rgba(74,222,128,0.1)', borderRadius: 8, padding: 12, marginBottom: 15 }}>
+                  <div style={{ fontSize: 12, fontWeight: 'bold', marginBottom: 8, color: '#4ade80' }}>✨ Active Abilities</div>
+                  <div style={{ display: 'grid', gap: 8 }}>
+                    {Object.entries(activeHiveAbilities).filter(([_, exp]) => exp > Date.now()).map(([id, expiration]) => {
+                      const ability = HIVE_ABILITIES[id];
+                      const remaining = Math.max(0, expiration - Date.now());
+                      const hours = Math.floor(remaining / 3600000);
+                      const mins = Math.floor((remaining % 3600000) / 60000);
+                      return (
+                        <div key={id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(0,0,0,0.2)', padding: 8, borderRadius: 6 }}>
+                          <span style={{ fontSize: 12 }}>{ability.icon} {ability.name}</span>
+                          <span style={{ fontSize: 11, color: '#4ade80' }}>{hours}h {mins}m remaining</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Ability List */}
+              <div style={{ display: 'grid', gap: 10 }}>
+                {Object.entries(HIVE_ABILITIES).map(([id, ability]) => {
+                  const isActive = isHiveAbilityActive(id);
+                  const canAfford = pheromones >= ability.cost;
+                  return (
+                    <div key={id} style={{
+                      background: isActive ? 'rgba(74,222,128,0.2)' : 'rgba(0,0,0,0.2)',
+                      borderRadius: 8,
+                      padding: 12,
+                      border: isActive ? '2px solid #4ade80' : '2px solid transparent'
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
+                        <div>
+                          <span style={{ fontSize: 16, marginRight: 6 }}>{ability.icon}</span>
+                          <span style={{ fontSize: 13, fontWeight: 'bold' }}>{ability.name}</span>
+                          {isActive && <span style={{ fontSize: 10, marginLeft: 8, padding: '2px 6px', background: 'rgba(74,222,128,0.3)', borderRadius: 4, color: '#4ade80' }}>ACTIVE</span>}
+                        </div>
+                        <span style={{ fontSize: 12, color: canAfford ? '#a855f7' : '#ef4444' }}>🧪 {ability.cost}</span>
+                      </div>
+                      <div style={{ fontSize: 11, opacity: 0.7, marginBottom: 8 }}>{ability.desc}</div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: 10, opacity: 0.5 }}>Duration: {Math.round(ability.duration / 3600000)}h</span>
+                        <button
+                          onClick={() => activateHiveAbility(id)}
+                          disabled={!canAfford || isActive}
+                          style={{
+                            padding: '6px 12px',
+                            background: isActive ? 'rgba(74,222,128,0.3)' : canAfford ? 'linear-gradient(135deg, #a855f7, #ec4899)' : 'rgba(100,100,100,0.5)',
+                            border: 'none',
+                            borderRadius: 6,
+                            color: '#fff',
+                            fontSize: 11,
+                            fontWeight: 'bold',
+                            cursor: !canAfford || isActive ? 'not-allowed' : 'pointer'
+                          }}
+                        >
+                          {isActive ? 'Active' : 'Activate'}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
 
             {/* Collapsible Buildings Section */}
@@ -2096,7 +2376,7 @@ export default function HiveQueenGame() {
 
         {tab === 6 && <Compendium queen={queen} monsterKills={monsterKills} unlockedMutations={unlockedMutations} />}
 
-        {tab === 7 && <SettingsTab onSave={manualSave} onDelete={handleDelete} lastSave={lastSave} prisms={prisms} />}
+        {tab === 7 && <SettingsTab onSave={manualSave} onDelete={handleDelete} lastSave={lastSave} prisms={prisms} slimes={slimes} purchasePrismItem={purchasePrismItem} />}
       </main>
 
       <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: 'rgba(0,0,0,0.95)', borderTop: '1px solid rgba(255,255,255,0.1)', maxHeight: 70, overflowY: 'auto', padding: 8 }}>
@@ -2116,6 +2396,7 @@ export default function HiveQueenGame() {
             <button onClick={() => setQueen(q => ({ ...q, level: q.level + 5 }))} style={{ padding: 8, background: '#ec4899', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 12 }}>+5 Queen Lv</button>
             <button onClick={() => { setLastTowerDefense(0); setTowerDefense(null); log('🎯 Tower Defense reset!'); }} style={{ padding: 8, background: '#22d3ee', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 12 }}>Reset TD Timer</button>
             <button onClick={() => setPrisms(p => p + 100)} style={{ padding: 8, background: '#8b5cf6', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 12 }}>+100 Prisms</button>
+            <button onClick={() => setPheromones(p => p + 100)} style={{ padding: 8, background: '#10b981', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 12 }}>+100 Pheromones</button>
           </div>
         </div>
       )}
