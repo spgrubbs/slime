@@ -4,8 +4,9 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   TICK_RATE,
   BASE_SLIME_COST,
-  TRAIT_MAGICKA_COST,
-  BASE_MAGICKA,
+  TRAIT_JELLY_COST,
+  BASE_JELLY,
+  JELLY_PER_QUEEN_LEVEL,
   BATTLE_TICK_SPEED,
   AUTO_SAVE_INTERVAL,
   TOWER_DEFENSE_COOLDOWN,
@@ -18,7 +19,7 @@ import { MUTATION_LIBRARY, TRAIT_LIBRARY, STATUS_EFFECTS, SLIME_TRAITS } from '.
 import { MONSTER_TYPES } from './data/monsterData.js';
 import { ZONES, EXPLORATION_EVENTS } from './data/zoneData.js';
 import { BUILDINGS, RESEARCH } from './data/buildingData.js';
-import { HUMAN_TYPES, TD_WAVES } from './data/towerDefenseData.js';
+import { HUMAN_TYPES, TD_WAVES, getTDScaling } from './data/towerDefenseData.js';
 import { RANCH_TYPES, RANCH_EVENTS, RANCH_UPGRADE_BONUSES, MAX_RANCH_LEVEL, RANCH_MAX_ACCUMULATION_TIME } from './data/ranchData.js';
 
 // Utility imports
@@ -236,9 +237,9 @@ export default function HiveQueenGame() {
     { id: 7, icon: '⚙️', label: 'Settings' },
   ];
 
-  const maxMag = BASE_MAGICKA + (builds.slimePit || 0) * 10;
-  const usedMag = slimes.reduce((s, sl) => s + sl.magCost, 0);
-  const freeMag = maxMag - usedMag;
+  const maxJelly = BASE_JELLY + (queen.level - 1) * JELLY_PER_QUEEN_LEVEL + (builds.slimePit || 0) * 10;
+  const usedJelly = slimes.reduce((s, sl) => s + sl.magCost, 0);
+  const freeJelly = maxJelly - usedJelly;
   const unlockedTiers = Object.keys(SLIME_TIERS).filter(t => t === 'elite' ? builds.hatchery > 0 : !SLIME_TIERS[t].unlockLevel || queen.level >= SLIME_TIERS[t].unlockLevel);
   const bon = {
     bio: 1 + (research.includes('efficientDigestion') ? 0.2 : 0),
@@ -374,7 +375,7 @@ export default function HiveQueenGame() {
   const spawn = (tier, selMutations, name, magCost) => {
     const td = SLIME_TIERS[tier];
     const bioCost = BASE_SLIME_COST + selMutations.length * 5;
-    if (bio < bioCost || freeMag < magCost) return;
+    if (bio < bioCost || freeJelly < magCost) return;
     const baseStats = { firmness: Math.floor(5 * td.statMultiplier), slipperiness: Math.floor(5 * td.statMultiplier), viscosity: Math.floor(5 * td.statMultiplier) };
     const pass = [];
     // Apply mutation stat bonuses and passives
@@ -468,6 +469,7 @@ export default function HiveQueenGame() {
     if (!ranch) return false;
     if (ranch.unlock.type === 'level') return queen.level >= ranch.unlock.value;
     if (ranch.unlock.type === 'prisms') return prisms >= ranch.unlock.value;
+    if (ranch.unlock.type === 'materials') return true; // Always visible, just need mats to build
     return true;
   };
 
@@ -846,13 +848,16 @@ export default function HiveQueenGame() {
 
   const startTowerDefense = (deployedSlimes) => {
     const wave = TD_WAVES[0];
+    const scaling = getTDScaling(queen.level);
     const humans = [];
-    for (let i = 0; i < wave.humans; i++) {
+    const humanCount = wave.humans + scaling.countMultiplier - 1; // Base + scaling bonus
+    for (let i = 0; i < humanCount; i++) {
+      const baseHp = HUMAN_TYPES.warrior.hp * wave.hpMultiplier * scaling.hpMultiplier;
       humans.push({
         id: genId(),
         type: 'warrior',
-        hp: HUMAN_TYPES.warrior.hp * wave.hpMultiplier,
-        maxHp: HUMAN_TYPES.warrior.hp * wave.hpMultiplier,
+        hp: baseHp,
+        maxHp: baseHp,
         position: 0, // 0 to 100, moving right to left
         speed: HUMAN_TYPES.warrior.speed,
       });
@@ -861,6 +866,7 @@ export default function HiveQueenGame() {
     setTowerDefense({
       phase: 'battle', // 'setup', 'battle', 'victory', 'defeat'
       currentWave: 0,
+      scaling, // Store scaling for wave spawns
       deployedSlimes: deployedSlimes.map(id => {
         const sl = slimes.find(s => s.id === id);
         return { id, attackTimer: 0 };
@@ -875,13 +881,14 @@ export default function HiveQueenGame() {
   const endTowerDefense = (victory, summary) => {
     let rewards = { biomass: 0, materials: {} };
     let losses = { biomass: 0 };
+    const rewardMultiplier = towerDefense?.scaling?.rewardMultiplier || 1;
 
     if (victory) {
-      // Calculate rewards
+      // Calculate rewards with queen level scaling
       TD_WAVES.forEach(w => {
-        rewards.biomass += w.reward.biomass;
+        rewards.biomass += Math.floor(w.reward.biomass * rewardMultiplier);
         Object.entries(w.reward.mats).forEach(([m, c]) => {
-          rewards.materials[m] = (rewards.materials[m] || 0) + c;
+          rewards.materials[m] = (rewards.materials[m] || 0) + Math.floor(c * rewardMultiplier);
         });
       });
       setBio(p => p + rewards.biomass);
@@ -1391,13 +1398,16 @@ export default function HiveQueenGame() {
           const nextWaveIdx = next.currentWave + 1;
           if (nextWaveIdx < TD_WAVES.length) {
             const wave = TD_WAVES[nextWaveIdx];
+            const scaling = next.scaling || { hpMultiplier: 1, countMultiplier: 1 };
             const newHumans = [];
-            for (let i = 0; i < wave.humans; i++) {
+            const humanCount = wave.humans + scaling.countMultiplier - 1;
+            for (let i = 0; i < humanCount; i++) {
+              const baseHp = HUMAN_TYPES.warrior.hp * wave.hpMultiplier * scaling.hpMultiplier;
               newHumans.push({
                 id: genId(),
                 type: 'warrior',
-                hp: HUMAN_TYPES.warrior.hp * wave.hpMultiplier,
-                maxHp: HUMAN_TYPES.warrior.hp * wave.hpMultiplier,
+                hp: baseHp,
+                maxHp: baseHp,
                 position: 0,
                 speed: HUMAN_TYPES.warrior.speed,
               });
@@ -1487,7 +1497,7 @@ export default function HiveQueenGame() {
         <button onClick={() => setMenu(true)} style={{ background: 'none', border: 'none', color: '#fff', fontSize: 24, cursor: 'pointer' }}>☰</button>
         <div style={{ display: 'flex', gap: 12 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'rgba(0,0,0,0.3)', padding: '4px 10px', borderRadius: 12, fontSize: 13 }}>🧬 <strong>{Math.floor(bio)}</strong></div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'rgba(0,0,0,0.3)', padding: '4px 10px', borderRadius: 12, fontSize: 13 }}>💜 <strong>{freeMag}/{maxMag}</strong></div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'rgba(0,0,0,0.3)', padding: '4px 10px', borderRadius: 12, fontSize: 13 }}>🍯 <strong>{freeJelly}/{maxJelly}</strong></div>
         </div>
         <button onClick={() => setDev(!dev)} style={{ background: 'none', border: 'none', color: '#fff', fontSize: 20, cursor: 'pointer' }}>🛠️</button>
       </header>
@@ -1539,23 +1549,36 @@ export default function HiveQueenGame() {
                 </div>
               </div>
 
-              {/* Next Level Preview */}
+              {/* Next Unlock Preview */}
               {(() => {
-                const nextLevel = queen.level + 1;
+                // Find all unlock levels above current level
+                const unlockLevels = new Set();
+                Object.values(SLIME_TIERS).forEach(t => {
+                  if (t.unlockLevel && t.unlockLevel > queen.level) unlockLevels.add(t.unlockLevel);
+                });
+                Object.values(ZONES).forEach(z => {
+                  if (z.unlock && z.unlock > queen.level) unlockLevels.add(z.unlock);
+                });
+
+                // Find the closest unlock level
+                const sortedLevels = [...unlockLevels].sort((a, b) => a - b);
+                if (sortedLevels.length === 0) return null;
+
+                const nextUnlockLevel = sortedLevels[0];
                 const nextUnlocks = [];
 
                 Object.entries(SLIME_TIERS).forEach(([k, t]) => {
-                  if (t.unlockLevel === nextLevel) nextUnlocks.push({ type: 'slime', name: t.name + ' Slimes', icon: '🟢' });
+                  if (t.unlockLevel === nextUnlockLevel) nextUnlocks.push({ type: 'slime', name: t.name + ' Slimes', icon: '🟢' });
                 });
 
                 Object.entries(ZONES).forEach(([k, z]) => {
-                  if (z.unlock === nextLevel) nextUnlocks.push({ type: 'zone', name: z.name, icon: z.icon });
+                  if (z.unlock === nextUnlockLevel) nextUnlocks.push({ type: 'zone', name: z.name, icon: z.icon });
                 });
 
                 if (nextUnlocks.length > 0) {
                   return (
                     <div style={{ background: 'rgba(236,72,153,0.2)', borderRadius: 8, padding: 12 }}>
-                      <div style={{ fontSize: 12, fontWeight: 'bold', marginBottom: 8, opacity: 0.9 }}>🔮 Next Level ({nextLevel})</div>
+                      <div style={{ fontSize: 12, fontWeight: 'bold', marginBottom: 8, opacity: 0.9 }}>🔮 Next Unlock (Level {nextUnlockLevel})</div>
                       <div style={{ display: 'grid', gap: 4, fontSize: 11 }}>
                         {nextUnlocks.map((u, i) => (
                           <div key={i} style={{ color: '#f472b6' }}>• {u.icon} {u.name}</div>
@@ -1692,7 +1715,7 @@ export default function HiveQueenGame() {
             </div>
           ) : (
             <div>
-              <SlimeForge unlockedMutations={unlockedMutations} biomass={bio} freeMag={freeMag} tiers={unlockedTiers} onSpawn={spawn} />
+              <SlimeForge unlockedMutations={unlockedMutations} biomass={bio} freeJelly={freeJelly} tiers={unlockedTiers} onSpawn={spawn} />
               {slimes.length ? (
                 <div style={{ display: 'grid', gap: 10 }}>
                 {slimes.map(s => {
@@ -1936,12 +1959,19 @@ export default function HiveQueenGame() {
                   <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 10, background: 'rgba(74,222,128,0.3)' }} />
 
                   {/* Humans */}
-                  {towerDefense.humans.map(h => (
-                    <div key={h.id} style={{ position: 'absolute', right: `${h.position}%`, top: '50%', transform: 'translateY(-50%)', fontSize: 32, transition: 'right 0.1s linear' }}>
-                      ⚔️
-                      <div style={{ fontSize: 10, color: '#fff', textAlign: 'center', background: 'rgba(0,0,0,0.7)', padding: '2px 4px', borderRadius: 4 }}>{Math.ceil(h.hp)}</div>
-                    </div>
-                  ))}
+                  {towerDefense.humans.map(h => {
+                    const hpPercent = Math.max(0, Math.min(100, (h.hp / h.maxHp) * 100));
+                    return (
+                      <div key={h.id} style={{ position: 'absolute', right: `${h.position}%`, top: '50%', transform: 'translateY(-50%)', display: 'flex', flexDirection: 'column', alignItems: 'center', transition: 'right 0.1s linear' }}>
+                        <div style={{ fontSize: 28 }}>⚔️</div>
+                        {/* Health bar */}
+                        <div style={{ width: 40, height: 6, background: 'rgba(0,0,0,0.7)', borderRadius: 3, overflow: 'hidden' }}>
+                          <div style={{ width: `${hpPercent}%`, height: '100%', background: hpPercent > 50 ? '#4ade80' : hpPercent > 25 ? '#f59e0b' : '#ef4444', transition: 'width 0.15s ease' }} />
+                        </div>
+                        <div style={{ fontSize: 9, color: '#fff', marginTop: 2 }}>{Math.ceil(h.hp)}/{Math.ceil(h.maxHp)}</div>
+                      </div>
+                    );
+                  })}
                 </div>
 
                 {/* Deployed Slimes */}

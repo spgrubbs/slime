@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import { SLIME_TIERS, STAT_INFO } from '../data/slimeData.js';
 import { MUTATION_LIBRARY } from '../data/traitData.js';
-import { BASE_SLIME_COST, TRAIT_MAGICKA_COST, ELEMENTS } from '../data/gameConstants.js';
+import { BASE_SLIME_COST, TRAIT_JELLY_COST, ELEMENTS } from '../data/gameConstants.js';
 import { genName } from '../utils/helpers.js';
 import SlimeSprite from './SlimeSprite.jsx';
 
-const SlimeForge = ({ unlockedMutations, biomass, freeMag, tiers, onSpawn }) => {
+const SlimeForge = ({ unlockedMutations, biomass, freeJelly, tiers, onSpawn }) => {
   const [tier, setTier] = useState('basic');
   const [selMutations, setSelMutations] = useState([]);
   const [name, setName] = useState(genName());
@@ -13,7 +13,7 @@ const SlimeForge = ({ unlockedMutations, biomass, freeMag, tiers, onSpawn }) => 
   const td = SLIME_TIERS[tier];
   const maxM = td.traitSlots;
   const bioCost = BASE_SLIME_COST + selMutations.length * 5;
-  const magCost = td.magickaCost + selMutations.length * TRAIT_MAGICKA_COST;
+  const jellyCost = td.jellyCost + selMutations.length * TRAIT_JELLY_COST;
 
   const toggle = (id) => {
     if (selMutations.includes(id)) setSelMutations(selMutations.filter(m => m !== id));
@@ -21,8 +21,8 @@ const SlimeForge = ({ unlockedMutations, biomass, freeMag, tiers, onSpawn }) => 
   };
 
   const spawn = () => {
-    if (biomass >= bioCost && freeMag >= magCost) {
-      onSpawn(tier, selMutations, name, magCost);
+    if (biomass >= bioCost && freeJelly >= jellyCost) {
+      onSpawn(tier, selMutations, name, jellyCost);
       setSelMutations([]);
       setName(genName());
     }
@@ -76,14 +76,14 @@ const SlimeForge = ({ unlockedMutations, biomass, freeMag, tiers, onSpawn }) => 
             return (
               <button key={k} onClick={() => { if(ok){setTier(k);setSelMutations([]);} }} style={{ display:'flex',alignItems:'center',gap:6,padding:'8px 12px',background:tier===k?'rgba(255,255,255,0.2)':'rgba(0,0,0,0.3)',border:`2px solid ${tier===k?t.color:'transparent'}`,borderRadius:8,color:'#fff',cursor:ok?'pointer':'not-allowed',opacity:ok?1:0.4,fontSize:12 }}>
                 <div style={{ width:16,height:12,backgroundColor:t.color,borderRadius:'50% 50% 50% 50% / 60% 60% 40% 40%' }} />
-                {t.name} <span style={{color:'#a855f7',fontSize:10}}>💜{t.magickaCost}+</span>
+                {t.name} <span style={{color:'#f59e0b',fontSize:10}}>🍯{t.jellyCost}+</span>
               </button>
             );
           })}
         </div>
       </div>
       <div style={{ marginBottom: 15 }}>
-        <div style={{ fontSize: 12, marginBottom: 8, opacity: 0.7 }}>Mutations ({selMutations.length}/{maxM}) • +{TRAIT_MAGICKA_COST}💜 each</div>
+        <div style={{ fontSize: 12, marginBottom: 8, opacity: 0.7 }}>Mutations ({selMutations.length}/{maxM}) • +{TRAIT_JELLY_COST}🍯 each</div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 8, maxHeight: 200, overflowY: 'auto' }}>
           {unlockedMutations.map((id) => {
             const m = MUTATION_LIBRARY[id];
@@ -116,10 +116,10 @@ const SlimeForge = ({ unlockedMutations, biomass, freeMag, tiers, onSpawn }) => 
         <span>Cost:</span>
         <div style={{display:'flex',gap:15}}>
           <span style={{color:biomass>=bioCost?'#4ade80':'#ef4444'}}>🧬{bioCost}</span>
-          <span style={{color:freeMag>=magCost?'#a855f7':'#ef4444'}}>💜{magCost}</span>
+          <span style={{color:freeJelly>=jellyCost?'#f59e0b':'#ef4444'}}>🍯{jellyCost}</span>
         </div>
       </div>
-      <button onClick={spawn} disabled={biomass<bioCost||freeMag<magCost} style={{ width:'100%',padding:12,background:biomass>=bioCost&&freeMag>=magCost?'linear-gradient(135deg,#ec4899,#a855f7)':'rgba(100,100,100,0.5)',border:'none',borderRadius:8,color:'#fff',fontWeight:'bold',cursor:biomass>=bioCost&&freeMag>=magCost?'pointer':'not-allowed',fontSize:14 }}>
+      <button onClick={spawn} disabled={biomass<bioCost||freeJelly<jellyCost} style={{ width:'100%',padding:12,background:biomass>=bioCost&&freeJelly>=jellyCost?'linear-gradient(135deg,#ec4899,#a855f7)':'rgba(100,100,100,0.5)',border:'none',borderRadius:8,color:'#fff',fontWeight:'bold',cursor:biomass>=bioCost&&freeJelly>=jellyCost?'pointer':'not-allowed',fontSize:14 }}>
         ✨ Spawn Slime
       </button>
     </div>

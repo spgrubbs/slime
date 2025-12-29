@@ -7,10 +7,10 @@ export const STAT_INFO = {
 
 // Slime tier definitions
 export const SLIME_TIERS = {
-  basic: { name: 'Basic', magickaCost: 5, statMultiplier: 1, traitSlots: 1, color: '#4ade80', baseHp: 50, biomassPerPercent: 10 },
-  enhanced: { name: 'Enhanced', magickaCost: 10, statMultiplier: 1.5, traitSlots: 2, color: '#22d3ee', unlockLevel: 5, baseHp: 80, biomassPerPercent: 100 },
-  elite: { name: 'Elite', magickaCost: 20, statMultiplier: 2, traitSlots: 3, color: '#a855f7', unlockLevel: 15, baseHp: 120, biomassPerPercent: 1000 },
-  royal: { name: 'Royal', magickaCost: 40, statMultiplier: 3, traitSlots: 4, color: '#f59e0b', unlockLevel: 30, baseHp: 200, biomassPerPercent: 10000 },
+  basic: { name: 'Basic', jellyCost: 5, statMultiplier: 1, traitSlots: 1, color: '#4ade80', baseHp: 50, biomassPerPercent: 10 },
+  enhanced: { name: 'Enhanced', jellyCost: 10, statMultiplier: 1.5, traitSlots: 2, color: '#22d3ee', unlockLevel: 5, baseHp: 80, biomassPerPercent: 100 },
+  elite: { name: 'Elite', jellyCost: 20, statMultiplier: 2, traitSlots: 3, color: '#a855f7', unlockLevel: 15, baseHp: 120, biomassPerPercent: 1000 },
+  royal: { name: 'Royal', jellyCost: 40, statMultiplier: 3, traitSlots: 4, color: '#f59e0b', unlockLevel: 30, baseHp: 200, biomassPerPercent: 10000 },
 };
 
 // Name generation parts

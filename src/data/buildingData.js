@@ -1,6 +1,6 @@
 // Building definitions - structures to construct
 export const BUILDINGS = {
-  slimePit: { name: 'Slime Pit', icon: '🕳️', desc: '+10 max Magicka', cost: { 'Wolf Pelt': 5, 'Crude Iron': 3 } },
+  slimePit: { name: 'Slime Pit', icon: '🕳️', desc: '+10 max Royal Jelly', cost: { 'Wolf Pelt': 5, 'Crude Iron': 3 } },
   researchLab: { name: 'Research Chamber', icon: '🔬', desc: '+25% build speed', cost: { 'Mana Crystal': 3, 'Ancient Stone': 5 } },
   hatchery: { name: 'Royal Hatchery', icon: '🥚', desc: 'Unlock Elite Slimes', cost: { 'Dragon Scale': 1, 'Soul Fragment': 10 }, max: 1 },
   defenseSlot: { name: 'Defense Slot', icon: '🎯', desc: '+1 Tower Defense slot', cost: { 'Human Bone': 5, 'Iron Sword': 3 }, max: 6 },

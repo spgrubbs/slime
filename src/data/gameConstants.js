@@ -1,8 +1,9 @@
 // Core game timing and costs
 export const TICK_RATE = 100;
 export const BASE_SLIME_COST = 10;
-export const TRAIT_MAGICKA_COST = 3;
-export const BASE_MAGICKA = 50;
+export const TRAIT_JELLY_COST = 3;
+export const BASE_JELLY = 50;
+export const JELLY_PER_QUEEN_LEVEL = 10; // +10 Royal Jelly per queen level
 export const BATTLE_TICK_SPEED = 1000;
 export const AUTO_SAVE_INTERVAL = 30000;
 export const SAVE_KEY = 'hive_queen_save_v1';
