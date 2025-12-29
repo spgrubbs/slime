@@ -19,7 +19,7 @@ import { MONSTER_TYPES } from './data/monsterData.js';
 import { ZONES, EXPLORATION_EVENTS } from './data/zoneData.js';
 import { BUILDINGS, RESEARCH } from './data/buildingData.js';
 import { HUMAN_TYPES, TD_WAVES } from './data/towerDefenseData.js';
-import { RANCH_TYPES, RANCH_EVENTS, RANCH_UPGRADE_BONUSES, MAX_RANCH_LEVEL } from './data/ranchData.js';
+import { RANCH_TYPES, RANCH_EVENTS, RANCH_UPGRADE_BONUSES, MAX_RANCH_LEVEL, RANCH_MAX_ACCUMULATION_TIME } from './data/ranchData.js';
 
 // Utility imports
 import { genName, genId, formatTime, calculateElementalDamage, createDefaultElements, canGainElement, calculateElementGain } from './utils/helpers.js';
@@ -461,14 +461,21 @@ export default function HiveQueenGame() {
   };
 
   // ============== RANCH FUNCTIONS ==============
+  // ranchAssignments structure: { ranchId: [{ slimeId, startTime, accumulated: { biomass, element, stats, events } }] }
+
+  const isRanchUnlocked = (ranchId) => {
+    const ranch = RANCH_TYPES[ranchId];
+    if (!ranch) return false;
+    if (ranch.unlock.type === 'level') return queen.level >= ranch.unlock.value;
+    if (ranch.unlock.type === 'prisms') return prisms >= ranch.unlock.value;
+    return true;
+  };
+
   const canBuildRanch = (ranchId) => {
     const ranch = RANCH_TYPES[ranchId];
     if (!ranch) return false;
     if (ranchBuildings[ranchId]) return false; // Already built
-
-    // Check unlock requirements
-    if (ranch.unlock.type === 'level' && queen.level < ranch.unlock.value) return false;
-    if (ranch.unlock.type === 'prisms' && prisms < ranch.unlock.value) return false;
+    if (!isRanchUnlocked(ranchId)) return false;
 
     // Check costs
     if (ranch.cost.biomass && bio < ranch.cost.biomass) return false;
@@ -536,6 +543,11 @@ export default function HiveQueenGame() {
     return ranch.capacity + (building.level - 1) * RANCH_UPGRADE_BONUSES.capacity;
   };
 
+  const getAssignedSlimeIds = (ranchId) => {
+    const assigned = ranchAssignments[ranchId] || [];
+    return assigned.map(a => typeof a === 'object' ? a.slimeId : a);
+  };
+
   const canAssignToRanch = (slimeId, ranchId) => {
     const ranch = RANCH_TYPES[ranchId];
     const building = ranchBuildings[ranchId];
@@ -549,7 +561,8 @@ export default function HiveQueenGame() {
 
     // Check if already assigned to any ranch
     for (const [rid, assigned] of Object.entries(ranchAssignments)) {
-      if (assigned.includes(slimeId)) return false;
+      const ids = (assigned || []).map(a => typeof a === 'object' ? a.slimeId : a);
+      if (ids.includes(slimeId)) return false;
     }
 
     // Check capacity
@@ -564,9 +577,15 @@ export default function HiveQueenGame() {
     const slime = slimes.find(s => s.id === slimeId);
     const ranch = RANCH_TYPES[ranchId];
 
+    const assignment = {
+      slimeId,
+      startTime: Date.now(),
+      accumulated: { biomass: 0, element: 0, stats: 0, cycles: 0 }
+    };
+
     setRanchAssignments(p => ({
       ...p,
-      [ranchId]: [...(p[ranchId] || []), slimeId]
+      [ranchId]: [...(p[ranchId] || []), assignment]
     }));
     log(`${slime.name} assigned to ${ranch.icon} ${ranch.name}`);
   };
@@ -574,20 +593,98 @@ export default function HiveQueenGame() {
   const removeFromRanch = (slimeId, ranchId) => {
     const slime = slimes.find(s => s.id === slimeId);
     const ranch = RANCH_TYPES[ranchId];
-    if (!slime || !ranch) return;
+    const building = ranchBuildings[ranchId];
+    if (!slime || !ranch || !building) return;
+
+    // Find the assignment to get accumulated rewards
+    const assigned = ranchAssignments[ranchId] || [];
+    const assignment = assigned.find(a => (typeof a === 'object' ? a.slimeId : a) === slimeId);
+
+    if (assignment && typeof assignment === 'object' && assignment.accumulated) {
+      const acc = assignment.accumulated;
+
+      // Apply accumulated rewards
+      if (ranch.effect === 'biomass' && acc.biomass > 0) {
+        setSlimes(prev => prev.map(s =>
+          s.id === slimeId ? { ...s, biomass: (s.biomass || 0) + Math.floor(acc.biomass) } : s
+        ));
+        log(`${slime.name} gained ${Math.floor(acc.biomass)} biomass from ${ranch.icon} ${ranch.name}!`);
+      } else if (ranch.effect === 'element' && acc.element > 0 && ranch.element) {
+        setSlimes(prev => prev.map(s => {
+          if (s.id !== slimeId) return s;
+          if (s.primaryElement || s.traits?.includes('void')) return s;
+          const newElements = { ...(s.elements || { fire: 0, water: 0, nature: 0, earth: 0 }) };
+          newElements[ranch.element] = Math.min(100, (newElements[ranch.element] || 0) + acc.element);
+          let primaryElement = s.primaryElement;
+          if (newElements[ranch.element] >= 100) {
+            primaryElement = ranch.element;
+            log(`${s.name} fully attuned to ${ELEMENTS[ranch.element].icon} ${ELEMENTS[ranch.element].name}!`);
+          } else {
+            log(`${s.name} gained ${acc.element.toFixed(1)}% ${ELEMENTS[ranch.element].name} affinity!`);
+          }
+          return { ...s, elements: newElements, primaryElement };
+        }));
+      } else if (ranch.effect === 'stats' && acc.stats > 0) {
+        setSlimes(prev => prev.map(s => {
+          if (s.id !== slimeId || !s.baseStats) return s;
+          const stats = ['firmness', 'slipperiness', 'viscosity'];
+          const statGainPerStat = acc.stats / 3;
+          return {
+            ...s,
+            baseStats: {
+              firmness: s.baseStats.firmness + statGainPerStat,
+              slipperiness: s.baseStats.slipperiness + statGainPerStat,
+              viscosity: s.baseStats.viscosity + statGainPerStat,
+            }
+          };
+        }));
+        log(`${slime.name} gained ${acc.stats.toFixed(1)} stat points from training!`);
+      } else if (ranch.effect === 'trait' && ranch.grantsTrait === 'void' && acc.cycles >= 1) {
+        // Nullifier: Grant void trait
+        setSlimes(prev => prev.map(s => {
+          if (s.id !== slimeId) return s;
+          if (s.traits?.includes('void')) return s;
+          return {
+            ...s,
+            elements: { fire: 0, water: 0, nature: 0, earth: 0 },
+            primaryElement: null,
+            traits: [...(s.traits || []), 'void']
+          };
+        }));
+        log(`${slime.name} gained the 🕳️ Void trait!`);
+      }
+    }
 
     setRanchAssignments(p => ({
       ...p,
-      [ranchId]: (p[ranchId] || []).filter(id => id !== slimeId)
+      [ranchId]: (p[ranchId] || []).filter(a => (typeof a === 'object' ? a.slimeId : a) !== slimeId)
     }));
-    log(`${slime.name} removed from ${ranch.icon} ${ranch.name}`);
   };
 
   const getSlimeRanch = (slimeId) => {
     for (const [ranchId, assigned] of Object.entries(ranchAssignments)) {
-      if (assigned.includes(slimeId)) return ranchId;
+      const ids = (assigned || []).map(a => typeof a === 'object' ? a.slimeId : a);
+      if (ids.includes(slimeId)) return ranchId;
     }
     return null;
+  };
+
+  const getSlimeAccumulated = (slimeId, ranchId) => {
+    const assigned = ranchAssignments[ranchId] || [];
+    const assignment = assigned.find(a => (typeof a === 'object' ? a.slimeId : a) === slimeId);
+    if (assignment && typeof assignment === 'object') {
+      return assignment.accumulated || { biomass: 0, element: 0, stats: 0, cycles: 0 };
+    }
+    return { biomass: 0, element: 0, stats: 0, cycles: 0 };
+  };
+
+  const getSlimeStartTime = (slimeId, ranchId) => {
+    const assigned = ranchAssignments[ranchId] || [];
+    const assignment = assigned.find(a => (typeof a === 'object' ? a.slimeId : a) === slimeId);
+    if (assignment && typeof assignment === 'object') {
+      return assignment.startTime || Date.now();
+    }
+    return Date.now();
   };
 
   const [expDuration, setExpDuration] = useState('10'); // '10', '100', 'infinite'
@@ -1086,7 +1183,7 @@ export default function HiveQueenGame() {
         });
       }
 
-      // Ranch tick - process ranch cycles
+      // Ranch tick - accumulate rewards (applied when slimes are removed)
       setRanchProgress(prev => {
         const next = { ...prev };
         Object.entries(ranchBuildings).forEach(([ranchId, building]) => {
@@ -1105,105 +1202,107 @@ export default function HiveQueenGame() {
           if (next[ranchId] >= effectiveCycleTime) {
             next[ranchId] = 0;
 
-            // Roll for random event
-            const eventRoll = Math.random();
+            // Roll for random event (15% chance)
             let eventMult = 1;
-            if (eventRoll < 0.15) {
+            let eventTriggered = null;
+            if (Math.random() < 0.15) {
               const validEvents = RANCH_EVENTS.filter(e => !e.ranchTypes || e.ranchTypes.includes(ranchId));
               const totalWeight = validEvents.reduce((sum, e) => sum + (e.weight || 1), 0);
               let roll = Math.random() * totalWeight;
               for (const event of validEvents) {
                 roll -= (event.weight || 1);
                 if (roll <= 0) {
+                  eventTriggered = event;
                   if (event.type === 'bonus') {
-                    if (event.effect === 'biomass') {
-                      setBio(b => b + event.value);
-                      setRanchEvents(e => [...e.slice(-9), { msg: event.msg, ranchId, time: Date.now() }]);
-                    } else if (event.effect === 'elementBoost' || event.effect === 'statsBoost') {
+                    if (event.effect === 'elementBoost' || event.effect === 'statsBoost') {
                       eventMult = event.value;
-                      setRanchEvents(e => [...e.slice(-9), { msg: event.msg, ranchId, time: Date.now() }]);
                     }
-                  } else if (event.type === 'penalty') {
+                  } else if (event.type === 'penalty' && event.effect === 'reducedGains') {
                     eventMult = event.value;
-                    setRanchEvents(e => [...e.slice(-9), { msg: event.msg, ranchId, time: Date.now() }]);
-                  } else if (event.type === 'flavor') {
-                    setRanchEvents(e => [...e.slice(-9), { msg: event.msg, ranchId, time: Date.now() }]);
                   }
                   break;
                 }
               }
             }
 
-            // Apply ranch effects to assigned slimes
-            assigned.forEach(slimeId => {
-              const slime = slimes.find(s => s.id === slimeId);
-              if (!slime) return;
+            // Log event with timestamp
+            if (eventTriggered) {
+              const now = new Date();
+              const timestamp = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+              setRanchEvents(e => [...e.slice(-19), {
+                msg: eventTriggered.msg,
+                ranchId,
+                time: Date.now(),
+                timestamp,
+                type: eventTriggered.type
+              }]);
+            }
 
-              // Calculate lazy trait bonus
-              const lazyBonus = slime.traits?.includes('lazy') ? 1.1 : 1;
-              const totalMult = effectMult * eventMult * lazyBonus;
+            // Accumulate rewards for each assigned slime (respecting 24h cap)
+            setRanchAssignments(prevAssignments => {
+              const newAssignments = { ...prevAssignments };
+              const ranchAssigned = [...(newAssignments[ranchId] || [])];
 
-              if (ranch.effect === 'biomass') {
-                const bioGain = Math.floor(ranch.effectValue * totalMult);
-                setSlimes(prev => prev.map(s =>
-                  s.id === slimeId ? { ...s, biomass: (s.biomass || 0) + bioGain } : s
-                ));
-              } else if (ranch.effect === 'element' && ranch.element) {
-                if (canGainElement(slime)) {
-                  const elemGain = ranch.effectValue * totalMult;
-                  setSlimes(prev => prev.map(s => {
-                    if (s.id !== slimeId) return s;
-                    const newElements = { ...(s.elements || createDefaultElements()) };
-                    newElements[ranch.element] = Math.min(100, (newElements[ranch.element] || 0) + elemGain);
-                    let primaryElement = s.primaryElement;
-                    if (newElements[ranch.element] >= 100 && !primaryElement) {
-                      primaryElement = ranch.element;
-                      log(`${s.name} fully attuned to ${ELEMENTS[ranch.element].icon} ${ELEMENTS[ranch.element].name}!`);
+              ranchAssigned.forEach((assignment, idx) => {
+                if (typeof assignment !== 'object') return;
+
+                const slimeId = assignment.slimeId;
+                const slime = slimes.find(s => s.id === slimeId);
+                if (!slime) return;
+
+                // Check if we've hit the 24h cap
+                const timeInRanch = (Date.now() - assignment.startTime) / 1000;
+                if (timeInRanch >= RANCH_MAX_ACCUMULATION_TIME) return; // Capped
+
+                // Calculate lazy trait bonus
+                const lazyBonus = slime.traits?.includes('lazy') ? 1.1 : 1;
+                const totalMult = effectMult * eventMult * lazyBonus;
+
+                const acc = { ...assignment.accumulated };
+
+                if (ranch.effect === 'biomass') {
+                  acc.biomass = (acc.biomass || 0) + ranch.effectValue * totalMult;
+                  // Bonus biomass from bountiful harvest event
+                  if (eventTriggered?.effect === 'biomass') {
+                    acc.biomass += eventTriggered.value;
+                  }
+                } else if (ranch.effect === 'element' && ranch.element) {
+                  if (!slime.primaryElement && !slime.traits?.includes('void')) {
+                    acc.element = (acc.element || 0) + ranch.effectValue * totalMult;
+                  }
+                } else if (ranch.effect === 'stats') {
+                  acc.stats = (acc.stats || 0) + ranch.effectValue * totalMult;
+                } else if (ranch.effect === 'trait') {
+                  acc.cycles = (acc.cycles || 0) + 1;
+                  // Luxury lounge: roll for trait on each cycle
+                  if (ranch.traitPool && Math.random() < ranch.effectValue) {
+                    const existingTraits = slime.traits || [];
+                    const availableTraits = ranch.traitPool.filter(t => !existingTraits.includes(t));
+                    if (availableTraits.length > 0) {
+                      const newTrait = availableTraits[Math.floor(Math.random() * availableTraits.length)];
+                      const traitData = SLIME_TRAITS[newTrait];
+                      setSlimes(prev => prev.map(s =>
+                        s.id === slimeId ? { ...s, traits: [...(s.traits || []), newTrait] } : s
+                      ));
+                      log(`${slime.name} gained the ${traitData.icon} ${traitData.name} trait at ${ranch.icon}!`);
+                      const now = new Date();
+                      setRanchEvents(e => [...e.slice(-19), {
+                        msg: `${slime.name} developed ${traitData.name}!`,
+                        ranchId,
+                        time: Date.now(),
+                        timestamp: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                        type: 'trait'
+                      }]);
                     }
-                    return { ...s, elements: newElements, primaryElement };
-                  }));
-                }
-              } else if (ranch.effect === 'stats') {
-                const statGain = ranch.effectValue * totalMult;
-                setSlimes(prev => prev.map(s => {
-                  if (s.id !== slimeId || !s.baseStats) return s;
-                  const stats = ['firmness', 'slipperiness', 'viscosity'];
-                  const targetStat = stats[Math.floor(Math.random() * stats.length)];
-                  return {
-                    ...s,
-                    baseStats: { ...s.baseStats, [targetStat]: s.baseStats[targetStat] + statGain }
-                  };
-                }));
-              } else if (ranch.effect === 'trait') {
-                if (ranch.grantsTrait === 'void') {
-                  // Nullifier: Strip elements and grant void trait
-                  setSlimes(prev => prev.map(s => {
-                    if (s.id !== slimeId) return s;
-                    if (s.traits?.includes('void')) return s;
-                    return {
-                      ...s,
-                      elements: createDefaultElements(),
-                      primaryElement: null,
-                      traits: [...(s.traits || []), 'void']
-                    };
-                  }));
-                  log(`${slime.name} gained the ${SLIME_TRAITS.void.icon} Void trait!`);
-                  removeFromRanch(slimeId, ranchId);
-                } else if (ranch.traitPool && Math.random() < ranch.effectValue) {
-                  // Luxury Lounge: Chance to grant random trait from pool
-                  const existingTraits = slime.traits || [];
-                  const availableTraits = ranch.traitPool.filter(t => !existingTraits.includes(t));
-                  if (availableTraits.length > 0) {
-                    const newTrait = availableTraits[Math.floor(Math.random() * availableTraits.length)];
-                    const traitData = SLIME_TRAITS[newTrait];
-                    setSlimes(prev => prev.map(s =>
-                      s.id === slimeId ? { ...s, traits: [...(s.traits || []), newTrait] } : s
-                    ));
-                    log(`${slime.name} gained the ${traitData.icon} ${traitData.name} trait!`);
-                    setRanchEvents(e => [...e.slice(-9), { msg: `${slime.name} developed ${traitData.name}!`, ranchId, time: Date.now() }]);
                   }
                 }
-              }
+
+                acc.cycles = (acc.cycles || 0) + 1;
+                ranchAssigned[idx] = { ...assignment, accumulated: acc };
+              });
+
+              newAssignments[ranchId] = ranchAssigned;
+              return newAssignments;
             });
           }
         });
@@ -1762,6 +1861,10 @@ export default function HiveQueenGame() {
               assignToRanch={assignToRanch}
               removeFromRanch={removeFromRanch}
               getSlimeRanch={getSlimeRanch}
+              isRanchUnlocked={isRanchUnlocked}
+              getAssignedSlimeIds={getAssignedSlimeIds}
+              getSlimeAccumulated={getSlimeAccumulated}
+              getSlimeStartTime={getSlimeStartTime}
             />
           ) : (
             <div style={{ textAlign: 'center', padding: 40 }}>
@@ -1963,7 +2066,7 @@ export default function HiveQueenGame() {
 
         {tab === 6 && <Compendium queen={queen} monsterKills={monsterKills} unlockedMutations={unlockedMutations} />}
 
-        {tab === 7 && <SettingsTab onSave={manualSave} onDelete={handleDelete} lastSave={lastSave} />}
+        {tab === 7 && <SettingsTab onSave={manualSave} onDelete={handleDelete} lastSave={lastSave} prisms={prisms} />}
       </main>
 
       <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: 'rgba(0,0,0,0.95)', borderTop: '1px solid rgba(255,255,255,0.1)', maxHeight: 70, overflowY: 'auto', padding: 8 }}>
