@@ -840,7 +840,7 @@ export default function HiveQueenGame() {
       }
     }, TICK_RATE);
     return () => clearInterval(iv);
-  }, [gameLoaded, lastTick, speed, slimes, bon, activeRes, log, bLog, setDefeatedMonsters]);
+  }, [gameLoaded, lastTick, speed, slimes, bon, activeRes, log, bLog]);
 
   // Tower Defense Combat Loop
   useEffect(() => {
