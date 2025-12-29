@@ -1,5 +1,8 @@
 // Ranch System - Passive slime progression buildings
-// Slimes assigned to ranches gain benefits over time
+// Slimes assigned to ranches accumulate rewards over time (max 24h)
+// Rewards are applied when slimes are removed from the ranch
+
+export const RANCH_MAX_ACCUMULATION_TIME = 24 * 60 * 60; // 24 hours in seconds
 
 export const RANCH_TYPES = {
   feedingPool: {
@@ -8,7 +11,7 @@ export const RANCH_TYPES = {
     icon: '🥣',
     desc: 'A nutrient-rich pool where slimes passively absorb biomass.',
     effect: 'biomass',
-    effectValue: 0.5, // biomass per cycle per slime
+    effectValue: 1, // biomass per cycle per slime
     cycleTime: 30, // seconds
     capacity: 3,
     unlock: { type: 'level', value: 3 },
@@ -23,12 +26,12 @@ export const RANCH_TYPES = {
     desc: 'A volcanic garden where slimes attune to fire energy.',
     effect: 'element',
     element: 'fire',
-    effectValue: 0.3, // element affinity per cycle
+    effectValue: 0.5, // element affinity per cycle
     cycleTime: 45,
     capacity: 2,
-    unlock: { type: 'level', value: 5 },
-    cost: { biomass: 100, mats: { dragonScale: 3 } },
-    upgradeCost: { biomass: 200, multiplier: 2 },
+    unlock: { type: 'level', value: 6 },
+    cost: { biomass: 150, mats: { dragonScale: 3 } },
+    upgradeCost: { biomass: 300, multiplier: 2 },
     color: '#ef4444',
   },
   tidalPool: {
@@ -38,12 +41,12 @@ export const RANCH_TYPES = {
     desc: 'A mystical pool connected to ocean currents. Attunes slimes to water.',
     effect: 'element',
     element: 'water',
-    effectValue: 0.3,
+    effectValue: 0.5,
     cycleTime: 45,
     capacity: 2,
-    unlock: { type: 'level', value: 5 },
-    cost: { biomass: 100, mats: { turtleShell: 3 } },
-    upgradeCost: { biomass: 200, multiplier: 2 },
+    unlock: { type: 'level', value: 6 },
+    cost: { biomass: 150, mats: { turtleShell: 3 } },
+    upgradeCost: { biomass: 300, multiplier: 2 },
     color: '#3b82f6',
   },
   earthenDen: {
@@ -53,12 +56,12 @@ export const RANCH_TYPES = {
     desc: 'A deep cavern filled with mineral-rich clay. Attunes slimes to earth.',
     effect: 'element',
     element: 'earth',
-    effectValue: 0.3,
+    effectValue: 0.5,
     cycleTime: 45,
     capacity: 2,
-    unlock: { type: 'level', value: 5 },
-    cost: { biomass: 100, mats: { crystalShard: 3 } },
-    upgradeCost: { biomass: 200, multiplier: 2 },
+    unlock: { type: 'level', value: 6 },
+    cost: { biomass: 150, mats: { crystalShard: 3 } },
+    upgradeCost: { biomass: 300, multiplier: 2 },
     color: '#a16207',
   },
   verdantNest: {
@@ -68,13 +71,27 @@ export const RANCH_TYPES = {
     desc: 'A lush garden bursting with life energy. Attunes slimes to nature.',
     effect: 'element',
     element: 'nature',
-    effectValue: 0.3,
+    effectValue: 0.5,
     cycleTime: 45,
     capacity: 2,
-    unlock: { type: 'level', value: 5 },
-    cost: { biomass: 100, mats: { wolfPelt: 3 } },
-    upgradeCost: { biomass: 200, multiplier: 2 },
-    color: '#22c55e',
+    unlock: { type: 'level', value: 6 },
+    cost: { biomass: 150, mats: { wolfPelt: 3 } },
+    upgradeCost: { biomass: 300, multiplier: 2 },
+    color: '#16a34a',
+  },
+  trainingPit: {
+    id: 'trainingPit',
+    name: 'Training Pit',
+    icon: '⚔️',
+    desc: 'An arena where slimes spar to improve their base stats.',
+    effect: 'stats',
+    effectValue: 0.2, // stat points per cycle (distributed)
+    cycleTime: 60,
+    capacity: 4,
+    unlock: { type: 'level', value: 10 },
+    cost: { biomass: 300, mats: { bone: 5 } },
+    upgradeCost: { biomass: 500, multiplier: 2 },
+    color: '#dc2626',
   },
   nullifier: {
     id: 'nullifier',
@@ -83,7 +100,7 @@ export const RANCH_TYPES = {
     desc: 'A void-touched room that strips elemental affinity and grants the Void trait.',
     effect: 'trait',
     grantsTrait: 'void',
-    effectValue: 1, // completes when element reaches 0
+    effectValue: 1,
     cycleTime: 120,
     capacity: 1,
     unlock: { type: 'prisms', value: 50 },
@@ -91,29 +108,15 @@ export const RANCH_TYPES = {
     upgradeCost: { prisms: 50, multiplier: 2 },
     color: '#6b21a8',
   },
-  trainingPit: {
-    id: 'trainingPit',
-    name: 'Training Pit',
-    icon: '⚔️',
-    desc: 'An arena where slimes spar to improve their base stats.',
-    effect: 'stats',
-    effectValue: 0.1, // stat points per cycle (distributed)
-    cycleTime: 60,
-    capacity: 4,
-    unlock: { type: 'level', value: 8 },
-    cost: { biomass: 200, mats: { bone: 5 } },
-    upgradeCost: { biomass: 400, multiplier: 2 },
-    color: '#dc2626',
-  },
   luxuryLounge: {
     id: 'luxuryLounge',
     name: 'Luxury Lounge',
     icon: '✨',
     desc: 'A premium spa that has a chance to grant rare personality traits.',
     effect: 'trait',
-    grantsTrait: null, // random from pool
+    grantsTrait: null,
     traitPool: ['lucky', 'resilient', 'adaptable'],
-    effectValue: 0.05, // 5% chance per cycle to gain trait
+    effectValue: 0.05,
     cycleTime: 180,
     capacity: 2,
     unlock: { type: 'prisms', value: 100 },
@@ -125,13 +128,12 @@ export const RANCH_TYPES = {
 
 // Random events that can occur during ranch cycles
 export const RANCH_EVENTS = [
-  // Positive events
   {
     id: 'bountifulHarvest',
     msg: 'A bountiful harvest! Extra biomass gained.',
     type: 'bonus',
     effect: 'biomass',
-    value: 5,
+    value: 3,
     weight: 10,
     ranchTypes: ['feedingPool'],
   },
@@ -140,13 +142,13 @@ export const RANCH_EVENTS = [
     msg: 'An elemental surge! Rapid affinity gain.',
     type: 'bonus',
     effect: 'elementBoost',
-    value: 2, // multiplier
+    value: 2,
     weight: 8,
     ranchTypes: ['fireGrove', 'tidalPool', 'earthenDen', 'verdantNest'],
   },
   {
     id: 'friendlyRivalry',
-    msg: 'A friendly rivalry breaks out! Enhanced training.',
+    msg: 'A friendly rivalry! Enhanced training.',
     type: 'bonus',
     effect: 'statsBoost',
     value: 1.5,
@@ -155,24 +157,23 @@ export const RANCH_EVENTS = [
   },
   {
     id: 'luckyFind',
-    msg: 'The slime found something shiny!',
+    msg: 'Found something shiny!',
     type: 'bonus',
     effect: 'material',
     value: 1,
     weight: 5,
     ranchTypes: ['feedingPool', 'trainingPit'],
   },
-  // Neutral/flavor events
   {
     id: 'napTime',
-    msg: 'The slimes took a peaceful nap.',
+    msg: 'Took a peaceful nap.',
     type: 'flavor',
     weight: 15,
-    ranchTypes: null, // all ranches
+    ranchTypes: null,
   },
   {
     id: 'playTime',
-    msg: 'The slimes spent time playing together.',
+    msg: 'Spent time playing together.',
     type: 'flavor',
     weight: 15,
     ranchTypes: null,
@@ -184,24 +185,29 @@ export const RANCH_EVENTS = [
     weight: 10,
     ranchTypes: ['nullifier', 'luxuryLounge'],
   },
-  // Negative events (rare)
   {
     id: 'disruption',
-    msg: 'A disturbance disrupted the session. Reduced gains.',
+    msg: 'A disturbance disrupted the session.',
     type: 'penalty',
     effect: 'reducedGains',
-    value: 0.5, // multiplier
+    value: 0.5,
     weight: 3,
     ranchTypes: null,
   },
 ];
 
-// Ranch upgrade effects per level
 export const RANCH_UPGRADE_BONUSES = {
-  capacity: 1, // +1 capacity per upgrade
-  effectMultiplier: 0.25, // +25% effect per upgrade
-  cycleReduction: 0.1, // -10% cycle time per upgrade (min 50%)
+  capacity: 1,
+  effectMultiplier: 0.25,
+  cycleReduction: 0.1,
 };
 
-// Maximum ranch level
 export const MAX_RANCH_LEVEL = 5;
+
+// Prisms shop packages
+export const PRISM_PACKAGES = [
+  { id: 'starter', name: 'Starter Pack', prisms: 50, price: '$0.99', bonus: null },
+  { id: 'value', name: 'Value Pack', prisms: 150, price: '$2.99', bonus: '+50 bonus' },
+  { id: 'premium', name: 'Premium Pack', prisms: 500, price: '$9.99', bonus: '+100 bonus' },
+  { id: 'mega', name: 'Mega Pack', prisms: 1200, price: '$19.99', bonus: '+300 bonus' },
+];

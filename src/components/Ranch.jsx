@@ -1,8 +1,16 @@
 import React, { useState } from 'react';
-import { RANCH_TYPES, RANCH_UPGRADE_BONUSES, MAX_RANCH_LEVEL } from '../data/ranchData.js';
+import { RANCH_TYPES, RANCH_UPGRADE_BONUSES, MAX_RANCH_LEVEL, RANCH_MAX_ACCUMULATION_TIME } from '../data/ranchData.js';
 import { ELEMENTS } from '../data/gameConstants.js';
 import { SLIME_TIERS } from '../data/slimeData.js';
 import SlimeSprite from './SlimeSprite.jsx';
+
+// CSS keyframes for bouncing animation
+const bounceKeyframes = `
+@keyframes slimeBounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+`;
 
 const Ranch = ({
   queen,
@@ -24,18 +32,21 @@ const Ranch = ({
   assignToRanch,
   removeFromRanch,
   getSlimeRanch,
+  isRanchUnlocked,
+  getAssignedSlimeIds,
+  getSlimeAccumulated,
+  getSlimeStartTime,
 }) => {
   const [selectedRanch, setSelectedRanch] = useState(null);
   const [showAssignModal, setShowAssignModal] = useState(false);
 
   // Get available slimes (not on expedition, not already assigned)
-  const getAvailableSlimes = (ranchId) => {
+  const getAvailableSlimes = () => {
     return slimes.filter(s => {
-      // Not on expedition
       if (Object.values(exps).some(e => e.party.some(p => p.id === s.id))) return false;
-      // Not assigned to any ranch
       for (const [rid, assigned] of Object.entries(ranchAssignments)) {
-        if (assigned.includes(s.id)) return false;
+        const ids = (assigned || []).map(a => typeof a === 'object' ? a.slimeId : a);
+        if (ids.includes(s.id)) return false;
       }
       return true;
     });
@@ -62,85 +73,187 @@ const Ranch = ({
     return { progress: Math.min(100, progress), cycleTime: effectiveCycleTime };
   };
 
+  const formatTime = (seconds) => {
+    if (seconds < 60) return `${Math.floor(seconds)}s`;
+    if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${Math.floor(seconds % 60)}s`;
+    return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`;
+  };
+
+  const formatAccumulatedReward = (ranchId, slimeId) => {
+    const ranch = RANCH_TYPES[ranchId];
+    const acc = getSlimeAccumulated(slimeId, ranchId);
+    if (ranch.effect === 'biomass' && acc.biomass > 0) {
+      return `+${Math.floor(acc.biomass)} biomass`;
+    } else if (ranch.effect === 'element' && acc.element > 0) {
+      return `+${acc.element.toFixed(1)}% ${ELEMENTS[ranch.element]?.name || ''}`;
+    } else if (ranch.effect === 'stats' && acc.stats > 0) {
+      return `+${acc.stats.toFixed(1)} stats`;
+    } else if (ranch.effect === 'trait') {
+      return `${acc.cycles || 0} cycles`;
+    }
+    return 'Accumulating...';
+  };
+
+  const getTimeRemaining = (slimeId, ranchId) => {
+    const startTime = getSlimeStartTime(slimeId, ranchId);
+    const elapsed = (Date.now() - startTime) / 1000;
+    const remaining = Math.max(0, RANCH_MAX_ACCUMULATION_TIME - elapsed);
+    if (remaining <= 0) return 'MAX (24h)';
+    return formatTime(remaining) + ' left';
+  };
+
+  const getTimeProgress = (slimeId, ranchId) => {
+    const startTime = getSlimeStartTime(slimeId, ranchId);
+    const elapsed = (Date.now() - startTime) / 1000;
+    return Math.min(100, (elapsed / RANCH_MAX_ACCUMULATION_TIME) * 100);
+  };
+
+  // Only show ranches that are unlocked
+  const visibleRanches = Object.entries(RANCH_TYPES).filter(([ranchId]) => isRanchUnlocked(ranchId));
+
   return (
     <div>
+      <style>{bounceKeyframes}</style>
+
+      {/* Header */}
       <div style={{ marginBottom: 15 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
           <div style={{ fontSize: 16, fontWeight: 'bold' }}>Slime Ranch</div>
-          <div style={{ fontSize: 12, color: '#f59e0b' }}>
-            <span style={{ marginRight: 10 }}>Prisms: {prisms}</span>
+          <div style={{ display: 'flex', gap: 15, fontSize: 12 }}>
+            <span style={{ color: '#f59e0b' }}>💎 {prisms} Prisms</span>
           </div>
         </div>
-        <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 10 }}>
-          Assign slimes to ranches for passive benefits. Slimes gain effects each cycle.
+        <div style={{ fontSize: 11, opacity: 0.7 }}>
+          Assign slimes to ranches for passive benefits. Rewards accumulate (max 24h) and are applied when slimes are removed.
         </div>
       </div>
 
-      {/* Ranch Grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12 }}>
-        {Object.entries(RANCH_TYPES).map(([ranchId, ranch]) => {
+      {/* Ranch Buildings - Horizontal Sections */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 15 }}>
+        {visibleRanches.map(([ranchId, ranch]) => {
           const building = ranchBuildings[ranchId];
           const isBuilt = !!building;
           const canBuild = canBuildRanch(ranchId);
-          const isLocked = ranch.unlock.type === 'level' ? queen.level < ranch.unlock.value : prisms < ranch.unlock.value;
-          const assigned = ranchAssignments[ranchId] || [];
-          const capacity = getRanchCapacity(ranchId);
-          const { progress, cycleTime } = isBuilt ? formatProgress(ranchId) : { progress: 0, cycleTime: ranch.cycleTime };
+          const assignedIds = getAssignedSlimeIds(ranchId);
+          const capacity = isBuilt ? getRanchCapacity(ranchId) : ranch.capacity;
+          const { progress, cycleTime } = formatProgress(ranchId);
 
           return (
             <div
               key={ranchId}
               style={{
-                background: isBuilt ? `linear-gradient(135deg, ${ranch.color}22, ${ranch.color}11)` : 'rgba(0,0,0,0.3)',
-                borderRadius: 10,
-                padding: 12,
-                border: `2px solid ${isBuilt ? ranch.color : isLocked ? '#4b5563' : '#22d3ee'}`,
-                opacity: isLocked ? 0.5 : 1,
+                background: isBuilt ? `linear-gradient(135deg, ${ranch.color}15, ${ranch.color}08)` : 'rgba(0,0,0,0.3)',
+                borderRadius: 12,
+                padding: 15,
+                border: `2px solid ${isBuilt ? ranch.color : canBuild ? '#22d3ee' : '#4b5563'}`,
               }}
             >
-              {/* Header */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-                <span style={{ fontSize: 28 }}>{ranch.icon}</span>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 'bold', fontSize: 14 }}>{ranch.name}</div>
-                  {isBuilt && (
-                    <div style={{ fontSize: 10, color: ranch.color }}>Level {building.level}/{MAX_RANCH_LEVEL}</div>
+              {/* Ranch Header */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <span style={{ fontSize: 32 }}>{ranch.icon}</span>
+                  <div>
+                    <div style={{ fontWeight: 'bold', fontSize: 14 }}>{ranch.name}</div>
+                    <div style={{ fontSize: 11, opacity: 0.7 }}>{ranch.desc}</div>
+                  </div>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  {isBuilt ? (
+                    <>
+                      <div style={{ fontSize: 12, color: ranch.color }}>Level {building.level}/{MAX_RANCH_LEVEL}</div>
+                      <div style={{ fontSize: 10, opacity: 0.6 }}>{cycleTime.toFixed(0)}s cycle</div>
+                    </>
+                  ) : (
+                    <div style={{ fontSize: 11, color: canBuild ? '#22d3ee' : '#4b5563' }}>
+                      Not Built
+                    </div>
                   )}
                 </div>
-                {isBuilt && (
-                  <div style={{ textAlign: 'right' }}>
-                    <div style={{ fontSize: 12, color: '#4ade80' }}>{assigned.length}/{capacity}</div>
-                    <div style={{ fontSize: 9, opacity: 0.6 }}>slimes</div>
-                  </div>
-                )}
               </div>
-
-              {/* Description */}
-              <div style={{ fontSize: 11, opacity: 0.8, marginBottom: 10 }}>{ranch.desc}</div>
 
               {/* Effect Info */}
-              <div style={{ fontSize: 10, background: 'rgba(0,0,0,0.2)', padding: 6, borderRadius: 4, marginBottom: 10 }}>
-                {ranch.effect === 'biomass' && (
-                  <span>+{ranch.effectValue} biomass/cycle</span>
-                )}
-                {ranch.effect === 'element' && (
-                  <span>{ELEMENTS[ranch.element]?.icon} +{ranch.effectValue}% {ELEMENTS[ranch.element]?.name}/cycle</span>
-                )}
-                {ranch.effect === 'stats' && (
-                  <span>+{ranch.effectValue} random stat/cycle</span>
-                )}
-                {ranch.effect === 'trait' && ranch.grantsTrait === 'void' && (
-                  <span>Grants Void trait (removes elements)</span>
-                )}
-                {ranch.effect === 'trait' && ranch.traitPool && (
-                  <span>{(ranch.effectValue * 100).toFixed(0)}% chance for rare trait/cycle</span>
-                )}
-                <span style={{ marginLeft: 8, opacity: 0.6 }}>({cycleTime.toFixed(0)}s cycle)</span>
+              <div style={{ fontSize: 11, background: 'rgba(0,0,0,0.2)', padding: 8, borderRadius: 6, marginBottom: 12 }}>
+                {ranch.effect === 'biomass' && <span>Effect: +{ranch.effectValue} biomass per cycle per slime</span>}
+                {ranch.effect === 'element' && <span>Effect: {ELEMENTS[ranch.element]?.icon} +{ranch.effectValue}% {ELEMENTS[ranch.element]?.name} affinity per cycle</span>}
+                {ranch.effect === 'stats' && <span>Effect: +{ranch.effectValue} random stat points per cycle</span>}
+                {ranch.effect === 'trait' && ranch.grantsTrait === 'void' && <span>Effect: Grants Void trait (removes elements)</span>}
+                {ranch.effect === 'trait' && ranch.traitPool && <span>Effect: {(ranch.effectValue * 100).toFixed(0)}% chance for rare trait per cycle</span>}
               </div>
 
-              {/* Progress Bar (if built and has slimes) */}
-              {isBuilt && assigned.length > 0 && (
-                <div style={{ marginBottom: 10 }}>
+              {/* Slot Visualization */}
+              {isBuilt && (
+                <div style={{ marginBottom: 12 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                    <span style={{ fontSize: 10, opacity: 0.6 }}>Slots:</span>
+                    <span style={{ fontSize: 12, color: '#4ade80' }}>{assignedIds.length}/{capacity}</span>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    {/* Render slots */}
+                    {Array.from({ length: capacity }).map((_, idx) => {
+                      const slimeId = assignedIds[idx];
+                      const slime = slimeId ? slimes.find(s => s.id === slimeId) : null;
+
+                      return (
+                        <div
+                          key={idx}
+                          style={{
+                            width: 70,
+                            height: 90,
+                            background: slime ? `${ranch.color}22` : 'rgba(0,0,0,0.3)',
+                            borderRadius: 8,
+                            border: `2px dashed ${slime ? ranch.color : '#4b5563'}`,
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            cursor: slime ? 'pointer' : 'default',
+                            position: 'relative',
+                            overflow: 'hidden',
+                          }}
+                          onClick={() => slime && removeFromRanch(slimeId, ranchId)}
+                          title={slime ? `Click to collect ${slime.name}` : 'Empty slot'}
+                        >
+                          {slime ? (
+                            <>
+                              <div
+                                style={{
+                                  animation: 'slimeBounce 1s ease-in-out infinite',
+                                  animationDelay: `${idx * 0.2}s`,
+                                }}
+                              >
+                                <SlimeSprite tier={slime.tier} size={32} />
+                              </div>
+                              <div style={{ fontSize: 8, textAlign: 'center', marginTop: 4, maxWidth: 60, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {slime.name}
+                              </div>
+                              <div style={{ fontSize: 8, color: '#4ade80', textAlign: 'center' }}>
+                                {formatAccumulatedReward(ranchId, slimeId)}
+                              </div>
+                              {/* Time progress bar */}
+                              <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 3, background: 'rgba(0,0,0,0.4)' }}>
+                                <div
+                                  style={{
+                                    width: `${getTimeProgress(slimeId, ranchId)}%`,
+                                    height: '100%',
+                                    background: getTimeProgress(slimeId, ranchId) >= 100 ? '#f59e0b' : ranch.color,
+                                  }}
+                                />
+                              </div>
+                            </>
+                          ) : (
+                            <div style={{ fontSize: 10, opacity: 0.4 }}>Empty</div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Cycle Progress Bar */}
+              {isBuilt && assignedIds.length > 0 && (
+                <div style={{ marginBottom: 12 }}>
+                  <div style={{ fontSize: 10, opacity: 0.6, marginBottom: 4 }}>Cycle Progress</div>
                   <div style={{ height: 6, background: 'rgba(0,0,0,0.4)', borderRadius: 3, overflow: 'hidden' }}>
                     <div
                       style={{
@@ -154,122 +267,92 @@ const Ranch = ({
                 </div>
               )}
 
-              {/* Assigned Slimes */}
-              {isBuilt && assigned.length > 0 && (
-                <div style={{ marginBottom: 10 }}>
-                  <div style={{ fontSize: 10, opacity: 0.6, marginBottom: 4 }}>Assigned Slimes</div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                    {assigned.map(slimeId => {
-                      const slime = slimes.find(s => s.id === slimeId);
-                      if (!slime) return null;
-                      return (
-                        <div
-                          key={slimeId}
-                          onClick={() => removeFromRanch(slimeId, ranchId)}
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 4,
-                            padding: '3px 8px',
-                            background: 'rgba(0,0,0,0.3)',
-                            borderRadius: 4,
-                            cursor: 'pointer',
-                            fontSize: 10,
-                          }}
-                          title="Click to remove"
-                        >
-                          <SlimeSprite tier={slime.tier} size={16} />
-                          <span>{slime.name}</span>
-                          <span style={{ opacity: 0.5 }}>x</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
               {/* Actions */}
-              {!isBuilt && !isLocked && (
-                <button
-                  onClick={() => buildRanch(ranchId)}
-                  disabled={!canBuild}
-                  style={{
-                    width: '100%',
-                    padding: 8,
-                    background: canBuild ? 'rgba(34,211,238,0.2)' : 'rgba(0,0,0,0.3)',
-                    border: `1px solid ${canBuild ? '#22d3ee' : '#4b5563'}`,
-                    borderRadius: 6,
-                    color: '#fff',
-                    cursor: canBuild ? 'pointer' : 'not-allowed',
-                    fontSize: 11,
-                  }}
-                >
-                  Build ({ranch.cost.biomass ? `${ranch.cost.biomass} bio` : ''}{ranch.cost.prisms ? `${ranch.cost.prisms} prisms` : ''}
-                  {ranch.cost.mats && Object.entries(ranch.cost.mats).map(([m, c]) => ` ${c} ${m}`).join('')})
-                </button>
-              )}
-
-              {!isBuilt && isLocked && (
-                <div style={{ fontSize: 10, textAlign: 'center', color: '#f59e0b', padding: 8 }}>
-                  {ranch.unlock.type === 'level' ? `Unlocks at Queen Lv.${ranch.unlock.value}` : `Requires ${ranch.unlock.value} prisms`}
-                </div>
-              )}
-
-              {isBuilt && (
-                <div style={{ display: 'flex', gap: 6 }}>
+              <div style={{ display: 'flex', gap: 8 }}>
+                {!isBuilt ? (
                   <button
-                    onClick={() => {
-                      setSelectedRanch(ranchId);
-                      setShowAssignModal(true);
-                    }}
-                    disabled={assigned.length >= capacity}
+                    onClick={() => buildRanch(ranchId)}
+                    disabled={!canBuild}
                     style={{
                       flex: 1,
-                      padding: 6,
-                      background: assigned.length >= capacity ? 'rgba(0,0,0,0.3)' : 'rgba(34,211,238,0.2)',
-                      border: `1px solid ${assigned.length >= capacity ? '#4b5563' : '#22d3ee'}`,
+                      padding: 10,
+                      background: canBuild ? 'rgba(34,211,238,0.2)' : 'rgba(0,0,0,0.3)',
+                      border: `1px solid ${canBuild ? '#22d3ee' : '#4b5563'}`,
                       borderRadius: 6,
                       color: '#fff',
-                      cursor: assigned.length >= capacity ? 'not-allowed' : 'pointer',
-                      fontSize: 10,
+                      cursor: canBuild ? 'pointer' : 'not-allowed',
+                      fontSize: 12,
                     }}
                   >
-                    Assign Slime
+                    Build ({ranch.cost.biomass ? `${ranch.cost.biomass} bio` : ''}{ranch.cost.prisms ? `${ranch.cost.prisms} prisms` : ''}
+                    {ranch.cost.mats && Object.entries(ranch.cost.mats).map(([m, c]) => ` ${c} ${m}`).join('')})
                   </button>
-                  {building.level < MAX_RANCH_LEVEL && (
+                ) : (
+                  <>
                     <button
-                      onClick={() => upgradeRanch(ranchId)}
-                      disabled={!canUpgradeRanch(ranchId)}
+                      onClick={() => {
+                        setSelectedRanch(ranchId);
+                        setShowAssignModal(true);
+                      }}
+                      disabled={assignedIds.length >= capacity}
                       style={{
-                        padding: 6,
-                        background: canUpgradeRanch(ranchId) ? 'rgba(74,222,128,0.2)' : 'rgba(0,0,0,0.3)',
-                        border: `1px solid ${canUpgradeRanch(ranchId) ? '#4ade80' : '#4b5563'}`,
+                        flex: 1,
+                        padding: 8,
+                        background: assignedIds.length >= capacity ? 'rgba(0,0,0,0.3)' : 'rgba(34,211,238,0.2)',
+                        border: `1px solid ${assignedIds.length >= capacity ? '#4b5563' : '#22d3ee'}`,
                         borderRadius: 6,
                         color: '#fff',
-                        cursor: canUpgradeRanch(ranchId) ? 'pointer' : 'not-allowed',
-                        fontSize: 10,
+                        cursor: assignedIds.length >= capacity ? 'not-allowed' : 'pointer',
+                        fontSize: 11,
                       }}
                     >
-                      Upgrade ({getUpgradeCost(ranchId)?.biomass || getUpgradeCost(ranchId)?.prisms})
+                      + Assign Slime
                     </button>
-                  )}
-                </div>
-              )}
+                    {building.level < MAX_RANCH_LEVEL && (
+                      <button
+                        onClick={() => upgradeRanch(ranchId)}
+                        disabled={!canUpgradeRanch(ranchId)}
+                        style={{
+                          padding: 8,
+                          background: canUpgradeRanch(ranchId) ? 'rgba(74,222,128,0.2)' : 'rgba(0,0,0,0.3)',
+                          border: `1px solid ${canUpgradeRanch(ranchId) ? '#4ade80' : '#4b5563'}`,
+                          borderRadius: 6,
+                          color: '#fff',
+                          cursor: canUpgradeRanch(ranchId) ? 'pointer' : 'not-allowed',
+                          fontSize: 11,
+                        }}
+                      >
+                        Upgrade ({getUpgradeCost(ranchId)?.biomass || getUpgradeCost(ranchId)?.prisms})
+                      </button>
+                    )}
+                  </>
+                )}
+              </div>
             </div>
           );
         })}
       </div>
 
+      {/* No ranches unlocked message */}
+      {visibleRanches.length === 0 && (
+        <div style={{ textAlign: 'center', padding: 40, opacity: 0.6 }}>
+          No ranches unlocked yet. Reach Queen Level 3 to unlock the Feeding Pool!
+        </div>
+      )}
+
       {/* Recent Events */}
       {ranchEvents.length > 0 && (
-        <div style={{ marginTop: 15 }}>
-          <div style={{ fontSize: 12, fontWeight: 'bold', marginBottom: 8 }}>Recent Ranch Events</div>
-          <div style={{ maxHeight: 100, overflowY: 'auto', background: 'rgba(0,0,0,0.2)', borderRadius: 6, padding: 8 }}>
+        <div style={{ marginTop: 20 }}>
+          <div style={{ fontSize: 12, fontWeight: 'bold', marginBottom: 8 }}>Recent Events</div>
+          <div style={{ maxHeight: 120, overflowY: 'auto', background: 'rgba(0,0,0,0.2)', borderRadius: 8, padding: 10 }}>
             {ranchEvents.slice().reverse().map((event, i) => {
               const ranch = RANCH_TYPES[event.ranchId];
+              const typeColor = event.type === 'bonus' ? '#4ade80' : event.type === 'penalty' ? '#ef4444' : event.type === 'trait' ? '#f59e0b' : '#9ca3af';
               return (
-                <div key={i} style={{ fontSize: 10, opacity: 0.8, marginBottom: 4 }}>
-                  <span style={{ color: ranch?.color }}>{ranch?.icon}</span> {event.msg}
+                <div key={i} style={{ fontSize: 11, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ opacity: 0.5, fontSize: 10 }}>{event.timestamp || ''}</span>
+                  <span style={{ color: ranch?.color }}>{ranch?.icon}</span>
+                  <span style={{ color: typeColor }}>{event.msg}</span>
                 </div>
               );
             })}
@@ -286,7 +369,7 @@ const Ranch = ({
             left: 0,
             right: 0,
             bottom: 0,
-            background: 'rgba(0,0,0,0.8)',
+            background: 'rgba(0,0,0,0.85)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -303,20 +386,22 @@ const Ranch = ({
               width: '90%',
               maxHeight: '80vh',
               overflowY: 'auto',
+              border: `2px solid ${RANCH_TYPES[selectedRanch].color}`,
             }}
             onClick={e => e.stopPropagation()}
           >
-            <div style={{ fontSize: 16, fontWeight: 'bold', marginBottom: 15 }}>
-              Assign Slime to {RANCH_TYPES[selectedRanch].icon} {RANCH_TYPES[selectedRanch].name}
+            <div style={{ fontSize: 16, fontWeight: 'bold', marginBottom: 15, display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span>{RANCH_TYPES[selectedRanch].icon}</span>
+              <span>Assign to {RANCH_TYPES[selectedRanch].name}</span>
             </div>
 
-            {getAvailableSlimes(selectedRanch).length === 0 ? (
+            {getAvailableSlimes().length === 0 ? (
               <div style={{ textAlign: 'center', opacity: 0.6, padding: 20 }}>
                 No available slimes. Slimes on expeditions or already assigned cannot be selected.
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {getAvailableSlimes(selectedRanch).map(slime => {
+                {getAvailableSlimes().map(slime => {
                   const tier = SLIME_TIERS[slime.tier];
                   return (
                     <div
@@ -330,29 +415,32 @@ const Ranch = ({
                       style={{
                         display: 'flex',
                         alignItems: 'center',
-                        gap: 10,
-                        padding: 10,
+                        gap: 12,
+                        padding: 12,
                         background: 'rgba(0,0,0,0.3)',
                         borderRadius: 8,
                         cursor: 'pointer',
                         border: '2px solid transparent',
+                        transition: 'border-color 0.2s',
                       }}
                       onMouseEnter={e => e.currentTarget.style.borderColor = tier.color}
                       onMouseLeave={e => e.currentTarget.style.borderColor = 'transparent'}
                     >
-                      <SlimeSprite tier={slime.tier} size={32} />
+                      <SlimeSprite tier={slime.tier} size={36} />
                       <div style={{ flex: 1 }}>
-                        <div style={{ fontWeight: 'bold', fontSize: 12 }}>{slime.name}</div>
-                        <div style={{ fontSize: 10, opacity: 0.6 }}>{tier.name}</div>
+                        <div style={{ fontWeight: 'bold', fontSize: 13 }}>{slime.name}</div>
+                        <div style={{ fontSize: 11, opacity: 0.6 }}>{tier.name}</div>
                         {slime.primaryElement && (
                           <div style={{ fontSize: 10, color: ELEMENTS[slime.primaryElement]?.color }}>
                             {ELEMENTS[slime.primaryElement]?.icon} {ELEMENTS[slime.primaryElement]?.name}
                           </div>
                         )}
-                        {slime.traits?.includes('lazy') && (
-                          <div style={{ fontSize: 9, color: '#4ade80' }}>+10% ranch effectiveness</div>
-                        )}
                       </div>
+                      {slime.traits?.includes('lazy') && (
+                        <div style={{ fontSize: 9, color: '#4ade80', padding: '2px 6px', background: 'rgba(74,222,128,0.2)', borderRadius: 4 }}>
+                          +10% ranch
+                        </div>
+                      )}
                     </div>
                   );
                 })}
