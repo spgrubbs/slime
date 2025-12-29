@@ -19,7 +19,7 @@ const SlimeDetail = ({ slime, expState }) => {
   };
 
   // Get mutations array (with backward compatibility for old 'traits' field)
-  const mutations = slime.mutations || slime.traits || [];
+  const mutations = slime.mutations || [];
 
   return (
     <div style={{ background: 'rgba(0,0,0,0.3)', borderRadius: 10, padding: 15, border: `2px solid ${tier.color}33` }}>
