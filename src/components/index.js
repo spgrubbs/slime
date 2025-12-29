@@ -8,3 +8,4 @@ export { default as Compendium } from './Compendium.jsx';
 export { default as Menu } from './Menu.jsx';
 export { default as WelcomeBackModal } from './WelcomeBackModal.jsx';
 export { default as SettingsTab } from './SettingsTab.jsx';
+export { default as Ranch } from './Ranch.jsx';
