@@ -33,7 +33,7 @@ const BattleArena = ({ exp, slimes, zone, logs }) => {
             if (!sl) return null;
             return (
               <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <SlimeSprite tier={sl.tier} size={38} hp={p.hp} maxHp={p.maxHp} traits={sl.traits} anim={exp.animSlime === p.id ? exp.slimeAnim : 'idle'} status={p.status || []} primaryElement={sl.primaryElement} />
+                <SlimeSprite tier={sl.tier} size={38} hp={p.hp} maxHp={p.maxHp} mutations={sl.mutations || sl.traits} anim={exp.animSlime === p.id ? exp.slimeAnim : 'idle'} status={p.status || []} primaryElement={sl.primaryElement} />
                 <div style={{ fontSize: 10 }}>
                   <div style={{ fontWeight: 'bold' }}>{sl.name.split(' ')[0]}</div>
                   <div style={{ opacity: 0.7 }}>🧬{Math.floor(sl.biomass || 0)} • {Math.ceil(p.hp)}/{p.maxHp}</div>
