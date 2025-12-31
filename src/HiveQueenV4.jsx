@@ -67,14 +67,17 @@ const calculateOfflineProgress = (saved, bonuses) => {
     if (sl.baseStats) {
       const tier = SLIME_TIERS[sl.tier];
       const biomass = sl.biomass || 0;
-      const mult = 1 + ((biomass / tier.biomassPerPercent) / 100);
+      const percentBonus = biomass / tier.biomassPerPercent;
+      // BALANCE: Cap at maxBiomassBonus (default 100% = double stats)
+      const cappedBonus = Math.min(percentBonus, tier.maxBiomassBonus || 100);
+      const mult = 1 + (cappedBonus / 100);
       return {
         firmness: Math.floor(sl.baseStats.firmness * mult),
         slipperiness: Math.floor(sl.baseStats.slipperiness * mult),
         viscosity: Math.floor(sl.baseStats.viscosity * mult),
       };
     }
-    return sl.stats || { firmness: 5, slipperiness: 5, viscosity: 5 };
+    return sl.stats || { firmness: 4, slipperiness: 4, viscosity: 4 };
   };
 
   // Simulate expeditions
@@ -247,7 +250,12 @@ export default function HiveQueenGame() {
   const maxJelly = BASE_JELLY + (queen.level - 1) * JELLY_PER_QUEEN_LEVEL + (builds.slimePit || 0) * 10;
   const usedJelly = slimes.reduce((s, sl) => s + sl.magCost, 0);
   const freeJelly = maxJelly - usedJelly;
-  const unlockedTiers = Object.keys(SLIME_TIERS).filter(t => t === 'elite' ? builds.hatchery > 0 : !SLIME_TIERS[t].unlockLevel || queen.level >= SLIME_TIERS[t].unlockLevel);
+  // BALANCE: Slime tiers are unlocked by buildings, not queen level
+  const unlockedTiers = Object.keys(SLIME_TIERS).filter(t => {
+    const tier = SLIME_TIERS[t];
+    if (!tier.unlockBuilding) return true; // Basic tier is always available
+    return builds[tier.unlockBuilding] > 0;
+  });
   const bon = {
     bio: 1 + (research.includes('efficientDigestion') ? 0.2 : 0),
     xp: 1 + (research.includes('enhancedAbsorption') ? 0.25 : 0),
@@ -522,7 +530,9 @@ export default function HiveQueenGame() {
     const td = SLIME_TIERS[tier];
     const bioCost = BASE_SLIME_COST + selMutations.length * 5;
     if (bio < bioCost || freeJelly < magCost) return;
-    const baseStats = { firmness: Math.floor(5 * td.statMultiplier), slipperiness: Math.floor(5 * td.statMultiplier), viscosity: Math.floor(5 * td.statMultiplier) };
+    // BALANCE: Random base stats within range, then apply tier multiplier
+    const randStat = () => Math.floor((3 + Math.random() * 4) * td.statMultiplier); // 3-6 base range
+    const baseStats = { firmness: randStat(), slipperiness: randStat(), viscosity: randStat() };
     const pass = [];
     // Apply mutation stat bonuses and passives
     selMutations.forEach(id => { const m = MUTATION_LIBRARY[id]; if (m) { baseStats[m.stat] += m.bonus; pass.push(m.passive); } });
@@ -849,20 +859,23 @@ export default function HiveQueenGame() {
       return slime.stats;
     }
 
-    // If no baseStats, return defaults
+    // If no baseStats, return defaults based on tier
     if (!slime.baseStats) {
       const tier = SLIME_TIERS[slime.tier];
+      const baseStat = 4; // Default base stat for legacy slimes
       return {
-        firmness: Math.floor(5 * (tier?.statMultiplier || 1)),
-        slipperiness: Math.floor(5 * (tier?.statMultiplier || 1)),
-        viscosity: Math.floor(5 * (tier?.statMultiplier || 1)),
+        firmness: Math.floor(baseStat * (tier?.statMultiplier || 1)),
+        slipperiness: Math.floor(baseStat * (tier?.statMultiplier || 1)),
+        viscosity: Math.floor(baseStat * (tier?.statMultiplier || 1)),
       };
     }
 
     const tier = SLIME_TIERS[slime.tier];
     const biomass = slime.biomass || 0;
     const percentBonus = biomass / tier.biomassPerPercent; // How many percent increases
-    const multiplier = 1 + (percentBonus / 100); // Convert to multiplier (1% = 0.01)
+    // BALANCE: Cap at maxBiomassBonus (default 100% = double stats)
+    const cappedBonus = Math.min(percentBonus, tier.maxBiomassBonus || 100);
+    const multiplier = 1 + (cappedBonus / 100); // Convert to multiplier
 
     return {
       firmness: Math.floor(slime.baseStats.firmness * multiplier),
@@ -1081,7 +1094,8 @@ export default function HiveQueenGame() {
     if (!gameLoaded) return;
     const iv = setInterval(() => {
       const now = Date.now();
-      const dt = ((now - lastTick) / TICK_RATE) * speed;
+      const dt = ((now - lastTick) / TICK_RATE) * speed; // Game ticks for battles
+      const dtSeconds = (now - lastTick) / 1000 * speed; // Real seconds for research/ranch
       setLastTick(now);
 
       // Pheromone generation - 1 per slime per hour, updated every minute
@@ -1374,11 +1388,12 @@ export default function HiveQueenGame() {
         return next;
       });
 
+      // BALANCE: Research uses real seconds, not game ticks
       if (activeRes) {
         setActiveRes(p => {
           if (!p) return null;
           const r = RESEARCH[p.id];
-          const np = p.prog + (100 / r.time) * bon.res * dt;
+          const np = p.prog + (100 / r.time) * bon.res * dtSeconds;
           if (np >= 100) { setResearch(c => [...c, p.id]); log(`${r.name} complete!`); return null; }
           return { ...p, prog: np };
         });
@@ -1392,14 +1407,14 @@ export default function HiveQueenGame() {
           const assigned = ranchAssignments[ranchId] || [];
           if (!ranch || !building || assigned.length === 0) return;
 
-          // Calculate cycle time with upgrades
+          // Calculate cycle time with upgrades (in real seconds)
           const cycleReduction = 1 - Math.min(0.5, (building.level - 1) * RANCH_UPGRADE_BONUSES.cycleReduction);
           const effectiveCycleTime = ranch.cycleTime * cycleReduction;
           const effectMult = 1 + (building.level - 1) * RANCH_UPGRADE_BONUSES.effectMultiplier;
 
           // Nurturing Aura hive ability: double ranch tick speed
           const ranchSpeedMult = isHiveAbilityActive('nurturingAura') ? 2 : 1;
-          next[ranchId] = (next[ranchId] || 0) + dt * ranchSpeedMult;
+          next[ranchId] = (next[ranchId] || 0) + dtSeconds * ranchSpeedMult;
 
           // Check if cycle completes
           if (next[ranchId] >= effectiveCycleTime) {
@@ -1738,8 +1753,9 @@ export default function HiveQueenGame() {
               <div style={{ background: 'rgba(0,0,0,0.2)', borderRadius: 8, padding: 12, marginBottom: 10 }}>
                 <div style={{ fontSize: 12, fontWeight: 'bold', marginBottom: 8, opacity: 0.9 }}>✨ Current Benefits</div>
                 <div style={{ display: 'grid', gap: 4, fontSize: 11 }}>
-                  {Object.entries(SLIME_TIERS).filter(([_, t]) => !t.unlockLevel || queen.level >= t.unlockLevel).map(([k, t]) => (
-                    <div key={k} style={{ color: '#4ade80' }}>• {t.name} Slimes unlocked</div>
+                  {/* Slime tiers are now building-unlocked, show which are available */}
+                  {unlockedTiers.map(k => (
+                    <div key={k} style={{ color: '#4ade80' }}>• {SLIME_TIERS[k].name} Slimes unlocked</div>
                   ))}
                   {Object.entries(ZONES).filter(([_, z]) => !z.unlock || queen.level >= z.unlock).map(([k, z]) => (
                     <div key={k} style={{ color: '#22d3ee' }}>• {z.name} accessible</div>
@@ -1749,11 +1765,8 @@ export default function HiveQueenGame() {
 
               {/* Next Unlock Preview */}
               {(() => {
-                // Find all unlock levels above current level
+                // Find next zone unlock level
                 const unlockLevels = new Set();
-                Object.values(SLIME_TIERS).forEach(t => {
-                  if (t.unlockLevel && t.unlockLevel > queen.level) unlockLevels.add(t.unlockLevel);
-                });
                 Object.values(ZONES).forEach(z => {
                   if (z.unlock && z.unlock > queen.level) unlockLevels.add(z.unlock);
                 });
@@ -1764,10 +1777,6 @@ export default function HiveQueenGame() {
 
                 const nextUnlockLevel = sortedLevels[0];
                 const nextUnlocks = [];
-
-                Object.entries(SLIME_TIERS).forEach(([k, t]) => {
-                  if (t.unlockLevel === nextUnlockLevel) nextUnlocks.push({ type: 'slime', name: t.name + ' Slimes', icon: '🟢' });
-                });
 
                 Object.entries(ZONES).forEach(([k, z]) => {
                   if (z.unlock === nextUnlockLevel) nextUnlocks.push({ type: 'zone', name: z.name, icon: z.icon });
