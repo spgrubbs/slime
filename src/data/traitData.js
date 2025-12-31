@@ -159,6 +159,7 @@ export const STATUS_EFFECTS = {
 
 // Personality traits - behavioral modifiers that slimes can acquire
 // Separate from mutations (combat abilities)
+// All traits now have titles for slime naming
 export const SLIME_TRAITS = {
   // Common positive traits
   brave: { name: 'Brave', icon: '🦁', desc: '+5% damage when HP below 50%', rarity: 'common', title: ' the Brave' },
@@ -169,22 +170,22 @@ export const SLIME_TRAITS = {
 
   // Uncommon positive traits
   lucky: { name: 'Lucky', icon: '🍀', desc: '+5% material drop rate', rarity: 'uncommon', title: ' the Lucky' },
-  greedy: { name: 'Greedy', icon: '💰', desc: '+5% biomass gain', rarity: 'uncommon' },
-  resilient: { name: 'Resilient', icon: '🔄', desc: 'Recover 1 HP per kill', rarity: 'uncommon' },
+  greedy: { name: 'Greedy', icon: '💰', desc: '+5% biomass gain', rarity: 'uncommon', title: ' the Greedy' },
+  resilient: { name: 'Resilient', icon: '🔄', desc: 'Recover 1 HP per kill', rarity: 'uncommon', title: ' the Resilient' },
   fierce: { name: 'Fierce', icon: '😤', desc: '+8% damage on first attack', rarity: 'uncommon', title: ' the Fierce' },
 
   // Common neutral/negative traits (add flavor)
-  lazy: { name: 'Lazy', icon: '😴', desc: '-5% damage, +10% ranch effectiveness', rarity: 'common' },
-  timid: { name: 'Timid', icon: '😰', desc: '+10% dodge, -5% damage', rarity: 'common' },
-  curious: { name: 'Curious', icon: '🔍', desc: '+10% exploration event chance', rarity: 'common' },
+  lazy: { name: 'Lazy', icon: '😴', desc: '-5% damage, +10% ranch effectiveness', rarity: 'common', title: ' the Lazy' },
+  timid: { name: 'Timid', icon: '😰', desc: '+10% dodge, -5% damage', rarity: 'common', title: ' the Timid' },
+  curious: { name: 'Curious', icon: '🔍', desc: '+10% exploration event chance', rarity: 'common', title: ' the Curious' },
 
   // Uncommon mixed traits
   reckless: { name: 'Reckless', icon: '💥', desc: '+10% damage, +5% damage taken', rarity: 'uncommon', title: ' the Reckless' },
-  glutton: { name: 'Glutton', icon: '🍖', desc: '+10% biomass gain, -3% max HP', rarity: 'uncommon' },
+  glutton: { name: 'Glutton', icon: '🍖', desc: '+10% biomass gain, -3% max HP', rarity: 'uncommon', title: ' the Glutton' },
 
   // Rare traits (from specific ranches only)
-  void: { name: 'Void', icon: '🕳️', desc: 'Cannot gain elemental affinity', rarity: 'rare', source: 'nullifier' },
-  adaptable: { name: 'Adaptable', icon: '🔀', desc: '+50% elemental affinity gain', rarity: 'rare' },
+  void: { name: 'Void', icon: '🕳️', desc: 'Cannot gain elemental affinity', rarity: 'rare', source: 'nullifier', title: ' the Void' },
+  adaptable: { name: 'Adaptable', icon: '🔀', desc: '+50% elemental affinity gain', rarity: 'rare', title: ' the Adaptable' },
 
   // Legendary traits (premium currency only)
   ancient: { name: 'Ancient', icon: '📜', desc: '+1 mutation slot', rarity: 'legendary', title: ' the Ancient' },

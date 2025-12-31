@@ -17,7 +17,7 @@ import {
 import { STAT_INFO, SLIME_TIERS } from './data/slimeData.js';
 import { MUTATION_LIBRARY, TRAIT_LIBRARY, STATUS_EFFECTS, SLIME_TRAITS } from './data/traitData.js';
 import { MONSTER_TYPES } from './data/monsterData.js';
-import { ZONES, EXPLORATION_EVENTS } from './data/zoneData.js';
+import { ZONES, EXPLORATION_EVENTS, INTERMISSION_EVENTS, INTERMISSION_DURATION } from './data/zoneData.js';
 import { BUILDINGS, RESEARCH } from './data/buildingData.js';
 import { HUMAN_TYPES, TD_WAVES, getTDScaling } from './data/towerDefenseData.js';
 import { RANCH_TYPES, RANCH_EVENTS, RANCH_UPGRADE_BONUSES, MAX_RANCH_LEVEL, RANCH_MAX_ACCUMULATION_TIME } from './data/ranchData.js';
@@ -530,9 +530,12 @@ export default function HiveQueenGame() {
     const td = SLIME_TIERS[tier];
     const bioCost = BASE_SLIME_COST + selMutations.length * 5;
     if (bio < bioCost || freeJelly < magCost) return;
-    // BALANCE: Random base stats within range, then apply tier multiplier
-    const randStat = () => Math.floor((3 + Math.random() * 4) * td.statMultiplier); // 3-6 base range
-    const baseStats = { firmness: randStat(), slipperiness: randStat(), viscosity: randStat() };
+
+    // Base stats: flat 5, scaled by tier multiplier
+    // Primal Blessing hive ability: +10% base stats
+    const spawnBoostMult = isHiveAbilityActive('spawnBoost') ? 1.10 : 1.0;
+    const baseStat = Math.floor(5 * td.statMultiplier * spawnBoostMult);
+    const baseStats = { firmness: baseStat, slipperiness: baseStat, viscosity: baseStat };
     const pass = [];
     // Apply mutation stat bonuses and passives
     selMutations.forEach(id => { const m = MUTATION_LIBRARY[id]; if (m) { baseStats[m.stat] += m.bonus; pass.push(m.passive); } });
@@ -847,8 +850,24 @@ export default function HiveQueenGame() {
 
   const [expDuration, setExpDuration] = useState('10'); // '10', '100', 'infinite'
   const [expSummaries, setExpSummaries] = useState([]); // Array of expedition summaries
-  const [expandedSections, setExpandedSections] = useState({ research: false, buildings: false }); // Collapsible sections
+  const [expandedSections, setExpandedSections] = useState({ research: false, buildings: false, queenUnlocks: false, pheromones: false }); // Collapsible sections
   const [queenSlimeModal, setQueenSlimeModal] = useState(null); // Slime ID for modal on queen screen
+  const [editingSlimeName, setEditingSlimeName] = useState(null); // { id, name, title } for editing
+
+  // Function to update a slime's name or title
+  const updateSlimeName = (slimeId, newName, newTitle) => {
+    setSlimes(prev => prev.map(s => {
+      if (s.id === slimeId) {
+        return {
+          ...s,
+          name: newName || s.name,
+          customTitle: newTitle !== undefined ? newTitle : s.customTitle
+        };
+      }
+      return s;
+    }));
+    setEditingSlimeName(null);
+  };
 
   // Helper function to calculate current stats based on biomass
   const getSlimeStats = (slime) => {
@@ -994,9 +1013,25 @@ export default function HiveQueenGame() {
 
   const build = (id) => {
     const b = BUILDINGS[id];
-    if (!b || !Object.entries(b.cost).every(([m, c]) => (mats[m] || 0) >= c)) return;
+    if (!b) return;
+
+    // Handle different cost formats
+    const hasMats = b.cost.mats;
+    const biomassCost = b.cost.biomass || 0;
+    const matCosts = hasMats ? b.cost.mats : (!b.cost.biomass ? b.cost : {});
+
+    // Check affordability
+    if (bio < biomassCost) return;
+    if (!Object.entries(matCosts).every(([m, c]) => (mats[m] || 0) >= c)) return;
     if (b.max && (builds[id] || 0) >= b.max) return;
-    setMats(p => { const n = { ...p }; Object.entries(b.cost).forEach(([m, c]) => { n[m] -= c; if (n[m] <= 0) delete n[m]; }); return n; });
+
+    // Deduct costs
+    if (biomassCost > 0) setBio(p => p - biomassCost);
+    setMats(p => {
+      const n = { ...p };
+      Object.entries(matCosts).forEach(([m, c]) => { n[m] -= c; if (n[m] <= 0) delete n[m]; });
+      return n;
+    });
     setBuilds(p => ({ ...p, [id]: (p[id] || 0) + 1 }));
     log(`Built ${b.name}!`);
   };
@@ -1122,9 +1157,54 @@ export default function HiveQueenGame() {
         const next = { ...prev };
         Object.entries(next).forEach(([zone, exp]) => {
           const zd = ZONES[zone];
-          // Only spawn new monsters if target not yet reached
-          if (!exp.monster && exp.kills < exp.targetKills && !exp.exploring) {
-            // 30% chance to trigger exploration event before spawning monster
+          const living = exp.party.filter(p => p.hp > 0);
+
+          // Handle intermission phase between battles
+          if (exp.intermission) {
+            const swiftMult = isHiveAbilityActive('swiftExpedition') ? 1.5 : 1.0;
+            exp.intermission.timer += dt * 100 * swiftMult;
+
+            // Process event effects once (boons/maluses)
+            if (!exp.intermission.processed && exp.intermission.event.type !== 'flavor') {
+              exp.intermission.processed = true;
+              const evt = exp.intermission.event;
+
+              if (evt.type === 'boon') {
+                if (evt.effect === 'heal') {
+                  living.forEach(p => { p.hp = Math.min(p.maxHp, p.hp + evt.value); });
+                } else if (evt.effect === 'biomass') {
+                  setBio(b => b + evt.value);
+                }
+              } else if (evt.type === 'malus') {
+                if (evt.effect === 'damage') {
+                  living.forEach(p => { p.hp = Math.max(1, p.hp - evt.value); });
+                } else if (evt.effect === 'poison') {
+                  living.forEach(p => {
+                    if (!(p.status || []).some(s => s.type === 'poison')) {
+                      p.status = p.status || [];
+                      p.status.push({ type: 'poison', dur: STATUS_EFFECTS.poison.dur });
+                    }
+                  });
+                }
+              }
+            }
+
+            // Check if intermission is over
+            if (exp.intermission.timer >= exp.intermission.duration) {
+              exp.intermission = null;
+              // Spawn next monster
+              const mt = zd.monsters[Math.floor(Math.random() * zd.monsters.length)];
+              const md = MONSTER_TYPES[mt];
+              exp.monster = { type: mt, hp: md.hp, maxHp: md.hp, dmg: md.dmg, status: [] };
+              bLog(zone, `A ${md.name} appears!`, '#22d3ee');
+              exp.turn = 0;
+            }
+            return; // Skip combat during intermission
+          }
+
+          // Only spawn new monsters if target not yet reached (first monster only)
+          if (!exp.monster && exp.kills < exp.targetKills && !exp.exploring && exp.kills === 0) {
+            // 30% chance to trigger exploration event before spawning first monster
             if (Math.random() < 0.3) {
               exp.exploring = true;
               const event = EXPLORATION_EVENTS[Math.floor(Math.random() * EXPLORATION_EVENTS.length)];
@@ -1176,7 +1256,9 @@ export default function HiveQueenGame() {
           }
 
           exp.timer += dt * 100;
-          if (exp.timer >= BATTLE_TICK_SPEED / speed) {
+          // Swift Expedition hive ability: 50% faster combat
+          const swiftMult = isHiveAbilityActive('swiftExpedition') ? 1.5 : 1.0;
+          if (exp.timer >= BATTLE_TICK_SPEED / speed / swiftMult) {
             exp.timer = 0;
             exp.animSlime = null; exp.slimeAnim = 'idle'; exp.monAnim = 'idle';
             
@@ -1237,6 +1319,10 @@ export default function HiveQueenGame() {
                   if (sl.pass?.includes('fireBreath') && !(mon.status || []).some(s => s.type === 'burn') && Math.random() < 0.3 + stats.viscosity * 0.02) { mon.status.push({ type: 'burn', dur: STATUS_EFFECTS.burn.dur }); bLog(zone, `${sl.name} burns ${md.name}! 🔥`, '#f97316'); }
                   if (sl.pass?.includes('poison') && !(mon.status || []).some(s => s.type === 'poison') && Math.random() < 0.35 + stats.viscosity * 0.02) { mon.status.push({ type: 'poison', dur: STATUS_EFFECTS.poison.dur }); bLog(zone, `${sl.name} poisons ${md.name}! 🧪`, '#22c55e'); }
                   exp.animSlime = p.id; exp.slimeAnim = 'attack'; exp.monAnim = 'hurt';
+                  // Shared Vigor hive ability: heal 2 HP when attacking
+                  if (isHiveAbilityActive('sharedVigor')) {
+                    p.hp = Math.min(p.maxHp, p.hp + 2);
+                  }
                   // Show element effectiveness in battle log
                   let dmgMsg = `${sl.name} ${crit ? '💥CRITS' : 'hits'} for ${Math.floor(dmg)}!`;
                   if (elementBonus && dmg > preDmg) dmgMsg += ' ⚡ Super effective!';
@@ -1329,6 +1415,25 @@ export default function HiveQueenGame() {
                 if (exp.kills >= exp.targetKills) {
                   bLog(zone, `Target reached! Auto-recalling party...`, '#4ade80');
                   setTimeout(() => stopExp(zone), 1000);
+                } else {
+                  // Start intermission before next battle
+                  let event;
+                  const roll = Math.random();
+                  if (roll < 0.75 && INTERMISSION_EVENTS[zone]) {
+                    // 75% zone-specific flavor text
+                    const zoneEvents = INTERMISSION_EVENTS[zone];
+                    event = zoneEvents[Math.floor(Math.random() * zoneEvents.length)];
+                  } else {
+                    // 25% general events (boons/maluses)
+                    event = INTERMISSION_EVENTS.general[Math.floor(Math.random() * INTERMISSION_EVENTS.general.length)];
+                  }
+                  exp.intermission = {
+                    timer: 0,
+                    duration: INTERMISSION_DURATION,
+                    event: event,
+                    processed: false
+                  };
+                  bLog(zone, event.msg, event.type === 'boon' ? '#4ade80' : event.type === 'malus' ? '#ef4444' : '#a855f7');
                 }
               }
             } else {
@@ -1673,6 +1778,88 @@ export default function HiveQueenGame() {
                 <h3 style={{ margin: 0, fontSize: 18 }}>Examine Slime</h3>
                 <button onClick={() => setQueenSlimeModal(null)} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 6, padding: '8px 16px', color: '#fff', cursor: 'pointer' }}>✕ Close</button>
               </div>
+
+              {/* Editable Name and Title */}
+              <div style={{ background: 'rgba(0,0,0,0.3)', borderRadius: 10, padding: 12, marginBottom: 15 }}>
+                {editingSlimeName?.id === sl.id ? (
+                  <div>
+                    <div style={{ marginBottom: 10 }}>
+                      <label style={{ fontSize: 11, opacity: 0.7, display: 'block', marginBottom: 4 }}>Name</label>
+                      <input
+                        type="text"
+                        value={editingSlimeName.name}
+                        onChange={(e) => setEditingSlimeName(prev => ({ ...prev, name: e.target.value }))}
+                        maxLength={20}
+                        style={{
+                          width: '100%',
+                          padding: 8,
+                          background: 'rgba(0,0,0,0.3)',
+                          border: '1px solid rgba(255,255,255,0.2)',
+                          borderRadius: 6,
+                          color: '#fff',
+                          fontSize: 14
+                        }}
+                      />
+                    </div>
+                    <div style={{ marginBottom: 10 }}>
+                      <label style={{ fontSize: 11, opacity: 0.7, display: 'block', marginBottom: 4 }}>Title (leave blank for trait title)</label>
+                      <input
+                        type="text"
+                        value={editingSlimeName.title}
+                        onChange={(e) => setEditingSlimeName(prev => ({ ...prev, title: e.target.value }))}
+                        placeholder={sl.traits?.[0] ? SLIME_TRAITS[sl.traits[0]]?.title || '' : ''}
+                        maxLength={25}
+                        style={{
+                          width: '100%',
+                          padding: 8,
+                          background: 'rgba(0,0,0,0.3)',
+                          border: '1px solid rgba(255,255,255,0.2)',
+                          borderRadius: 6,
+                          color: '#fff',
+                          fontSize: 14
+                        }}
+                      />
+                    </div>
+                    <div style={{ display: 'flex', gap: 10 }}>
+                      <button
+                        onClick={() => updateSlimeName(sl.id, editingSlimeName.name, editingSlimeName.title)}
+                        style={{ flex: 1, padding: 8, background: 'linear-gradient(135deg, #22c55e, #16a34a)', border: 'none', borderRadius: 6, color: '#fff', fontWeight: 'bold', cursor: 'pointer', fontSize: 12 }}
+                      >
+                        Save
+                      </button>
+                      <button
+                        onClick={() => setEditingSlimeName(null)}
+                        style={{ flex: 1, padding: 8, background: 'rgba(100,100,100,0.5)', border: 'none', borderRadius: 6, color: '#fff', cursor: 'pointer', fontSize: 12 }}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <div style={{ fontSize: 16, fontWeight: 'bold' }}>
+                        {sl.name}
+                        <span style={{ fontSize: 12, opacity: 0.7, marginLeft: 4 }}>
+                          {sl.customTitle || (sl.traits?.[0] && SLIME_TRAITS[sl.traits[0]]?.title) || ''}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: 11, opacity: 0.5 }}>Click edit to customize name & title</div>
+                    </div>
+                    <button
+                      onClick={() => setEditingSlimeName({
+                        id: sl.id,
+                        name: sl.name,
+                        title: sl.customTitle || ''
+                      })}
+                      style={{ padding: '6px 12px', background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 6, color: '#fff', cursor: 'pointer', fontSize: 11 }}
+                    >
+                      ✏️ Edit
+                    </button>
+                  </div>
+                )}
+              </div>
+
               <SlimeDetail slime={sl} expState={expS} />
               {!onExp && (
                 <button
@@ -1749,71 +1936,115 @@ export default function HiveQueenGame() {
                 </div>
               </div>
 
-              {/* Current Effects */}
-              <div style={{ background: 'rgba(0,0,0,0.2)', borderRadius: 8, padding: 12, marginBottom: 10 }}>
-                <div style={{ fontSize: 12, fontWeight: 'bold', marginBottom: 8, opacity: 0.9 }}>✨ Current Benefits</div>
-                <div style={{ display: 'grid', gap: 4, fontSize: 11 }}>
-                  {/* Slime tiers are now building-unlocked, show which are available */}
-                  {unlockedTiers.map(k => (
-                    <div key={k} style={{ color: '#4ade80' }}>• {SLIME_TIERS[k].name} Slimes unlocked</div>
-                  ))}
-                  {Object.entries(ZONES).filter(([_, z]) => !z.unlock || queen.level >= z.unlock).map(([k, z]) => (
-                    <div key={k} style={{ color: '#22d3ee' }}>• {z.name} accessible</div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Next Unlock Preview */}
-              {(() => {
-                // Find next zone unlock level
-                const unlockLevels = new Set();
-                Object.values(ZONES).forEach(z => {
-                  if (z.unlock && z.unlock > queen.level) unlockLevels.add(z.unlock);
-                });
-
-                // Find the closest unlock level
-                const sortedLevels = [...unlockLevels].sort((a, b) => a - b);
-                if (sortedLevels.length === 0) return null;
-
-                const nextUnlockLevel = sortedLevels[0];
-                const nextUnlocks = [];
-
-                Object.entries(ZONES).forEach(([k, z]) => {
-                  if (z.unlock === nextUnlockLevel) nextUnlocks.push({ type: 'zone', name: z.name, icon: z.icon });
-                });
-
-                if (nextUnlocks.length > 0) {
-                  return (
-                    <div style={{ background: 'rgba(236,72,153,0.2)', borderRadius: 8, padding: 12 }}>
-                      <div style={{ fontSize: 12, fontWeight: 'bold', marginBottom: 8, opacity: 0.9 }}>🔮 Next Unlock (Level {nextUnlockLevel})</div>
-                      <div style={{ display: 'grid', gap: 4, fontSize: 11 }}>
-                        {nextUnlocks.map((u, i) => (
-                          <div key={i} style={{ color: '#f472b6' }}>• {u.icon} {u.name}</div>
-                        ))}
-                      </div>
+              {/* Collapsible Unlocks Section */}
+              <div style={{ background: 'rgba(0,0,0,0.2)', borderRadius: 8, overflow: 'hidden' }}>
+                <button
+                  onClick={() => setExpandedSections(s => ({ ...s, queenUnlocks: !s.queenUnlocks }))}
+                  style={{
+                    width: '100%',
+                    padding: 10,
+                    background: 'transparent',
+                    border: 'none',
+                    color: '#fff',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    fontSize: 12,
+                    fontWeight: 'bold',
+                    opacity: 0.9
+                  }}
+                >
+                  <span>✨ Current Benefits & Unlocks</span>
+                  <span>{expandedSections.queenUnlocks ? '▼' : '▶'}</span>
+                </button>
+                {expandedSections.queenUnlocks && (
+                  <div style={{ padding: '0 12px 12px' }}>
+                    <div style={{ display: 'grid', gap: 4, fontSize: 11, marginBottom: 10 }}>
+                      {/* Slime tiers are now building-unlocked, show which are available */}
+                      {unlockedTiers.map(k => (
+                        <div key={k} style={{ color: '#4ade80' }}>• {SLIME_TIERS[k].name} Slimes unlocked</div>
+                      ))}
+                      {Object.entries(ZONES).filter(([_, z]) => !z.unlock || queen.level >= z.unlock).map(([k, z]) => (
+                        <div key={k} style={{ color: '#22d3ee' }}>• {z.name} accessible</div>
+                      ))}
                     </div>
-                  );
-                }
-                return null;
-              })()}
+
+                    {/* Next Unlock Preview */}
+                    {(() => {
+                      // Find next zone unlock level
+                      const unlockLevels = new Set();
+                      Object.values(ZONES).forEach(z => {
+                        if (z.unlock && z.unlock > queen.level) unlockLevels.add(z.unlock);
+                      });
+
+                      // Find the closest unlock level
+                      const sortedLevels = [...unlockLevels].sort((a, b) => a - b);
+                      if (sortedLevels.length === 0) return null;
+
+                      const nextUnlockLevel = sortedLevels[0];
+                      const nextUnlocks = [];
+
+                      Object.entries(ZONES).forEach(([k, z]) => {
+                        if (z.unlock === nextUnlockLevel) nextUnlocks.push({ type: 'zone', name: z.name, icon: z.icon });
+                      });
+
+                      if (nextUnlocks.length > 0) {
+                        return (
+                          <div style={{ background: 'rgba(236,72,153,0.2)', borderRadius: 8, padding: 12 }}>
+                            <div style={{ fontSize: 12, fontWeight: 'bold', marginBottom: 8, opacity: 0.9 }}>🔮 Next Unlock (Level {nextUnlockLevel})</div>
+                            <div style={{ display: 'grid', gap: 4, fontSize: 11 }}>
+                              {nextUnlocks.map((u, i) => (
+                                <div key={i} style={{ color: '#f472b6' }}>• {u.icon} {u.name}</div>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      }
+                      return null;
+                    })()}
+                  </div>
+                )}
+              </div>
             </div>
 
-            {/* Hive Pheromones & Abilities */}
-            <div style={{ background: 'rgba(168,85,247,0.1)', borderRadius: 12, marginBottom: 20, padding: 20 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 }}>
-                <div>
-                  <div style={{ fontSize: 16, fontWeight: 'bold' }}>🧪 Hive Pheromones</div>
-                  <div style={{ fontSize: 12, opacity: 0.7 }}>Generated by your slime population</div>
+            {/* Collapsible Hive Pheromones & Abilities */}
+            <div style={{ background: 'rgba(168,85,247,0.1)', borderRadius: 12, marginBottom: 20, overflow: 'hidden' }}>
+              <button
+                onClick={() => setExpandedSections(s => ({ ...s, pheromones: !s.pheromones }))}
+                style={{
+                  width: '100%',
+                  padding: 15,
+                  background: 'transparent',
+                  border: 'none',
+                  color: '#fff',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <span style={{ fontSize: 16, fontWeight: 'bold' }}>🧪 Hive Pheromones</span>
+                  <span style={{ background: 'rgba(0,0,0,0.3)', padding: '4px 10px', borderRadius: 6, fontSize: 14, fontWeight: 'bold' }}>
+                    {pheromones}
+                  </span>
+                  {Object.keys(activeHiveAbilities).filter(id => activeHiveAbilities[id] > Date.now()).length > 0 && (
+                    <span style={{ fontSize: 10, padding: '2px 6px', background: 'rgba(74,222,128,0.3)', borderRadius: 4, color: '#4ade80' }}>
+                      {Object.keys(activeHiveAbilities).filter(id => activeHiveAbilities[id] > Date.now()).length} active
+                    </span>
+                  )}
                 </div>
-                <div style={{ background: 'rgba(0,0,0,0.3)', padding: '8px 16px', borderRadius: 8, fontSize: 18, fontWeight: 'bold' }}>
-                  🧪 {pheromones}
-                </div>
-              </div>
-              <div style={{ fontSize: 11, opacity: 0.6, marginBottom: 15 }}>
-                +{slimes.length} pheromones/hour ({slimes.length} slimes × 1/hour)
-              </div>
+                <span>{expandedSections.pheromones ? '▼' : '▶'}</span>
+              </button>
 
-              {/* Active Abilities */}
+              {expandedSections.pheromones && (
+                <div style={{ padding: '0 20px 20px' }}>
+                  <div style={{ fontSize: 11, opacity: 0.6, marginBottom: 15 }}>
+                    +{slimes.length} pheromones/hour ({slimes.length} slimes × 1/hour)
+                  </div>
+
+                  {/* Active Abilities */}
               {Object.keys(activeHiveAbilities).length > 0 && (
                 <div style={{ background: 'rgba(74,222,128,0.1)', borderRadius: 8, padding: 12, marginBottom: 15 }}>
                   <div style={{ fontSize: 12, fontWeight: 'bold', marginBottom: 8, color: '#4ade80' }}>✨ Active Abilities</div>
@@ -1877,7 +2108,9 @@ export default function HiveQueenGame() {
                     </div>
                   );
                 })}
-              </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Collapsible Buildings Section */}
@@ -1913,9 +2146,19 @@ export default function HiveQueenGame() {
                   )}
                   <div style={{ display: 'grid', gap: 10 }}>
                     {Object.entries(BUILDINGS).map(([k, b]) => {
-                      const isTimeBased = typeof b.cost === 'number';
+                      // Handle different cost formats:
+                      // - number: research item (biomass only, has time)
+                      // - { biomass, mats }: building with biomass + materials
+                      // - { mat: count, ... }: legacy material-only format
+                      const isResearch = typeof b.cost === 'number';
+                      const hasMats = !isResearch && b.cost.mats;
+                      const biomassCost = isResearch ? b.cost : (b.cost.biomass || 0);
+                      const matCosts = hasMats ? b.cost.mats : (!isResearch && !b.cost.biomass ? b.cost : {});
+
                       const done = research.includes(k);
-                      const can = isTimeBased ? bio >= b.cost : Object.entries(b.cost).every(([m, c]) => (mats[m] || 0) >= c);
+                      const canAffordBio = bio >= biomassCost;
+                      const canAffordMats = Object.entries(matCosts).every(([m, c]) => (mats[m] || 0) >= c);
+                      const can = canAffordBio && canAffordMats;
                       const max = b.max && (builds[k] || 0) >= b.max;
                       const isBuilding = activeRes?.id === k;
 
@@ -1925,24 +2168,27 @@ export default function HiveQueenGame() {
                           <div style={{ flex: 1 }}>
                             <div style={{ fontWeight: 'bold' }}>{b.name}</div>
                             <div style={{ fontSize: 12, opacity: 0.7 }}>{b.desc}</div>
-                            {isTimeBased && b.time && (
+                            {isResearch && b.time && (
                               <div style={{ fontSize: 11, opacity: 0.5, marginTop: 4 }}>Build time: {Math.floor(b.time / 60)}:{(b.time % 60).toString().padStart(2, '0')}</div>
                             )}
                           </div>
-                          {!isTimeBased && <span style={{ marginLeft: 'auto', color: '#4ade80', fontSize: 18 }}>x{builds[k] || 0}</span>}
+                          {!isResearch && <span style={{ marginLeft: 'auto', color: '#4ade80', fontSize: 18 }}>x{builds[k] || 0}</span>}
                         </div>
 
-                        {isTimeBased ? (
+                        {isResearch ? (
                           <div style={{ marginTop: 8 }}>
-                            <div style={{ fontSize: 11, padding: '3px 8px', background: 'rgba(0,0,0,0.3)', borderRadius: 4, color: bio >= b.cost ? '#4ade80' : '#ef4444', display: 'inline-block', marginBottom: 8 }}>
-                              Cost: {b.cost}🧬
+                            <div style={{ fontSize: 11, padding: '3px 8px', background: 'rgba(0,0,0,0.3)', borderRadius: 4, color: canAffordBio ? '#4ade80' : '#ef4444', display: 'inline-block', marginBottom: 8 }}>
+                              Cost: {biomassCost}🧬
                             </div>
-                            {!done && !activeRes && <button onClick={() => startRes(k)} disabled={bio < b.cost || max} style={{ padding: '8px 16px', background: can && !max ? '#4ade80' : 'rgba(100,100,100,0.5)', border: 'none', borderRadius: 6, color: '#1a1a2e', fontWeight: 'bold', cursor: can && !max ? 'pointer' : 'not-allowed', display: 'block' }}>{max ? 'Built' : `Build (${b.cost}🧬)`}</button>}
+                            {!done && !activeRes && <button onClick={() => startRes(k)} disabled={!canAffordBio || max} style={{ padding: '8px 16px', background: canAffordBio && !max ? '#4ade80' : 'rgba(100,100,100,0.5)', border: 'none', borderRadius: 6, color: '#1a1a2e', fontWeight: 'bold', cursor: canAffordBio && !max ? 'pointer' : 'not-allowed', display: 'block' }}>{max ? 'Built' : `Build (${biomassCost}🧬)`}</button>}
                             {done && <span style={{ color: '#4ade80' }}>✓ Built</span>}
                           </div>
                         ) : (
                           <div>
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>{Object.entries(b.cost).map(([m, c]) => <span key={m} style={{ fontSize: 11, padding: '3px 8px', background: 'rgba(0,0,0,0.3)', borderRadius: 4, color: (mats[m] || 0) >= c ? '#4ade80' : '#ef4444' }}>{m}: {c}</span>)}</div>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+                              {biomassCost > 0 && <span style={{ fontSize: 11, padding: '3px 8px', background: 'rgba(0,0,0,0.3)', borderRadius: 4, color: canAffordBio ? '#4ade80' : '#ef4444' }}>🧬 {biomassCost}</span>}
+                              {Object.entries(matCosts).map(([m, c]) => <span key={m} style={{ fontSize: 11, padding: '3px 8px', background: 'rgba(0,0,0,0.3)', borderRadius: 4, color: (mats[m] || 0) >= c ? '#4ade80' : '#ef4444' }}>{m}: {c}</span>)}
+                            </div>
                             <button onClick={() => build(k)} disabled={!can || max} style={{ padding: '8px 16px', background: can && !max ? '#4ade80' : 'rgba(100,100,100,0.5)', border: 'none', borderRadius: 6, color: '#1a1a2e', fontWeight: 'bold', cursor: can && !max ? 'pointer' : 'not-allowed' }}>{max ? 'Max' : 'Build'}</button>
                           </div>
                         )}
