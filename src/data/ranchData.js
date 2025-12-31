@@ -1,6 +1,8 @@
 // Ranch System - Passive slime progression buildings
+// BALANCE: Designed for idle gameplay with 3-4 visits per day
 // Slimes assigned to ranches accumulate rewards over time (max 24h)
 // Rewards are applied when slimes are removed from the ranch
+// Cycle times are in REAL SECONDS (not game ticks)
 
 export const RANCH_MAX_ACCUMULATION_TIME = 24 * 60 * 60; // 24 hours in seconds
 
@@ -11,12 +13,12 @@ export const RANCH_TYPES = {
     icon: '🥣',
     desc: 'A nutrient-rich pool where slimes passively absorb biomass.',
     effect: 'biomass',
-    effectValue: 1,
-    cycleTime: 30,
+    effectValue: 2,                     // Biomass gained per cycle
+    cycleTime: 30 * 60,                 // 30 minutes (in real seconds)
     capacity: 3,
-    unlock: { type: 'level', value: 3 }, // Only feedingPool uses level unlock
-    cost: { biomass: 50 },
-    upgradeCost: { biomass: 100, multiplier: 2 },
+    unlock: { type: 'level', value: 3 },
+    cost: { biomass: 100 },             // Increased from 50
+    upgradeCost: { biomass: 250, multiplier: 2 },
     color: '#22c55e',
   },
   fireGrove: {
@@ -26,12 +28,12 @@ export const RANCH_TYPES = {
     desc: 'A volcanic garden where slimes attune to fire energy.',
     effect: 'element',
     element: 'fire',
-    effectValue: 0.5,
-    cycleTime: 45,
+    effectValue: 1,                     // Element affinity gained per cycle
+    cycleTime: 60 * 60,                 // 1 hour
     capacity: 2,
-    unlock: { type: 'materials' }, // Unlocks when you have the materials
-    cost: { biomass: 150, mats: { 'Dragon Scale': 2, 'Phoenix Ash': 1 } },
-    upgradeCost: { biomass: 300, multiplier: 2 },
+    unlock: { type: 'materials' },
+    cost: { biomass: 500, mats: { 'Phoenix Ash': 2, 'Ember Core': 1 } },
+    upgradeCost: { biomass: 800, multiplier: 2 },
     color: '#ef4444',
   },
   tidalPool: {
@@ -41,12 +43,12 @@ export const RANCH_TYPES = {
     desc: 'A mystical pool connected to ocean currents. Attunes slimes to water.',
     effect: 'element',
     element: 'water',
-    effectValue: 0.5,
-    cycleTime: 45,
+    effectValue: 1,
+    cycleTime: 60 * 60,                 // 1 hour
     capacity: 2,
     unlock: { type: 'materials' },
-    cost: { biomass: 150, mats: { 'Turtle Shell': 3, 'Ancient Stone': 2 } },
-    upgradeCost: { biomass: 300, multiplier: 2 },
+    cost: { biomass: 500, mats: { 'Turtle Shell': 3, 'Ancient Stone': 2 } },
+    upgradeCost: { biomass: 800, multiplier: 2 },
     color: '#3b82f6',
   },
   earthenDen: {
@@ -56,12 +58,12 @@ export const RANCH_TYPES = {
     desc: 'A deep cavern filled with mineral-rich clay. Attunes slimes to earth.',
     effect: 'element',
     element: 'earth',
-    effectValue: 0.5,
-    cycleTime: 45,
+    effectValue: 1,
+    cycleTime: 60 * 60,                 // 1 hour
     capacity: 2,
     unlock: { type: 'materials' },
-    cost: { biomass: 150, mats: { 'Crystal Shard': 2, 'Golem Core': 1 } },
-    upgradeCost: { biomass: 300, multiplier: 2 },
+    cost: { biomass: 500, mats: { 'Crystal Shard': 2, 'Golem Core': 1 } },
+    upgradeCost: { biomass: 800, multiplier: 2 },
     color: '#a16207',
   },
   verdantNest: {
@@ -71,26 +73,26 @@ export const RANCH_TYPES = {
     desc: 'A lush garden bursting with life energy. Attunes slimes to nature.',
     effect: 'element',
     element: 'nature',
-    effectValue: 0.5,
-    cycleTime: 45,
+    effectValue: 1,
+    cycleTime: 60 * 60,                 // 1 hour
     capacity: 2,
     unlock: { type: 'materials' },
-    cost: { biomass: 150, mats: { 'Wolf Pelt': 3, 'Snake Scale': 2 } },
-    upgradeCost: { biomass: 300, multiplier: 2 },
+    cost: { biomass: 500, mats: { 'Wolf Pelt': 5, 'Snake Scale': 3 } },
+    upgradeCost: { biomass: 800, multiplier: 2 },
     color: '#16a34a',
   },
   trainingPit: {
     id: 'trainingPit',
     name: 'Training Pit',
     icon: '⚔️',
-    desc: 'An arena where slimes spar to improve their base stats.',
+    desc: 'An arena where slimes spar to add bonus stats.',
     effect: 'stats',
-    effectValue: 0.2,
-    cycleTime: 60,
+    effectValue: 0.5,                   // Base stat point bonus per cycle
+    cycleTime: 2 * 60 * 60,             // 2 hours
     capacity: 4,
     unlock: { type: 'materials' },
-    cost: { biomass: 300, mats: { 'Bone Dust': 5, 'Ogre Hide': 2 } },
-    upgradeCost: { biomass: 500, multiplier: 2 },
+    cost: { biomass: 1000, mats: { 'Bone Dust': 8, 'Ogre Hide': 3 } },
+    upgradeCost: { biomass: 1500, multiplier: 2 },
     color: '#dc2626',
   },
   nullifier: {
@@ -101,7 +103,7 @@ export const RANCH_TYPES = {
     effect: 'trait',
     grantsTrait: 'void',
     effectValue: 1,
-    cycleTime: 120,
+    cycleTime: 4 * 60 * 60,             // 4 hours
     capacity: 1,
     unlock: { type: 'prisms', value: 50 },
     cost: { prisms: 25 },
@@ -116,8 +118,8 @@ export const RANCH_TYPES = {
     effect: 'trait',
     grantsTrait: null,
     traitPool: ['lucky', 'resilient', 'adaptable'],
-    effectValue: 0.05,
-    cycleTime: 180,
+    effectValue: 0.08,                  // 8% chance per cycle
+    cycleTime: 6 * 60 * 60,             // 6 hours
     capacity: 2,
     unlock: { type: 'prisms', value: 100 },
     cost: { prisms: 50 },
@@ -127,13 +129,14 @@ export const RANCH_TYPES = {
 };
 
 // Random events that can occur during ranch cycles
+// Weight determines relative frequency (higher = more common)
 export const RANCH_EVENTS = [
   {
     id: 'bountifulHarvest',
     msg: 'A bountiful harvest! Extra biomass gained.',
     type: 'bonus',
     effect: 'biomass',
-    value: 3,
+    value: 5,                           // Extra biomass
     weight: 10,
     ranchTypes: ['feedingPool'],
   },
@@ -142,7 +145,7 @@ export const RANCH_EVENTS = [
     msg: 'An elemental surge! Rapid affinity gain.',
     type: 'bonus',
     effect: 'elementBoost',
-    value: 2,
+    value: 2,                           // Double element gain this cycle
     weight: 8,
     ranchTypes: ['fireGrove', 'tidalPool', 'earthenDen', 'verdantNest'],
   },
@@ -151,7 +154,7 @@ export const RANCH_EVENTS = [
     msg: 'A friendly rivalry! Enhanced training.',
     type: 'bonus',
     effect: 'statsBoost',
-    value: 1.5,
+    value: 1.5,                         // 50% more stats
     weight: 8,
     ranchTypes: ['trainingPit'],
   },
@@ -190,21 +193,21 @@ export const RANCH_EVENTS = [
     msg: 'A disturbance disrupted the session.',
     type: 'penalty',
     effect: 'reducedGains',
-    value: 0.5,
+    value: 0.5,                         // 50% reduced gains
     weight: 3,
     ranchTypes: null,
   },
 ];
 
 export const RANCH_UPGRADE_BONUSES = {
-  capacity: 1,
-  effectMultiplier: 0.25,
-  cycleReduction: 0.1,
+  capacity: 1,                          // +1 capacity per level
+  effectMultiplier: 0.20,               // +20% effect per level
+  cycleReduction: 0.10,                 // -10% cycle time per level (max 50%)
 };
 
 export const MAX_RANCH_LEVEL = 5;
 
-// Prisms shop packages
+// Prisms shop packages (cosmetic - not in actual game logic)
 export const PRISM_PACKAGES = [
   { id: 'starter', name: 'Starter Pack', prisms: 50, price: '$0.99', bonus: null },
   { id: 'value', name: 'Value Pack', prisms: 150, price: '$2.99', bonus: '+50 bonus' },
