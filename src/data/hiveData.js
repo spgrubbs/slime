@@ -1,11 +1,11 @@
 // Hive Abilities - Activated with Pheromones
 export const HIVE_ABILITIES = {
-  hiveSense: {
-    name: 'Hive Sense',
-    icon: '👁️',
-    desc: 'See all monster types in zones for 1 hour',
-    cost: 10,
-    duration: 3600000, // 1 hour
+  spawnBoost: {
+    name: 'Primal Blessing',
+    icon: '🌟',
+    desc: '+10% base stats for newly spawned slimes',
+    cost: 15,
+    duration: 7200000, // 2 hours
   },
   nurturingAura: {
     name: 'Nurturing Aura',
@@ -14,10 +14,17 @@ export const HIVE_ABILITIES = {
     cost: 25,
     duration: 14400000, // 4 hours
   },
+  swiftExpedition: {
+    name: 'Swift Expedition',
+    icon: '🏃',
+    desc: 'Expeditions move 50% faster (combat and travel)',
+    cost: 35,
+    duration: 7200000, // 2 hours
+  },
   sharedVigor: {
     name: 'Shared Vigor',
     icon: '❤️‍🩹',
-    desc: 'Expedition slimes regenerate 1 HP per minute',
+    desc: 'Slimes heal 2 HP each time they attack in expeditions',
     cost: 50,
     duration: 7200000, // 2 hours
   },
