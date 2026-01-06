@@ -1,5 +1,5 @@
 import React, { useRef, useEffect } from 'react';
-import { ZONES } from '../data/zoneData.js';
+import { ZONES, INTERMISSION_DURATION } from '../data/zoneData.js';
 import { BATTLE_TICK_SPEED } from '../data/gameConstants.js';
 import SlimeSprite from './SlimeSprite.jsx';
 import MonsterSprite from './MonsterSprite.jsx';
@@ -19,6 +19,9 @@ const BattleArena = ({ exp, slimes, zone, logs }) => {
       </div>
     );
   }
+
+  const isIntermission = exp.intermission && !exp.monster;
+  const intermissionProgress = isIntermission ? (exp.intermission.timer / exp.intermission.duration) * 100 : 0;
 
   return (
     <div style={{ background: `linear-gradient(180deg, ${z.bg} 0%, ${z.bg}dd 100%)`, borderRadius: 10, overflow: 'hidden', border: '2px solid rgba(255,255,255,0.2)' }}>
@@ -43,14 +46,45 @@ const BattleArena = ({ exp, slimes, zone, logs }) => {
           })}
         </div>
         {exp.monster && <div style={{ fontSize: 28, color: '#ef4444' }}>⚔️</div>}
+        {isIntermission && <div style={{ fontSize: 28 }}>🚶</div>}
         <div>
           {exp.monster ? (
             <MonsterSprite monster={exp.monster.type} hp={exp.monster.hp} maxHp={exp.monster.maxHp} anim={exp.monAnim || 'idle'} status={exp.monster.status || []} />
+          ) : isIntermission ? (
+            <div style={{ textAlign: 'center', minWidth: 80 }}>
+              <div style={{ fontSize: 24, marginBottom: 4 }}>
+                {exp.intermission.event.type === 'boon' ? '✨' : exp.intermission.event.type === 'malus' ? '⚠️' : '👣'}
+              </div>
+              <div style={{ fontSize: 10, opacity: 0.8 }}>Traveling...</div>
+            </div>
           ) : (
             <div style={{ fontSize: 14, opacity: 0.5 }}>🔍 Searching...</div>
           )}
         </div>
       </div>
+
+      {/* Intermission progress bar */}
+      {isIntermission && (
+        <div style={{ padding: '0 12px 8px', background: 'rgba(0,0,0,0.3)' }}>
+          <div style={{ fontSize: 10, opacity: 0.8, marginBottom: 4, color: exp.intermission.event.type === 'boon' ? '#4ade80' : exp.intermission.event.type === 'malus' ? '#ef4444' : '#a855f7' }}>
+            {exp.intermission.event.msg}
+          </div>
+          <div style={{ height: 6, background: 'rgba(0,0,0,0.5)', borderRadius: 3, overflow: 'hidden' }}>
+            <div
+              style={{
+                width: `${intermissionProgress}%`,
+                height: '100%',
+                background: exp.intermission.event.type === 'boon' ? 'linear-gradient(90deg, #22c55e, #4ade80)' :
+                           exp.intermission.event.type === 'malus' ? 'linear-gradient(90deg, #ef4444, #f87171)' :
+                           'linear-gradient(90deg, #a855f7, #c084fc)',
+                transition: 'width 0.1s linear'
+              }}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Battle progress bar */}
       {exp.monster && (
         <div style={{ padding: '0 12px 8px', background: 'rgba(0,0,0,0.3)' }}>
           <div style={{ fontSize: 10, opacity: 0.6, marginBottom: 4 }}>Next action</div>
