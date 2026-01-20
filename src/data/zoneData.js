@@ -1,80 +1,81 @@
 // Zone definitions - exploration areas
-// BALANCE: Each zone has exactly 2 exclusive monsters of similar difficulty
+// BALANCE: Each zone has 5 monsters (including 1 rare)
 // Zones unlock progressively via queen level
 // element: The dominant element of the zone (affects slime element gain)
 // elementGainRate: How fast slimes gain element affinity per kill (0 = neutral zone)
+// Elemental Progression: Nature → Earth → Water → Fire (each beats the next)
 
 export const ZONES = {
   forest: {
-    name: 'Dark Forest',
+    name: 'Verdant Forest',
     icon: '🌲',
     tier: 1,
-    monsters: ['wolf', 'bat'],           // Tier 1 monsters only
+    monsters: ['youngWolf', 'venusSlimetrap', 'pebblet', 'vineSpider', 'lifeFairy'],
     unlocked: true,
     bg: '#1a3d1a',
-    desc: 'Shadowy woodland with common creatures. Good for training new slimes.',
+    desc: 'Lush woodland teeming with nature spirits. Perfect for training new slimes.',
     element: 'nature',
-    elementGainRate: 0.3,                // Slow element gain
+    elementGainRate: 0.3,
     recommendedStats: 4,
   },
   swamp: {
-    name: 'Poison Swamp',
+    name: 'Murky Swamp',
     icon: '🌿',
     tier: 2,
-    monsters: ['snake', 'goblin'],       // Tier 2 monsters only
-    unlock: 5,                           // Requires queen level 5
+    monsters: ['serratedCarp', 'antSeaLion', 'swampStrider', 'wilOWisp', 'theSnail'],
+    unlock: 5,
     bg: '#2d3a1a',
-    desc: 'Toxic wetlands with cunning creatures. Beware the poison!',
-    element: 'water',                    // Changed from nature for variety
+    desc: 'Toxic wetlands hiding dangerous creatures. Beware the waters!',
+    element: 'water',
     elementGainRate: 0.4,
     recommendedStats: 6,
   },
   caves: {
-    name: 'Crystal Caves',
-    icon: '🕳️',
+    name: 'Crystal Grotto',
+    icon: '💎',
     tier: 3,
-    monsters: ['skeleton', 'turtle'],    // Tier 3 monsters only
-    unlock: 10,                          // Increased from 3
+    monsters: ['vampireBat', 'rockWorm', 'coalSprite', 'stalagMite', 'sapphireNewt'],
+    unlock: 10,
     bg: '#1a2d4a',
-    desc: 'Glittering caverns with armored foes. Requires stronger slimes.',
+    desc: 'Glittering caverns with crystalline foes. Earth magic runs strong.',
     element: 'earth',
     elementGainRate: 0.5,
     recommendedStats: 8,
   },
   ruins: {
-    name: 'Shadow Ruins',
-    icon: '🏛️',
+    name: 'Cinderspire',
+    icon: '🔥',
     tier: 4,
-    monsters: ['wisp', 'shade'],         // Tier 4 monsters only
-    unlock: 18,                          // Increased from 10
-    bg: '#2a1a3a',
-    desc: 'Haunted ancient structures. Ethereal enemies deal heavy damage.',
-    element: null,                       // Neutral zone
-    elementGainRate: 0,
+    monsters: ['embermander', 'animatedAlloy', 'magmaOoze', 'burntSpirit', 'wyrm'],
+    unlock: 18,
+    bg: '#3a1a1a',
+    desc: 'Volcanic fortress of flame. Fire elementals rule these scorched halls.',
+    element: 'fire',
+    elementGainRate: 0.6,
     recommendedStats: 10,
   },
   peaks: {
-    name: 'Ogre Peaks',
+    name: 'Stormspire Summit',
     icon: '⛰️',
     tier: 5,
-    monsters: ['golem', 'ogre'],         // Tier 5 monsters only
-    unlock: 28,                          // Increased from 15
-    bg: '#3a2a1a',
-    desc: 'Mountains ruled by giants. Only the strongest survive.',
-    element: 'earth',
+    monsters: ['thunderHawk', 'boulderTroll', 'stormElemental', 'frostGiant', 'thunderbird'],
+    unlock: 28,
+    bg: '#2a2a3a',
+    desc: 'Lightning-scarred peaks where storms never cease. Only the strongest survive.',
+    element: 'water',
     elementGainRate: 0.7,
     recommendedStats: 14,
   },
   volcano: {
-    name: 'Dragon Volcano',
-    icon: '🌋',
+    name: 'Void Abyss',
+    icon: '🕳️',
     tier: 6,
-    monsters: ['phoenix', 'dragon'],     // Tier 6 monsters only
-    unlock: 40,                          // Increased from 25
-    bg: '#4a1a1a',
-    desc: 'Blazing hellscape of fire. The ultimate challenge.',
-    element: 'fire',
-    elementGainRate: 1.0,
+    monsters: ['voidTendril', 'abyssalWatcher', 'nullConstruct', 'realityShard', 'hollowOne'],
+    unlock: 40,
+    bg: '#0a0a1a',
+    desc: 'A tear in reality where ancient horrors lurk. Elements mean nothing here.',
+    element: null,
+    elementGainRate: 0,
     recommendedStats: 18,
   },
 };
@@ -162,5 +163,7 @@ export const INTERMISSION_EVENTS = {
   ],
 };
 
-// Intermission duration in milliseconds (3 seconds)
-export const INTERMISSION_DURATION = 3000;
+// Intermission duration in timer units (matches battle tick system)
+// At 1x speed: 4500 units = 45 ticks = 4.5 seconds
+// This is 3x the BATTLE_TICK_SPEED (1500) for a clear pause
+export const INTERMISSION_DURATION = 4500;

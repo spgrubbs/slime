@@ -1,6 +1,15 @@
 // Human invader types for tower defense
 export const HUMAN_TYPES = {
   warrior: { name: 'Human Warrior', icon: '⚔️', hp: 50, speed: 0.8, biomassReward: 20, mats: ['Human Bone', 'Iron Sword'] },
+  boss: {
+    name: 'Human Champion',
+    icon: '🛡️',
+    hp: 200,
+    speed: 0.5, // Slower but tankier
+    biomassReward: 100,
+    mats: ['Human Bone', 'Iron Sword', 'Champion Badge'],
+    isBoss: true,
+  },
 };
 
 // Base tower defense wave definitions (scaled by queen level)

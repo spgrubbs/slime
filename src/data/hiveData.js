@@ -42,6 +42,14 @@ export const HIVE_ABILITIES = {
     cost: 75,
     duration: 14400000, // 4 hours
   },
+  decoy: {
+    name: 'Slime Decoy',
+    icon: '🎭',
+    desc: 'Prevents the first raider from reaching the hive in Tower Defense (one-time save)',
+    cost: 40,
+    duration: 86400000, // 24 hours (or until used)
+    oneTimeUse: true, // Consumed when triggered
+  },
 };
 
 // Prism Shop Items - Purchased with Prisms (Prismatic Cores)

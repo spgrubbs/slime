@@ -1,181 +1,451 @@
 // Monster type definitions
-// BALANCE: Monsters are zone-exclusive with similar difficulty per zone
-// Each zone has 2 monsters of comparable stats
+// BALANCE: Monsters are zone-exclusive with ~5 per zone (including 1 rare)
 // Elements: fire, water, nature, earth, or null (neutral)
+// Elemental progression: Nature → Earth → Water → Fire (advantage chain)
 
 export const MONSTER_TYPES = {
-  // === ZONE 1: Dark Forest (Beginner) ===
-  // Weak monsters - basic slimes should struggle but survive with attention
-  wolf: {
-    name: 'Wolf',
+  // === ZONE 1: Verdant Forest (Beginner) ===
+  // Nature-focused starting zone
+  youngWolf: {
+    name: 'Young Wolf',
     icon: '🐺',
     tier: 1,
-    hp: 30,
-    dmg: 5,        // Increased from 4 - threatens weak slimes
-    biomass: 3,    // Reduced from 5
+    hp: 25,
+    dmg: 4,
+    biomass: 2,
     mats: ['Wolf Fang', 'Wolf Pelt'],
-    trait: 'wolfFang',
-    drop: 0.02,
-    abilities: ['Can apply Bleed'],
-    element: 'nature',
-  },
-  bat: {
-    name: 'Cave Bat',
-    icon: '🦇',
-    tier: 1,
-    hp: 20,        // Reduced from 25
-    dmg: 4,        // Increased from 3
-    biomass: 2,    // Reduced from 4
-    mats: ['Bat Wing', 'Echo Crystal'],
-    trait: 'batWing',
-    drop: 0.025,
-    abilities: ['Fast attacks'],
+    trait: null,
+    drop: 0.03,
+    abilities: ['Basic attacks'],
     element: null,
+    mutation: 'sharp',
   },
-
-  // === ZONE 2: Poison Swamp (Early) ===
-  // Moderate difficulty - requires some investment
-  snake: {
-    name: 'Venom Snake',
-    icon: '🐍',
-    tier: 2,
-    hp: 35,        // Increased from 30
-    dmg: 6,        // Increased from 5
-    biomass: 5,    // Reduced from 9
-    mats: ['Snake Scale', 'Venom Gland'],
-    trait: 'venomSac',
-    drop: 0.02,
-    abilities: ['Poisons on hit'],
+  venusSlimetrap: {
+    name: 'Venus Slimetrap',
+    icon: '🌱',
+    tier: 1,
+    hp: 30,
+    dmg: 3,
+    biomass: 3,
+    mats: ['Slimetrap Vine', 'Digestive Sac'],
+    trait: null,
+    drop: 0.03,
+    abilities: ['Digest prey'],
     element: 'nature',
+    mutation: 'digest',
   },
-  goblin: {
-    name: 'Goblin',
-    icon: '👺',
-    tier: 2,
-    hp: 30,        // Reduced from 35
-    dmg: 7,        // Increased from 6
-    biomass: 5,    // Reduced from 8
-    mats: ['Goblin Ear', 'Crude Iron'],
-    trait: 'goblinCunning',
-    drop: 0.02,
-    abilities: ['High dodge'],
+  pebblet: {
+    name: 'Pebblet',
+    icon: '🪨',
+    tier: 1,
+    hp: 35,
+    dmg: 3,
+    biomass: 2,
+    mats: ['Pebble Shard', 'Earthite'],
+    trait: null,
+    drop: 0.03,
+    abilities: ['Rocky hide'],
     element: 'earth',
+    mutation: 'stoneskin',
+  },
+  vineSpider: {
+    name: 'Vine Spider',
+    icon: '🕷️',
+    tier: 1,
+    hp: 20,
+    dmg: 5,
+    biomass: 2,
+    mats: ['Spider Silk', 'Vine Weave'],
+    trait: null,
+    drop: 0.03,
+    abilities: ['Web attacks'],
+    element: 'nature',
+    mutation: 'vinewebs',
+  },
+  lifeFairy: {
+    name: 'Life Fairy',
+    icon: '🧚',
+    tier: 1,
+    hp: 15,
+    dmg: 2,
+    biomass: 5,
+    mats: ['Fairy Dust', 'Life Essence'],
+    trait: null,
+    drop: 0.01, // Rare
+    abilities: ['Healing magic'],
+    element: 'nature',
+    mutation: 'resurrect',
+    rare: true,
   },
 
-  // === ZONE 3: Crystal Caves (Mid-Early) ===
-  // Challenging - requires enhanced slimes or well-invested basics
-  skeleton: {
-    name: 'Skeleton',
-    icon: '💀',
-    tier: 3,
+  // === ZONE 2: Murky Swamp (Early) ===
+  // Water-focused with some Fire
+  serratedCarp: {
+    name: 'Serrated Carp',
+    icon: '🐟',
+    tier: 2,
+    hp: 35,
+    dmg: 6,
+    biomass: 5,
+    mats: ['Serrated Scale', 'Carp Fin'],
+    trait: null,
+    drop: 0.025,
+    abilities: ['Causes bleeding'],
+    element: 'water',
+    mutation: 'spiny',
+  },
+  antSeaLion: {
+    name: 'Ant Sea-Lion',
+    icon: '🦁',
+    tier: 2,
     hp: 45,
+    dmg: 5,
+    biomass: 5,
+    mats: ['Sea Lion Tusk', 'Chitin Shell'],
+    trait: null,
+    drop: 0.025,
+    abilities: ['Trapping attacks'],
+    element: 'water',
+    mutation: 'whirlpool',
+  },
+  swampStrider: {
+    name: 'Swamp Strider',
+    icon: '🦟',
+    tier: 2,
+    hp: 30,
+    dmg: 6,
+    biomass: 4,
+    mats: ['Strider Leg', 'Marsh Gas'],
+    trait: null,
+    drop: 0.025,
+    abilities: ['Quick movement'],
+    element: 'water',
+    mutation: 'farstep',
+  },
+  wilOWisp: {
+    name: "Wil'o Wisp",
+    icon: '👻',
+    tier: 2,
+    hp: 25,
+    dmg: 7,
+    biomass: 5,
+    mats: ['Wisp Essence', 'Mana Crystal'],
+    trait: null,
+    drop: 0.025,
+    abilities: ['Ethereal'],
+    element: 'fire',
+    mutation: 'ethereal',
+  },
+  theSnail: {
+    name: 'The Snail',
+    icon: '🐌',
+    tier: 2,
+    hp: 60,
+    dmg: 3,
+    biomass: 8,
+    mats: ['Snail Shell', 'Ancient Stone'],
+    trait: null,
+    drop: 0.008, // Rare
+    abilities: ['The Touch'],
+    element: null,
+    mutation: 'theTouch',
+    rare: true,
+  },
+
+  // === ZONE 3: Crystal Grotto (Mid-Early) ===
+  // Earth-focused
+  vampireBat: {
+    name: 'Vampire Bat',
+    icon: '🦇',
+    tier: 3,
+    hp: 40,
+    dmg: 8,
+    biomass: 6,
+    mats: ['Bat Wing', 'Echo Crystal'],
+    trait: null,
+    drop: 0.02,
+    abilities: ['Drains life'],
+    element: null,
+    mutation: 'lifesteal',
+  },
+  rockWorm: {
+    name: 'Rock Worm',
+    icon: '🪱',
+    tier: 3,
+    hp: 55,
+    dmg: 7,
+    biomass: 7,
+    mats: ['Worm Segment', 'Crystal Shard'],
+    trait: null,
+    drop: 0.02,
+    abilities: ['Burrows'],
+    element: 'earth',
+    mutation: 'sloughSkin',
+  },
+  coalSprite: {
+    name: 'Coal Sprite',
+    icon: '✨',
+    tier: 3,
+    hp: 35,
+    dmg: 9,
+    biomass: 6,
+    mats: ['Coal Dust', 'Spark Essence'],
+    trait: null,
+    drop: 0.02,
+    abilities: ['Blinding attacks'],
+    element: 'earth',
+    mutation: 'blindingPowder',
+  },
+  stalagMite: {
+    name: 'Stalag Mite',
+    icon: '🗻',
+    tier: 3,
+    hp: 50,
     dmg: 8,
     biomass: 7,
-    mats: ['Bone Dust', 'Soul Fragment'],
-    trait: 'boneArmor',
-    drop: 0.018,
-    abilities: ['Immune to Poison'],
+    mats: ['Stalag Shard', 'Cave Mineral'],
+    trait: null,
+    drop: 0.02,
+    abilities: ['Ambush'],
     element: 'earth',
+    mutation: 'dropIn',
   },
-  turtle: {
-    name: 'Giant Turtle',
-    icon: '🐢',
+  sapphireNewt: {
+    name: 'Sapphire Newt',
+    icon: '🦎',
     tier: 3,
-    hp: 80,        // Reduced from 120
-    dmg: 6,        // Increased from 5
-    biomass: 8,    // Reduced from 12
-    mats: ['Turtle Shell', 'Ancient Stone'],
-    trait: 'turtleShell',
-    drop: 0.015,
-    abilities: ['Very tanky'],
+    hp: 45,
+    dmg: 6,
+    biomass: 10,
+    mats: ['Sapphire Scale', 'Newt Eye'],
+    trait: null,
+    drop: 0.008, // Rare
+    abilities: ['Precious hide'],
     element: 'water',
+    mutation: 'bejeweled',
+    rare: true,
   },
 
-  // === ZONE 4: Shadow Ruins (Mid) ===
-  // Tough enemies - requires elite slimes or strong enhanced
-  wisp: {
-    name: 'Magic Wisp',
-    icon: '✨',
+  // === ZONE 4: Cinderspire (Mid) ===
+  // Fire-focused
+  embermander: {
+    name: 'Embermander',
+    icon: '🔥',
     tier: 4,
     hp: 50,
     dmg: 10,
     biomass: 10,
-    mats: ['Wisp Essence', 'Mana Crystal'],
-    trait: 'wispGlow',
+    mats: ['Ember Scale', 'Ash Remnant'],
+    trait: null,
     drop: 0.015,
-    abilities: ['Magic damage'],
-    element: null,
+    abilities: ['Regenerates'],
+    element: 'fire',
+    mutation: 'regenerate',
   },
-  shade: {
-    name: 'Shadow Shade',
-    icon: '👤',
+  animatedAlloy: {
+    name: 'Animated Alloy',
+    icon: '🤖',
     tier: 4,
-    hp: 45,        // Increased from 40
-    dmg: 12,       // Reduced from 15
-    biomass: 10,   // Reduced from 14
-    mats: ['Shadow Wisp', 'Dark Essence'],
-    trait: 'shadowCloak',
+    hp: 65,
+    dmg: 9,
+    biomass: 11,
+    mats: ['Alloy Shard', 'Crude Iron'],
+    trait: null,
     drop: 0.015,
-    abilities: ['High dodge', 'Ambush'],
+    abilities: ['Metallic body'],
+    element: 'earth',
+    mutation: 'alloyPotential',
+  },
+  magmaOoze: {
+    name: 'Magma Ooze',
+    icon: '🌋',
+    tier: 4,
+    hp: 45,
+    dmg: 11,
+    biomass: 10,
+    mats: ['Magma Core', 'Molten Slag'],
+    trait: null,
+    drop: 0.015,
+    abilities: ['Burns on contact'],
+    element: 'fire',
+    mutation: 'pyrolyze',
+  },
+  burntSpirit: {
+    name: 'Burnt Spirit',
+    icon: '💀',
+    tier: 4,
+    hp: 40,
+    dmg: 13,
+    biomass: 11,
+    mats: ['Soul Fragment', 'Ash Wisp'],
+    trait: null,
+    drop: 0.015,
+    abilities: ['Wailing attack'],
     element: null,
+    mutation: 'ghastlyWail',
+  },
+  wyrm: {
+    name: 'Wyrm',
+    icon: '🐲',
+    tier: 4,
+    hp: 75,
+    dmg: 12,
+    biomass: 15,
+    mats: ['Wyrm Scale', 'Dragon Bone'],
+    trait: null,
+    drop: 0.006, // Rare
+    abilities: ['Dragon breath'],
+    element: 'fire',
+    mutation: 'draconicPower',
+    rare: true,
   },
 
-  // === ZONE 5: Ogre Peaks (Late) ===
-  // Very difficult - requires royal or well-invested elite slimes
-  golem: {
-    name: 'Crystal Golem',
-    icon: '🗿',
+  // === ZONE 5: Stormspire Summit (Late) ===
+  // Mixed elements, lightning theme
+  thunderHawk: {
+    name: 'Thunder Hawk',
+    icon: '🦅',
     tier: 5,
-    hp: 120,       // Reduced from 180
-    dmg: 12,
-    biomass: 15,   // Reduced from 18
-    mats: ['Crystal Shard', 'Golem Core'],
-    trait: 'crystalCore',
+    hp: 90,
+    dmg: 13,
+    biomass: 14,
+    mats: ['Storm Feather', 'Thunder Beak'],
+    trait: null,
     drop: 0.012,
-    abilities: ['Very tanky', 'Reflects damage'],
-    element: 'earth',
+    abilities: ['Lightning fast'],
+    element: null,
+    mutation: 'chainLightning',
   },
-  ogre: {
-    name: 'Ogre',
+  boulderTroll: {
+    name: 'Boulder Troll',
     icon: '👹',
     tier: 5,
-    hp: 100,       // Reduced from 200
-    dmg: 16,       // Reduced from 18
-    biomass: 18,   // Reduced from 25
-    mats: ['Ogre Hide', 'Ogre Club'],
-    trait: 'ogreStrength',
+    hp: 130,
+    dmg: 11,
+    biomass: 16,
+    mats: ['Troll Hide', 'Stone Club'],
+    trait: null,
     drop: 0.012,
-    abilities: ['Massive damage', 'Stun chance'],
+    abilities: ['Massive strength'],
     element: 'earth',
+    mutation: 'earthshaker',
+  },
+  stormElemental: {
+    name: 'Storm Elemental',
+    icon: '⚡',
+    tier: 5,
+    hp: 85,
+    dmg: 15,
+    biomass: 15,
+    mats: ['Storm Core', 'Lightning Shard'],
+    trait: null,
+    drop: 0.012,
+    abilities: ['Electric attacks'],
+    element: 'water',
+    mutation: 'charged',
+  },
+  frostGiant: {
+    name: 'Frost Giant',
+    icon: '❄️',
+    tier: 5,
+    hp: 110,
+    dmg: 14,
+    biomass: 17,
+    mats: ['Frost Gem', 'Giant Bone'],
+    trait: null,
+    drop: 0.012,
+    abilities: ['Freezing attacks'],
+    element: 'water',
+    mutation: 'permafrost',
+  },
+  thunderbird: {
+    name: 'Thunderbird',
+    icon: '🌩️',
+    tier: 5,
+    hp: 100,
+    dmg: 16,
+    biomass: 22,
+    mats: ['Thunderbird Plume', 'Storm Essence'],
+    trait: null,
+    drop: 0.005, // Rare
+    abilities: ['Storm master'],
+    element: null,
+    mutation: 'stormcaller',
+    rare: true,
   },
 
-  // === ZONE 6: Dragon Volcano (End-Game) ===
-  // Extremely difficult - requires fully invested royal slimes
-  phoenix: {
-    name: 'Phoenix',
-    icon: '🔥',
+  // === ZONE 6: Void Abyss (End-Game) ===
+  // Neutral/void themed
+  voidTendril: {
+    name: 'Void Tendril',
+    icon: '🦑',
     tier: 6,
-    hp: 100,       // Reduced from 150
-    dmg: 18,       // Reduced from 20
-    biomass: 25,   // Reduced from 35
-    mats: ['Phoenix Ash', 'Ember Core'],
-    trait: 'phoenixFeather',
+    hp: 120,
+    dmg: 19,
+    biomass: 28,
+    mats: ['Void Fiber', 'Dark Matter'],
+    trait: null,
     drop: 0.01,
-    abilities: ['Burns', 'Revives once at 50% HP'],
-    element: 'fire',
+    abilities: ['Consuming attacks'],
+    element: null,
+    mutation: 'consume',
   },
-  dragon: {
-    name: 'Young Dragon',
-    icon: '🐉',
+  abyssalWatcher: {
+    name: 'Abyssal Watcher',
+    icon: '👁️',
     tier: 6,
-    hp: 180,       // Reduced from 350
-    dmg: 22,       // Reduced from 25
-    biomass: 35,   // Reduced from 50
-    mats: ['Dragon Scale', 'Dragon Bone'],
-    trait: 'dragonHeart',
-    drop: 0.008,
-    abilities: ['Burns', 'Fire breath', 'Flying'],
-    element: 'fire',
+    hp: 100,
+    dmg: 21,
+    biomass: 26,
+    mats: ['Watcher Eye', 'Abyssal Fragment'],
+    trait: null,
+    drop: 0.01,
+    abilities: ['All-seeing'],
+    element: null,
+    mutation: 'allSeeing',
+  },
+  nullConstruct: {
+    name: 'Null Construct',
+    icon: '🔳',
+    tier: 6,
+    hp: 160,
+    dmg: 17,
+    biomass: 30,
+    mats: ['Null Core', 'Construct Piece'],
+    trait: null,
+    drop: 0.01,
+    abilities: ['Nullifies magic'],
+    element: null,
+    mutation: 'nullify',
+  },
+  realityShard: {
+    name: 'Reality Shard',
+    icon: '💎',
+    tier: 6,
+    hp: 90,
+    dmg: 23,
+    biomass: 25,
+    mats: ['Reality Fragment', 'Dimension Tear'],
+    trait: null,
+    drop: 0.01,
+    abilities: ['Reality bending'],
+    element: null,
+    mutation: 'fracture',
+  },
+  hollowOne: {
+    name: 'The Hollow One',
+    icon: '🕳️',
+    tier: 6,
+    hp: 200,
+    dmg: 22,
+    biomass: 45,
+    mats: ['Hollow Core', 'Void Essence'],
+    trait: null,
+    drop: 0.004, // Rare
+    abilities: ['Void master'],
+    element: null,
+    mutation: 'voidTouched',
+    rare: true,
   },
 };
 

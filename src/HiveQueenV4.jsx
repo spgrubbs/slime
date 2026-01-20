@@ -1052,7 +1052,7 @@ export default function HiveQueenGame() {
         type: 'warrior',
         hp: baseHp,
         maxHp: baseHp,
-        position: 0, // 0 to 100, moving right to left
+        position: -i * 8, // Stagger start positions so humans don't overlap
         speed: HUMAN_TYPES.warrior.speed,
       });
     }
@@ -1085,6 +1085,9 @@ export default function HiveQueenGame() {
           rewards.materials[m] = (rewards.materials[m] || 0) + Math.floor(c * rewardMultiplier);
         });
       });
+      // Boss drops Champion Badge (unique material)
+      rewards.materials['Champion Badge'] = (rewards.materials['Champion Badge'] || 0) + 1;
+
       setBio(p => p + rewards.biomass);
       setMats(p => {
         const n = { ...p };
@@ -1096,12 +1099,48 @@ export default function HiveQueenGame() {
       // Guaranteed Prism on TD victory
       setPrisms(p => p + 1);
       rewards.prisms = 1;
-      log(`🎉 Victory! +${rewards.biomass} biomass, +1💎 Prism, materials gained!`);
+      log(`🎉 Victory! +${rewards.biomass} biomass, +1💎 Prism, +1🏅 Champion Badge!`);
     } else {
       // Lose half biomass
       losses.biomass = Math.floor(bio / 2);
       setBio(p => Math.max(0, p - losses.biomass));
-      log(`💀 Defeat! Lost ${losses.biomass} biomass!`);
+
+      // Partial rewards based on humans defeated (even in defeat, you get some drops)
+      const humansDefeated = summary?.humansDefeated || 0;
+      if (humansDefeated > 0) {
+        // Small biomass reward per human
+        const partialBio = Math.floor(humansDefeated * 5 * rewardMultiplier);
+        rewards.biomass = partialBio;
+        setBio(p => p + partialBio);
+
+        // 30% chance per human defeated to drop a material
+        const dropChance = 0.3;
+        const possibleMats = ['Human Bone', 'Iron Sword'];
+        for (let i = 0; i < humansDefeated; i++) {
+          if (Math.random() < dropChance) {
+            const mat = possibleMats[Math.floor(Math.random() * possibleMats.length)];
+            rewards.materials[mat] = (rewards.materials[mat] || 0) + 1;
+          }
+        }
+
+        // Apply material rewards
+        if (Object.keys(rewards.materials).length > 0) {
+          setMats(p => {
+            const n = { ...p };
+            Object.entries(rewards.materials).forEach(([m, c]) => {
+              n[m] = (n[m] || 0) + c;
+            });
+            return n;
+          });
+        }
+
+        const matStr = Object.keys(rewards.materials).length > 0
+          ? `, salvaged: ${Object.entries(rewards.materials).map(([m, c]) => `${c}x ${m}`).join(', ')}`
+          : '';
+        log(`💀 Defeat! Lost ${losses.biomass} biomass, but salvaged +${partialBio} biomass${matStr}!`);
+      } else {
+        log(`💀 Defeat! Lost ${losses.biomass} biomass!`);
+      }
     }
 
     // Update tower defense with summary but don't clear it yet
@@ -1662,11 +1701,27 @@ export default function HiveQueenGame() {
         });
 
         // Check if any human reached the end (position >= 100)
-        const reachedEnd = next.humans.some(h => h.position >= 100);
-        if (reachedEnd) {
-          next.phase = 'defeat';
-          setTimeout(() => endTowerDefense(false, { totalDamage: next.totalDamage, humansDefeated: next.humansDefeated }), 100);
-          return next;
+        const humanReachedEnd = next.humans.find(h => h.position >= 100);
+        if (humanReachedEnd) {
+          // Check if Decoy ability is active and not yet used
+          const decoyActive = activeHiveAbilities.decoy && Date.now() < activeHiveAbilities.decoy;
+          if (decoyActive && !next.decoyUsed) {
+            // Decoy saves the hive - remove the human and consume the ability
+            next.humans = next.humans.filter(h => h.id !== humanReachedEnd.id);
+            next.decoyUsed = true;
+            next.humansDefeated++;
+            next.battleLog = [...next.battleLog.slice(-20), '🎭 Slime Decoy intercepted the invader!'];
+            // Deactivate the decoy ability
+            setActiveHiveAbilities(prev => {
+              const updated = { ...prev };
+              delete updated.decoy;
+              return updated;
+            });
+          } else {
+            next.phase = 'defeat';
+            setTimeout(() => endTowerDefense(false, { totalDamage: next.totalDamage, humansDefeated: next.humansDefeated }), 100);
+            return next;
+          }
         }
 
         // Slimes attack - apply damage to humans
@@ -1692,8 +1747,10 @@ export default function HiveQueenGame() {
                   next.battleLog = [...next.battleLog.slice(-20), `${sl.name} attacks for ${Math.floor(damage)} damage!`];
 
                   if (newHp <= 0) {
-                    next.battleLog = [...next.battleLog.slice(-20), `Human warrior defeated!`];
+                    const defeatMsg = h.isBoss ? '🏆 Human Champion defeated!' : 'Human warrior defeated!';
+                    next.battleLog = [...next.battleLog.slice(-20), defeatMsg];
                     next.humansDefeated++;
+                    if (h.isBoss) next.bossDefeated = true;
                     humansToRemove.push(h.id);
                   }
 
@@ -1724,13 +1781,28 @@ export default function HiveQueenGame() {
                 type: 'warrior',
                 hp: baseHp,
                 maxHp: baseHp,
-                position: 0,
+                position: -i * 8, // Stagger start positions so humans don't overlap
                 speed: HUMAN_TYPES.warrior.speed,
               });
             }
+            // Add boss on final wave (wave 3, index 2)
+            if (nextWaveIdx === 2) {
+              const bossHp = HUMAN_TYPES.boss.hp * wave.hpMultiplier * scaling.hpMultiplier;
+              newHumans.push({
+                id: genId(),
+                type: 'boss',
+                hp: bossHp,
+                maxHp: bossHp,
+                position: -humanCount * 8 - 15, // Boss starts further back
+                speed: HUMAN_TYPES.boss.speed,
+                isBoss: true,
+              });
+              next.battleLog = [...next.battleLog.slice(-20), `⚠️ Wave ${nextWaveIdx + 1} begins! A CHAMPION approaches!`];
+            } else {
+              next.battleLog = [...next.battleLog.slice(-20), `Wave ${nextWaveIdx + 1} begins!`];
+            }
             next.humans = newHumans;
             next.currentWave = nextWaveIdx;
-            next.battleLog = [...next.battleLog.slice(-20), `Wave ${nextWaveIdx + 1} begins!`];
           } else {
             // Victory!
             next.phase = 'victory';
@@ -1743,7 +1815,7 @@ export default function HiveQueenGame() {
     }, TD_TICK_SPEED);
 
     return () => clearInterval(iv);
-  }, [gameLoaded, towerDefense, speed, slimes, endTowerDefense]);
+  }, [gameLoaded, towerDefense, speed, slimes, endTowerDefense, activeHiveAbilities]);
 
   const avail = slimes.filter(s => !Object.values(exps).some(e => e.party.some(p => p.id === s.id)) && !party.includes(s.id) && !(towerDefense?.deployedSlimes || []).some(ds => ds.id === s.id));
   const selSl = slimes.find(s => s.id === selSlime);
@@ -2493,17 +2565,19 @@ export default function HiveQueenGame() {
                   {/* Endzone indicator */}
                   <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 10, background: 'rgba(74,222,128,0.3)' }} />
 
-                  {/* Humans */}
-                  {towerDefense.humans.map(h => {
+                  {/* Humans - sorted by position so closest to end renders on top */}
+                  {[...towerDefense.humans].sort((a, b) => a.position - b.position).map((h, idx) => {
                     const hpPercent = Math.max(0, Math.min(100, (h.hp / h.maxHp) * 100));
+                    const isBoss = h.isBoss;
                     return (
-                      <div key={h.id} style={{ position: 'absolute', right: `${h.position}%`, top: '50%', transform: 'translateY(-50%)', display: 'flex', flexDirection: 'column', alignItems: 'center', transition: 'right 0.1s linear' }}>
-                        <div style={{ fontSize: 28 }}>⚔️</div>
+                      <div key={h.id} style={{ position: 'absolute', right: `${Math.max(0, h.position)}%`, top: '50%', transform: 'translateY(-50%)', display: 'flex', flexDirection: 'column', alignItems: 'center', transition: 'right 0.1s linear', zIndex: idx + 1 }}>
+                        <div style={{ fontSize: isBoss ? 36 : 28, filter: isBoss ? 'drop-shadow(0 0 8px #f59e0b)' : 'none' }}>{isBoss ? '🛡️' : '⚔️'}</div>
+                        {isBoss && <div style={{ fontSize: 8, color: '#f59e0b', fontWeight: 'bold', marginBottom: 2 }}>CHAMPION</div>}
                         {/* Health bar */}
-                        <div style={{ width: 40, height: 6, background: 'rgba(0,0,0,0.7)', borderRadius: 3, overflow: 'hidden' }}>
-                          <div style={{ width: `${hpPercent}%`, height: '100%', background: hpPercent > 50 ? '#4ade80' : hpPercent > 25 ? '#f59e0b' : '#ef4444', transition: 'width 0.15s ease' }} />
+                        <div style={{ width: isBoss ? 50 : 40, height: 6, background: 'rgba(0,0,0,0.7)', borderRadius: 3, overflow: 'hidden' }}>
+                          <div style={{ width: `${hpPercent}%`, height: '100%', background: isBoss ? 'linear-gradient(90deg, #f59e0b, #fbbf24)' : (hpPercent > 50 ? '#4ade80' : hpPercent > 25 ? '#f59e0b' : '#ef4444'), transition: 'width 0.15s ease' }} />
                         </div>
-                        <div style={{ fontSize: 9, color: '#fff', marginTop: 2 }}>{Math.ceil(h.hp)}/{Math.ceil(h.maxHp)}</div>
+                        <div style={{ fontSize: 9, color: isBoss ? '#f59e0b' : '#fff', marginTop: 2 }}>{Math.ceil(h.hp)}/{Math.ceil(h.maxHp)}</div>
                       </div>
                     );
                   })}
