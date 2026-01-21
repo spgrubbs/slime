@@ -27,6 +27,29 @@ import { HIVE_ABILITIES, PRISM_SHOP, PHEROMONE_UPDATE_INTERVAL, PHEROMONES_PER_S
 import { genName, genId, formatTime, calculateElementalDamage, createDefaultElements, canGainElement, calculateElementGain } from './utils/helpers.js';
 import { saveGame, loadGame, deleteSave } from './utils/saveSystem.js';
 
+// Weighted monster spawning - rare monsters have 5% spawn rate, common share 95%
+const selectMonster = (zone) => {
+  const zd = ZONES[zone];
+  if (!zd || !zd.monsters?.length) return null;
+
+  // Separate common and rare monsters
+  const common = zd.monsters.filter(m => !MONSTER_TYPES[m]?.rare);
+  const rare = zd.monsters.filter(m => MONSTER_TYPES[m]?.rare);
+
+  // 5% chance for rare monster (if any exist)
+  if (rare.length > 0 && Math.random() < 0.05) {
+    return rare[Math.floor(Math.random() * rare.length)];
+  }
+
+  // 95% chance for common monster
+  if (common.length > 0) {
+    return common[Math.floor(Math.random() * common.length)];
+  }
+
+  // Fallback to any monster if no common (shouldn't happen)
+  return zd.monsters[Math.floor(Math.random() * zd.monsters.length)];
+};
+
 // Component imports
 import {
   SlimeSprite,
@@ -90,7 +113,7 @@ const calculateOfflineProgress = (saved, bonuses) => {
 
     while (ticks > 0 && exp.party.some(p => p.hp > 0)) {
       if (!monster || monster.hp <= 0) {
-        const mt = zd.monsters[Math.floor(Math.random() * zd.monsters.length)];
+        const mt = selectMonster(zone) || zd.monsters[0];
         const md = MONSTER_TYPES[mt];
         monster = { type: mt, hp: md.hp, maxHp: md.hp, dmg: md.dmg };
       }
@@ -914,24 +937,41 @@ export default function HiveQueenGame() {
   };
 
   const stopExp = (zone) => {
-    const exp = exps[zone];
-    if (!exp) return;
+    // Use functional update to access current state, avoiding stale closure
+    setExps(currentExps => {
+      const exp = currentExps[zone];
+      if (!exp) return currentExps;
 
-    // Create summary
-    const summary = {
-      zone: ZONES[zone].name,
-      kills: exp.kills,
-      materials: exp.materials,
-      survivors: exp.party.filter(p => p.hp > 0),
-      totalParty: exp.party.length,
-      biomassDistributed: exp.party.reduce((sum, p) => sum + (p.biomassGained || 0), 0),
-    };
+      // Create summary with current state data
+      const summary = {
+        zone: ZONES[zone].name,
+        kills: exp.kills,
+        materials: { ...exp.materials },
+        survivors: exp.party.filter(p => p.hp > 0),
+        totalParty: exp.party.length,
+        biomassDistributed: exp.party.reduce((sum, p) => sum + (p.biomassGained || 0), 0),
+        // Copy party data for material/biomass distribution
+        party: exp.party.map(p => ({ ...p })),
+        monsterKillCounts: { ...exp.monsterKillCounts },
+      };
 
+      // Process the summary (materials, biomass, kills) outside the setExps call
+      setTimeout(() => processExpSummary(zone, summary), 0);
+
+      // Remove the expedition from state
+      const next = { ...currentExps };
+      delete next[zone];
+      return next;
+    });
+  };
+
+  // Process expedition summary (split out to avoid nested state updates)
+  const processExpSummary = (zone, summary) => {
     // Add materials to inventory if any slimes survived
     if (summary.survivors.length > 0) {
       setMats(m => {
         const n = { ...m };
-        Object.entries(exp.materials).forEach(([mat, count]) => {
+        Object.entries(summary.materials).forEach(([mat, count]) => {
           n[mat] = (n[mat] || 0) + count;
         });
         return n;
@@ -939,7 +979,7 @@ export default function HiveQueenGame() {
 
       // Distribute biomass and element gains to surviving slimes
       setSlimes(slimes => slimes.map(sl => {
-        const partyMember = exp.party.find(p => p.id === sl.id);
+        const partyMember = summary.party.find(p => p.id === sl.id);
         if (partyMember && partyMember.hp > 0) {
           const updatedSlime = {
             ...sl,
@@ -969,21 +1009,21 @@ export default function HiveQueenGame() {
       log(`Recalled from ${ZONES[zone].name}! Materials secured.`);
 
       // Count kills toward mutation unlocks (only on successful recall)
-      Object.entries(exp.monsterKillCounts || {}).forEach(([monsterType, count]) => {
+      Object.entries(summary.monsterKillCounts || {}).forEach(([monsterType, count]) => {
         if (count <= 0) return;
 
         setMonsterKills(prev => {
           const newTotal = (prev[monsterType] || 0) + count;
           const md = MONSTER_TYPES[monsterType];
 
-          if (md && md.trait) {
-            const mutation = MUTATION_LIBRARY[md.trait];
+          if (md && md.mutation) {
+            const mutation = MUTATION_LIBRARY[md.mutation];
             if (mutation && newTotal >= mutation.requiredKills) {
               // Check if not already unlocked (use functional update to avoid stale closure)
               setUnlockedMutations(p => {
-                if (!p.includes(md.trait)) {
+                if (!p.includes(md.mutation)) {
                   log(`🧬 Mutation Unlocked: ${mutation.name}!`);
-                  return [...p, md.trait];
+                  return [...p, md.mutation];
                 }
                 return p;
               });
@@ -999,7 +1039,6 @@ export default function HiveQueenGame() {
     }
 
     setExpSummaries(s => [...s, { ...summary, id: Date.now() }]);
-    setExps(p => { const n = { ...p }; delete n[zone]; return n; });
     setBLogs(p => { const n = { ...p }; delete n[zone]; return n; });
   };
 
@@ -1211,12 +1250,15 @@ export default function HiveQueenGame() {
               if (evt.type === 'boon') {
                 if (evt.effect === 'heal') {
                   living.forEach(p => { p.hp = Math.min(p.maxHp, p.hp + evt.value); });
+                  bLog(zone, `✨ Party healed +${evt.value} HP!`, '#4ade80');
                 } else if (evt.effect === 'biomass') {
                   setBio(b => b + evt.value);
+                  bLog(zone, `✨ Found +${evt.value} biomass!`, '#4ade80');
                 }
               } else if (evt.type === 'malus') {
                 if (evt.effect === 'damage') {
                   living.forEach(p => { p.hp = Math.max(1, p.hp - evt.value); });
+                  bLog(zone, `⚠️ Party took ${evt.value} damage!`, '#ef4444');
                 } else if (evt.effect === 'poison') {
                   living.forEach(p => {
                     if (!(p.status || []).some(s => s.type === 'poison')) {
@@ -1224,6 +1266,7 @@ export default function HiveQueenGame() {
                       p.status.push({ type: 'poison', dur: STATUS_EFFECTS.poison.dur });
                     }
                   });
+                  bLog(zone, `⚠️ Party poisoned!`, '#22c55e');
                 }
               }
             }
@@ -1231,8 +1274,8 @@ export default function HiveQueenGame() {
             // Check if intermission is over
             if (exp.intermission.timer >= exp.intermission.duration) {
               exp.intermission = null;
-              // Spawn next monster
-              const mt = zd.monsters[Math.floor(Math.random() * zd.monsters.length)];
+              // Spawn next monster (weighted by rarity)
+              const mt = selectMonster(zone) || zd.monsters[0];
               const md = MONSTER_TYPES[mt];
               exp.monster = { type: mt, hp: md.hp, maxHp: md.hp, dmg: md.dmg, status: [] };
               bLog(zone, `A ${md.name} appears!`, '#22d3ee');
@@ -1277,17 +1320,17 @@ export default function HiveQueenGame() {
                 }
               }
             } else {
-              // Spawn monster immediately
-              const mt = zd.monsters[Math.floor(Math.random() * zd.monsters.length)];
+              // Spawn monster immediately (weighted by rarity)
+              const mt = selectMonster(zone) || zd.monsters[0];
               const md = MONSTER_TYPES[mt];
               exp.monster = { type: mt, hp: md.hp, maxHp: md.hp, dmg: md.dmg, status: [] };
               bLog(zone, `A ${md.name} appears!`, '#22d3ee');
               exp.turn = 0;
             }
           } else if (exp.exploring) {
-            // After exploration event, spawn the monster
+            // After exploration event, spawn the monster (weighted by rarity)
             exp.exploring = false;
-            const mt = zd.monsters[Math.floor(Math.random() * zd.monsters.length)];
+            const mt = selectMonster(zone) || zd.monsters[0];
             const md = MONSTER_TYPES[mt];
             exp.monster = { type: mt, hp: md.hp, maxHp: md.hp, dmg: md.dmg, status: [] };
             bLog(zone, `A ${md.name} appears!`, '#22d3ee');
@@ -1359,8 +1402,10 @@ export default function HiveQueenGame() {
                   if (sl.pass?.includes('poison') && !(mon.status || []).some(s => s.type === 'poison') && Math.random() < 0.35 + stats.viscosity * 0.02) { mon.status.push({ type: 'poison', dur: STATUS_EFFECTS.poison.dur }); bLog(zone, `${sl.name} poisons ${md.name}! 🧪`, '#22c55e'); }
                   exp.animSlime = p.id; exp.slimeAnim = 'attack'; exp.monAnim = 'hurt';
                   // Shared Vigor hive ability: heal 2 HP when attacking
-                  if (isHiveAbilityActive('sharedVigor')) {
+                  if (isHiveAbilityActive('sharedVigor') && p.hp < p.maxHp) {
+                    const healAmt = Math.min(2, p.maxHp - p.hp);
                     p.hp = Math.min(p.maxHp, p.hp + 2);
+                    if (healAmt > 0) bLog(zone, `❤️‍🩹 ${sl.name} healed +${healAmt} (Shared Vigor)`, '#ec4899');
                   }
                   // Show element effectiveness in battle log
                   let dmgMsg = `${sl.name} ${crit ? '💥CRITS' : 'hits'} for ${Math.floor(dmg)}!`;
@@ -1398,10 +1443,14 @@ export default function HiveQueenGame() {
 
                 // Distribute biomass evenly among living party members
                 const bioPerSlime = bioG / living.length;
+                const hasBountiful = isHiveAbilityActive('bountifulHarvest');
                 living.forEach(p => {
                   p.biomassGained = (p.biomassGained || 0) + bioPerSlime;
                 });
-                bLog(zone, `${md.name} defeated! +${Math.floor(bioPerSlime)}🧬 each`, '#4ade80');
+                const bioMsg = hasBountiful
+                  ? `${md.name} defeated! +${Math.floor(bioPerSlime)}🧬 each (🌾+25%)`
+                  : `${md.name} defeated! +${Math.floor(bioPerSlime)}🧬 each`;
+                bLog(zone, bioMsg, '#4ade80');
 
                 // Rare Prism drop (0.1% per kill)
                 if (Math.random() < 0.001) {
@@ -1428,12 +1477,13 @@ export default function HiveQueenGame() {
 
                 // Element accumulation - slimes gain element affinity from zone
                 if (zd.element && zd.elementGainRate > 0) {
+                  const hasEvoPulse = isHiveAbilityActive('evolutionPulse');
                   living.forEach(p => {
                     const sl = slimes.find(s => s.id === p.id);
                     if (sl && canGainElement(sl)) {
                       let gain = calculateElementGain(zd.elementGainRate, sl);
                       // Evolution Pulse hive ability: +50% element gain
-                      if (isHiveAbilityActive('evolutionPulse')) gain *= 1.5;
+                      if (hasEvoPulse) gain *= 1.5;
                       const newValue = Math.min(100, (sl.elements?.[zd.element] || 0) + gain);
                       // Store element gain in party member for batch update on recall
                       if (!p.elementGains) p.elementGains = {};
@@ -1441,7 +1491,8 @@ export default function HiveQueenGame() {
                       // Check if element would reach 100%
                       if ((sl.elements?.[zd.element] || 0) + (p.elementGains[zd.element] || 0) >= 100 && !p.elementLocked) {
                         p.elementLocked = zd.element;
-                        bLog(zone, `${sl.name} attuned to ${ELEMENTS[zd.element].icon} ${ELEMENTS[zd.element].name}!`, ELEMENTS[zd.element].color);
+                        const evoPulseMsg = hasEvoPulse ? ' (⚡+50%)' : '';
+                        bLog(zone, `${sl.name} attuned to ${ELEMENTS[zd.element].icon} ${ELEMENTS[zd.element].name}!${evoPulseMsg}`, ELEMENTS[zd.element].color);
                         log(`${sl.name} is now a ${ELEMENTS[zd.element].name} slime!`);
                       }
                     }
@@ -2719,9 +2770,9 @@ export default function HiveQueenGame() {
           <div style={{ marginBottom: 10 }}><label style={{ fontSize: 12 }}>Speed: {speed}x</label><input type="range" min="1" max="50" value={speed} onChange={e => setSpeed(+e.target.value)} style={{ width: '100%' }} /></div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             <button onClick={() => setBio(b => b + 100)} style={{ padding: 8, background: '#4ade80', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 12 }}>+100🧬</button>
-            <button onClick={() => setMats(m => ({ ...m, 'Dragon Scale': (m['Dragon Scale'] || 0) + 3, 'Soul Fragment': (m['Soul Fragment'] || 0) + 10, 'Wolf Pelt': (m['Wolf Pelt'] || 0) + 10, 'Crude Iron': (m['Crude Iron'] || 0) + 10, 'Mana Crystal': (m['Mana Crystal'] || 0) + 5, 'Ancient Stone': (m['Ancient Stone'] || 0) + 8, 'Human Bone': (m['Human Bone'] || 0) + 10, 'Iron Sword': (m['Iron Sword'] || 0) + 10 }))} style={{ padding: 8, background: '#f59e0b', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 12 }}>+Mats</button>
-            <button onClick={() => setUnlockedMutations(['wolfFang', 'dragonHeart', 'turtleShell', 'venomSac', 'phoenixFeather', 'goblinCunning', 'batWing', 'boneArmor'])} style={{ padding: 8, background: '#a855f7', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 12 }}>Unlock Mutations</button>
-            <button onClick={() => setMonsterKills(k => ({ ...k, wolf: (k.wolf || 0) + 50, goblin: (k.goblin || 0) + 50, turtle: (k.turtle || 0) + 50, bat: (k.bat || 0) + 50 }))} style={{ padding: 8, background: '#22c55e', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 12 }}>+50 Kills</button>
+            <button onClick={() => setMats(m => ({ ...m, 'Wolf Fang': (m['Wolf Fang'] || 0) + 10, 'Wolf Pelt': (m['Wolf Pelt'] || 0) + 10, 'Spider Silk': (m['Spider Silk'] || 0) + 10, 'Mana Crystal': (m['Mana Crystal'] || 0) + 5, 'Snail Shell': (m['Snail Shell'] || 0) + 5, 'Wyrm Scale': (m['Wyrm Scale'] || 0) + 3, 'Storm Core': (m['Storm Core'] || 0) + 3, 'Void Essence': (m['Void Essence'] || 0) + 3, 'Human Bone': (m['Human Bone'] || 0) + 10, 'Iron Sword': (m['Iron Sword'] || 0) + 10, 'Champion Badge': (m['Champion Badge'] || 0) + 2 }))} style={{ padding: 8, background: '#f59e0b', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 12 }}>+Mats</button>
+            <button onClick={() => setUnlockedMutations(['sharp', 'digest', 'stoneskin', 'vinewebs', 'resurrect', 'spiny', 'whirlpool', 'ethereal', 'lifesteal', 'pyrolyze', 'draconicPower', 'voidTouched'])} style={{ padding: 8, background: '#a855f7', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 12 }}>Unlock Mutations</button>
+            <button onClick={() => setMonsterKills(k => ({ ...k, youngWolf: (k.youngWolf || 0) + 50, venusSlimetrap: (k.venusSlimetrap || 0) + 50, serratedCarp: (k.serratedCarp || 0) + 50, crystalBat: (k.crystalBat || 0) + 50, emberWyrm: (k.emberWyrm || 0) + 50, voidHollow: (k.voidHollow || 0) + 50 }))} style={{ padding: 8, background: '#22c55e', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 12 }}>+50 Kills</button>
             <button onClick={() => setQueen(q => ({ ...q, level: q.level + 5 }))} style={{ padding: 8, background: '#ec4899', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 12 }}>+5 Queen Lv</button>
             <button onClick={() => { setLastTowerDefense(0); setTowerDefense(null); log('🎯 Tower Defense reset!'); }} style={{ padding: 8, background: '#22d3ee', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 12 }}>Reset TD Timer</button>
             <button onClick={() => setPrisms(p => p + 100)} style={{ padding: 8, background: '#8b5cf6', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 12 }}>+100 Prisms</button>
