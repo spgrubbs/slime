@@ -84,23 +84,32 @@ const SlimeForge = ({ unlockedMutations, biomass, freeJelly, tiers, onSpawn }) =
       </div>
       <div style={{ marginBottom: 15 }}>
         <div style={{ fontSize: 12, marginBottom: 8, opacity: 0.7 }}>Mutations ({selMutations.length}/{maxM}) • +{TRAIT_JELLY_COST}🍯 each</div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 8, maxHeight: 200, overflowY: 'auto' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 8, maxHeight: 250, overflowY: 'auto' }}>
           {unlockedMutations.map((id) => {
             const m = MUTATION_LIBRARY[id];
             if (!m) return null;
             const sel = selMutations.includes(id);
             const can = sel || selMutations.length < maxM;
+            // Get passive description - handle both function and string formats
+            const passiveText = typeof m.passiveDesc === 'function'
+              ? m.passiveDesc(stats.viscosity || 5)
+              : m.passiveDesc;
             return (
-              <button key={id} onClick={() => can && toggle(id)} style={{ display:'flex',flexDirection:'column',alignItems:'flex-start',padding:8,background:sel?`${m.color}33`:'rgba(0,0,0,0.3)',border:`2px solid ${sel?m.color:'transparent'}`,borderRadius:8,color:'#fff',cursor:can?'pointer':'not-allowed',opacity:can?1:0.5,textAlign:'left' }}>
-                <div style={{ display:'flex',alignItems:'center',gap:5,marginBottom:4,width:'100%' }}>
-                  <span>{m.icon}</span><span style={{fontSize:11,fontWeight:'bold'}}>{m.name}</span>
+              <button key={id} onClick={() => can && toggle(id)} style={{ display:'flex',flexDirection:'column',alignItems:'flex-start',padding:10,background:sel?'rgba(168,85,247,0.25)':'rgba(0,0,0,0.3)',border:`2px solid ${sel?'#a855f7':'transparent'}`,borderRadius:8,color:'#fff',cursor:can?'pointer':'not-allowed',opacity:can?1:0.5,textAlign:'left' }}>
+                <div style={{ display:'flex',alignItems:'center',gap:6,marginBottom:6,width:'100%' }}>
+                  <span style={{fontSize:18}}>{m.icon}</span>
+                  <span style={{fontSize:12,fontWeight:'bold'}}>{m.name}</span>
+                  {sel && <span style={{marginLeft:'auto',fontSize:10,color:'#4ade80'}}>✓</span>}
                 </div>
-                <div style={{fontSize:9,opacity:0.7}}>+{m.bonus} {STAT_INFO[m.stat]?.name}</div>
-                <div style={{fontSize:9,color:m.color}}>{m.passiveDesc}</div>
+                <div style={{fontSize:10,color:'#4ade80',marginBottom:4}}>+{m.bonus} {STAT_INFO[m.stat]?.name}</div>
+                <div style={{fontSize:10,color:'#c084fc',marginBottom:4,lineHeight:1.3}}>{passiveText}</div>
+                {m.viscScale && (
+                  <div style={{fontSize:9,opacity:0.6,marginBottom:2}}>Scales with Viscosity</div>
+                )}
                 {m.elementBonus && (
-                  <div style={{fontSize:8,marginTop:2}}>
+                  <div style={{fontSize:9,marginTop:2,display:'flex',gap:4}}>
                     {Object.entries(m.elementBonus).map(([elem, bonus]) => (
-                      <span key={elem} style={{color: ELEMENTS[elem]?.color}}>
+                      <span key={elem} style={{color: ELEMENTS[elem]?.color, background:`${ELEMENTS[elem]?.color}22`, padding:'1px 4px', borderRadius:3}}>
                         {ELEMENTS[elem]?.icon}+{bonus}%
                       </span>
                     ))}

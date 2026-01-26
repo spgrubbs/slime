@@ -22,6 +22,7 @@ import { BUILDINGS, RESEARCH } from './data/buildingData.js';
 import { HUMAN_TYPES, TD_WAVES, getTDScaling } from './data/towerDefenseData.js';
 import { RANCH_TYPES, RANCH_EVENTS, RANCH_UPGRADE_BONUSES, MAX_RANCH_LEVEL, RANCH_MAX_ACCUMULATION_TIME } from './data/ranchData.js';
 import { HIVE_ABILITIES, PRISM_SHOP, PHEROMONE_UPDATE_INTERVAL, PHEROMONES_PER_SLIME_PER_HOUR } from './data/hiveData.js';
+import { SKILL_TREES, SKILL_POINTS_PER_LEVEL, getSkillEffects } from './data/skillTreeData.js';
 
 // Utility imports
 import { genName, genId, formatTime, calculateElementalDamage, createDefaultElements, canGainElement, calculateElementGain } from './utils/helpers.js';
@@ -63,6 +64,7 @@ import {
   SettingsTab,
   Ranch,
 } from './components';
+import SkillTree from './components/SkillTree.jsx';
 
 // ============== OFFLINE PROGRESS ==============
 const calculateOfflineProgress = (saved, bonuses) => {
@@ -237,6 +239,7 @@ export default function HiveQueenGame() {
   const [towerDefense, setTowerDefense] = useState(null);
   const [monsterKills, setMonsterKills] = useState({});
   const [unlockedMutations, setUnlockedMutations] = useState([]);
+  const [purchasedSkills, setPurchasedSkills] = useState(['expeditionBasics', 'hiveFoundation', 'combatTraining']);
 
   // Ranch system state
   const [prisms, setPrisms] = useState(0);
@@ -265,9 +268,10 @@ export default function HiveQueenGame() {
     { id: 2, icon: '🗺️', label: 'Explore' },
     { id: 3, icon: '🏠', label: 'Ranch', unlock: 3 },
     { id: 4, icon: '🎯', label: 'Defense' },
-    { id: 5, icon: '📦', label: 'Inventory' },
-    { id: 6, icon: '📖', label: 'Compendium' },
-    { id: 7, icon: '⚙️', label: 'Settings' },
+    { id: 5, icon: '🌳', label: 'Skills' },
+    { id: 6, icon: '📦', label: 'Inventory' },
+    { id: 7, icon: '📖', label: 'Compendium' },
+    { id: 8, icon: '⚙️', label: 'Settings' },
   ];
 
   const maxJelly = BASE_JELLY + (queen.level - 1) * JELLY_PER_QUEEN_LEVEL + (builds.slimePit || 0) * 10;
@@ -451,6 +455,7 @@ export default function HiveQueenGame() {
           }
         });
         setUnlockedMutations(newUnlocks);
+        setPurchasedSkills(saved.purchasedSkills || ['expeditionBasics', 'hiveFoundation', 'combatTraining']);
 
         // Load ranch state
         setPrisms(saved.prisms || 0);
@@ -477,6 +482,7 @@ export default function HiveQueenGame() {
         setLastTowerDefense(saved.lastTowerDefense || 0);
         setMonsterKills(saved.monsterKills || {});
         setUnlockedMutations(saved.unlockedMutations || []);
+        setPurchasedSkills(saved.purchasedSkills || ['expeditionBasics', 'hiveFoundation', 'combatTraining']);
         setPrisms(saved.prisms || 0);
         setRanchBuildings(saved.ranchBuildings || {});
         setRanchAssignments(saved.ranchAssignments || {});
@@ -495,16 +501,16 @@ export default function HiveQueenGame() {
   useEffect(() => {
     if (!gameLoaded) return;
     const interval = setInterval(() => {
-      const state = { queen, bio, mats, slimes, exps, builds, research, activeRes, lastTowerDefense, monsterKills, unlockedMutations, prisms, ranchBuildings, ranchAssignments, ranchProgress, pheromones, lastPheromoneUpdate, activeHiveAbilities, lastSave: Date.now() };
+      const state = { queen, bio, mats, slimes, exps, builds, research, activeRes, lastTowerDefense, monsterKills, unlockedMutations, purchasedSkills, prisms, ranchBuildings, ranchAssignments, ranchProgress, pheromones, lastPheromoneUpdate, activeHiveAbilities, lastSave: Date.now() };
       if (saveGame(state)) {
         setLastSave(Date.now());
       }
     }, AUTO_SAVE_INTERVAL);
     return () => clearInterval(interval);
-  }, [gameLoaded, queen, bio, mats, slimes, exps, builds, research, activeRes, lastTowerDefense, monsterKills, unlockedMutations, prisms, ranchBuildings, ranchAssignments, ranchProgress, pheromones, lastPheromoneUpdate, activeHiveAbilities]);
+  }, [gameLoaded, queen, bio, mats, slimes, exps, builds, research, activeRes, lastTowerDefense, monsterKills, unlockedMutations, purchasedSkills, prisms, ranchBuildings, ranchAssignments, ranchProgress, pheromones, lastPheromoneUpdate, activeHiveAbilities]);
 
   const manualSave = () => {
-    const state = { queen, bio, mats, slimes, exps, builds, research, activeRes, lastTowerDefense, monsterKills, unlockedMutations, prisms, ranchBuildings, ranchAssignments, ranchProgress, pheromones, lastPheromoneUpdate, activeHiveAbilities, lastSave: Date.now() };
+    const state = { queen, bio, mats, slimes, exps, builds, research, activeRes, lastTowerDefense, monsterKills, unlockedMutations, purchasedSkills, prisms, ranchBuildings, ranchAssignments, ranchProgress, pheromones, lastPheromoneUpdate, activeHiveAbilities, lastSave: Date.now() };
     if (saveGame(state)) {
       setLastSave(Date.now());
       log('💾 Game saved!');
@@ -527,6 +533,7 @@ export default function HiveQueenGame() {
     setTowerDefense(null);
     setMonsterKills({});
     setUnlockedMutations([]);
+    setPurchasedSkills(['expeditionBasics', 'hiveFoundation', 'combatTraining']);
     setPrisms(0);
     setRanchBuildings({});
     setRanchAssignments({});
@@ -640,8 +647,26 @@ export default function HiveQueenGame() {
     if (bio < cost) return;
     setBio(p => p - cost);
     setQueen(q => ({ ...q, level: q.level + 1 }));
-    log(`Queen leveled up to ${queen.level + 1}!`);
+    log(`Queen leveled up to ${queen.level + 1}! +${SKILL_POINTS_PER_LEVEL}✨ skill point`);
   };
+
+  // Skill tree functions
+  const purchaseSkill = (skillId, cost) => {
+    setPurchasedSkills(prev => [...prev, skillId]);
+    log(`Learned ${skillId}! (-${cost}✨)`);
+  };
+
+  // Calculate available skill points
+  const totalSkillPoints = queen.level; // 1 point per level
+  const spentSkillPoints = purchasedSkills.reduce((total, skillId) => {
+    for (const tree of Object.values(SKILL_TREES)) {
+      if (tree.skills[skillId]) {
+        return total + tree.skills[skillId].cost;
+      }
+    }
+    return total;
+  }, 0);
+  const availableSkillPoints = totalSkillPoints - spentSkillPoints;
 
   // ============== RANCH FUNCTIONS ==============
   // ranchAssignments structure: { ranchId: [{ slimeId, startTime, accumulated: { biomass, element, stats, events } }] }
@@ -2723,6 +2748,15 @@ export default function HiveQueenGame() {
         )}
 
         {tab === 5 && (
+          <SkillTree
+            queenLevel={queen.level}
+            purchasedSkills={purchasedSkills}
+            onPurchaseSkill={purchaseSkill}
+            availablePoints={availableSkillPoints}
+          />
+        )}
+
+        {tab === 6 && (
           <div>
             <h3 style={{ margin: '0 0 10px', fontSize: 14, opacity: 0.7 }}>Materials</h3>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8, marginBottom: 20 }}>
@@ -2754,9 +2788,9 @@ export default function HiveQueenGame() {
           </div>
         )}
 
-        {tab === 6 && <Compendium queen={queen} monsterKills={monsterKills} unlockedMutations={unlockedMutations} />}
+        {tab === 7 && <Compendium queen={queen} monsterKills={monsterKills} unlockedMutations={unlockedMutations} />}
 
-        {tab === 7 && <SettingsTab onSave={manualSave} onDelete={handleDelete} lastSave={lastSave} prisms={prisms} slimes={slimes} purchasePrismItem={purchasePrismItem} />}
+        {tab === 8 && <SettingsTab onSave={manualSave} onDelete={handleDelete} lastSave={lastSave} prisms={prisms} slimes={slimes} purchasePrismItem={purchasePrismItem} />}
       </main>
 
       <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: 'rgba(0,0,0,0.95)', borderTop: '1px solid rgba(255,255,255,0.1)', maxHeight: 70, overflowY: 'auto', padding: 8 }}>
