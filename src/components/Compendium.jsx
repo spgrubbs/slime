@@ -44,11 +44,10 @@ const Compendium = ({ queen, monsterKills, unlockedMutations }) => {
           {z.monsters.map(mid => {
             const m = MONSTER_TYPES[mid];
             if (!m) return null;
-            const mutation = MUTATION_LIBRARY[m.trait];
-            if (!mutation) return null;
+            const mutation = m.mutation ? MUTATION_LIBRARY[m.mutation] : null;
             const kills = monsterKills?.[mid] || 0;
-            const isUnlocked = unlockedMutations?.includes(m.trait) || false;
-            const progress = Math.min(100, (kills / mutation.requiredKills) * 100);
+            const isUnlocked = mutation && unlockedMutations?.includes(m.mutation);
+            const progress = mutation ? Math.min(100, (kills / mutation.requiredKills) * 100) : 0;
             const discovered = kills > 0;
 
             if (!discovered) {
@@ -73,7 +72,7 @@ const Compendium = ({ queen, monsterKills, unlockedMutations }) => {
                         </span>
                       )}
                     </div>
-                    <div style={{ fontSize: 11, opacity: 0.7 }}>{'⭐'.repeat(m.diff)}</div>
+                    <div style={{ fontSize: 11, opacity: 0.7 }}>{'⭐'.repeat(m.tier || 1)}</div>
                   </div>
                   <div style={{ textAlign: 'right' }}>
                     <div style={{ fontSize: 16, fontWeight: 'bold', color: '#4ade80' }}>{kills}</div>
@@ -83,12 +82,14 @@ const Compendium = ({ queen, monsterKills, unlockedMutations }) => {
                 <div style={{ display: 'flex', gap: 12, marginBottom: 10, fontSize: 11, flexWrap: 'wrap' }}>
                   <span>❤️ {m.hp}</span><span>⚔️ {m.dmg}</span><span>🧬 +{m.biomass}</span>
                 </div>
-                <div style={{ marginBottom: 10 }}>
-                  <div style={{ fontSize: 10, opacity: 0.6, marginBottom: 4 }}>Abilities</div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                    {m.abilities.map((a,i) => <span key={i} style={{ fontSize: 10, padding: '3px 8px', background: 'rgba(168,85,247,0.2)', borderRadius: 4 }}>{a}</span>)}
+                {m.abilities && (
+                  <div style={{ marginBottom: 10 }}>
+                    <div style={{ fontSize: 10, opacity: 0.6, marginBottom: 4 }}>Abilities</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                      {m.abilities.map((a,i) => <span key={i} style={{ fontSize: 10, padding: '3px 8px', background: 'rgba(168,85,247,0.2)', borderRadius: 4 }}>{a}</span>)}
+                    </div>
                   </div>
-                </div>
+                )}
                 <div style={{ marginBottom: 10 }}>
                   <div style={{ fontSize: 10, opacity: 0.6, marginBottom: 4 }}>Material Drops</div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
@@ -96,49 +97,52 @@ const Compendium = ({ queen, monsterKills, unlockedMutations }) => {
                   </div>
                 </div>
 
-                {/* Mutation Progress Section */}
-                <div style={{
-                  background: isUnlocked ? `${mutation.color}22` : 'rgba(0,0,0,0.2)',
-                  borderRadius: 8,
-                  padding: 10,
-                  border: isUnlocked ? `2px solid ${mutation.color}` : '2px solid transparent'
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <span style={{ fontSize: 16 }}>{mutation.icon}</span>
-                      <span style={{ fontSize: 12, fontWeight: 'bold' }}>{mutation.name}</span>
-                      {isUnlocked && <span style={{ fontSize: 10, color: '#4ade80', background: 'rgba(74,222,128,0.2)', padding: '2px 6px', borderRadius: 4 }}>UNLOCKED</span>}
+                {/* Mutation Progress Section - only show if monster has a mutation */}
+                {mutation && (
+                  <div style={{
+                    background: isUnlocked ? 'rgba(168,85,247,0.15)' : 'rgba(0,0,0,0.2)',
+                    borderRadius: 8,
+                    padding: 10,
+                    border: isUnlocked ? '2px solid #a855f7' : '2px solid transparent'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ fontSize: 16 }}>{mutation.icon}</span>
+                        <span style={{ fontSize: 12, fontWeight: 'bold' }}>{mutation.name}</span>
+                        {isUnlocked && <span style={{ fontSize: 10, color: '#4ade80', background: 'rgba(74,222,128,0.2)', padding: '2px 6px', borderRadius: 4 }}>UNLOCKED</span>}
+                      </div>
+                      <span style={{ fontSize: 11, opacity: 0.8 }}>{kills}/{mutation.requiredKills}</span>
                     </div>
-                    <span style={{ fontSize: 11, opacity: 0.8 }}>{kills}/{mutation.requiredKills}</span>
-                  </div>
 
-                  {/* Progress Bar */}
-                  <div style={{ height: 8, background: 'rgba(0,0,0,0.4)', borderRadius: 4, overflow: 'hidden', marginBottom: 8 }}>
-                    <div style={{
-                      width: `${progress}%`,
-                      height: '100%',
-                      background: isUnlocked
-                        ? `linear-gradient(90deg, ${mutation.color}, ${mutation.color}cc)`
-                        : 'linear-gradient(90deg, #4ade80, #22c55e)',
-                      transition: 'width 0.3s',
-                      boxShadow: isUnlocked ? `0 0 8px ${mutation.color}` : 'none'
-                    }} />
-                  </div>
-
-                  {/* Mutation Details */}
-                  <div style={{ fontSize: 10, opacity: 0.8, marginBottom: 4 }}>
-                    +{mutation.bonus} {mutation.stat} • {mutation.passiveDesc}
-                  </div>
-                  {mutation.elementBonus && (
-                    <div style={{ fontSize: 10 }}>
-                      {Object.entries(mutation.elementBonus).map(([elem, bonus]) => (
-                        <span key={elem} style={{ color: ELEMENTS[elem]?.color, marginRight: 8 }}>
-                          {ELEMENTS[elem]?.icon}+{bonus}% starting affinity
-                        </span>
-                      ))}
+                    {/* Progress Bar */}
+                    <div style={{ height: 8, background: 'rgba(0,0,0,0.4)', borderRadius: 4, overflow: 'hidden', marginBottom: 8 }}>
+                      <div style={{
+                        width: `${progress}%`,
+                        height: '100%',
+                        background: isUnlocked
+                          ? 'linear-gradient(90deg, #a855f7, #c084fc)'
+                          : 'linear-gradient(90deg, #4ade80, #22c55e)',
+                        transition: 'width 0.3s',
+                        boxShadow: isUnlocked ? '0 0 8px #a855f7' : 'none'
+                      }} />
                     </div>
-                  )}
-                </div>
+
+                    {/* Mutation Details */}
+                    <div style={{ fontSize: 10, opacity: 0.8, marginBottom: 4 }}>
+                      {mutation.stat && mutation.bonus && `+${mutation.bonus} ${mutation.stat} • `}
+                      {typeof mutation.passiveDesc === 'function' ? mutation.passiveDesc(10) : mutation.passiveDesc}
+                    </div>
+                    {mutation.elementBonus && (
+                      <div style={{ fontSize: 10 }}>
+                        {Object.entries(mutation.elementBonus).map(([elem, bonus]) => (
+                          <span key={elem} style={{ color: ELEMENTS[elem]?.color, marginRight: 8 }}>
+                            {ELEMENTS[elem]?.icon}+{bonus}% starting affinity
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             );
           })}
@@ -194,7 +198,26 @@ const Compendium = ({ queen, monsterKills, unlockedMutations }) => {
             <div style={{ display: 'grid', gap: 10, fontSize: 12 }}>
               <div><strong>Unlocking</strong> - Defeat 100 of a monster type to unlock its mutation. Check the Compendium for progress.</div>
               <div><strong>Trait Slots</strong> - Basic slimes have 1 slot, Enhanced have 2, Elite have 3, Royal have 4.</div>
+              <div><strong>VISC Scaling</strong> - Mutation passive effects scale with the slime's Viscosity stat. Higher viscosity = stronger effects!</div>
               <div><strong>Mutation Effects</strong> - Each mutation grants stat bonuses and unique passive abilities. Some also provide starting elemental affinity.</div>
+            </div>
+          </div>
+
+          {/* Pheromone System */}
+          <div style={{ background: 'rgba(0,0,0,0.3)', borderRadius: 10, padding: 15 }}>
+            <div style={{ fontSize: 14, fontWeight: 'bold', marginBottom: 10, color: '#10b981' }}>🧪 Pheromone System</div>
+            <div style={{ display: 'grid', gap: 10, fontSize: 12 }}>
+              <div><strong>Earning Pheromones</strong> - Each slime generates 1 pheromone per hour. More slimes = faster accumulation.</div>
+              <div><strong>Hive Abilities</strong>:</div>
+              <ul style={{ margin: '0 0 0 20px', padding: 0 }}>
+                <li><strong>Primal Blessing</strong> - +10% stats for newly spawned slimes (2h)</li>
+                <li><strong>Nurturing Aura</strong> - Double ranch tick speed (4h)</li>
+                <li><strong>Swift Expedition</strong> - Expeditions move 50% faster (2h)</li>
+                <li><strong>Shared Vigor</strong> - Slimes heal 2 HP on attack (2h)</li>
+                <li><strong>Evolution Pulse</strong> - +50% elemental affinity gain (8h)</li>
+                <li><strong>Bountiful Harvest</strong> - +25% biomass and material drops (4h)</li>
+                <li><strong>Slime Decoy</strong> - Prevents first raider from reaching hive in TD (one-time)</li>
+              </ul>
             </div>
           </div>
 
