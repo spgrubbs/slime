@@ -13,6 +13,7 @@ export const getDefaultState = () => ({
   lastTowerDefense: 0,
   monsterKills: {},
   unlockedMutations: [],
+  purchasedSkills: ['expeditionBasics', 'hiveFoundation', 'combatTraining'], // Root skills free
   lastSave: Date.now(),
 });
 
@@ -90,6 +91,11 @@ const migrateSaveData = (data) => {
   // Ensure monsterKills exists
   if (!migrated.monsterKills) {
     migrated.monsterKills = {};
+  }
+
+  // Ensure purchasedSkills exists with root skills
+  if (!migrated.purchasedSkills) {
+    migrated.purchasedSkills = ['expeditionBasics', 'hiveFoundation', 'combatTraining'];
   }
 
   return migrated;

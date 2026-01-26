@@ -6,53 +6,53 @@ export const STAT_INFO = {
 };
 
 // Slime tier definitions
-// BALANCE: Basic slimes are weak and fragile - they need investment to survive
-// Tiers are unlocked via buildings, not queen level
-// biomassPerPercent: biomass needed for 1% stat increase (capped at 100% bonus)
-// maxBiomassBonus: maximum % bonus from biomass (100 = double stats)
+// BALANCE: Wide gaps between tiers create meaningful progression
+// Basic slimes are for Zone 1, suicide in Zone 3+
+// Each tier roughly doubles power from previous
+// biomassPerPercent: biomass needed for 1% stat increase (capped at maxBiomassBonus)
 export const SLIME_TIERS = {
   basic: {
     name: 'Basic',
     jellyCost: 5,
-    statMultiplier: 1,
+    statMultiplier: 1,      // Base stats ~5
     traitSlots: 1,
     color: '#4ade80',
-    baseHp: 25,           // Reduced from 50 - fragile without investment
-    biomassPerPercent: 5, // Reduced from 10 - biomass matters more
-    maxBiomassBonus: 100, // Cap at 100% bonus (double stats)
-    unlockBuilding: null, // Always available
+    baseHp: 30,             // Comfortable in Zone 1
+    biomassPerPercent: 3,   // Easy to grow initially
+    maxBiomassBonus: 80,    // Cap at 80% bonus
+    unlockBuilding: null,   // Always available
   },
   enhanced: {
     name: 'Enhanced',
-    jellyCost: 15,        // Increased from 10
-    statMultiplier: 1.3,  // Reduced from 1.5
+    jellyCost: 20,
+    statMultiplier: 2,      // 2x basic stats ~10
     traitSlots: 2,
     color: '#22d3ee',
-    baseHp: 40,           // Reduced from 80
-    biomassPerPercent: 15,// More biomass needed per %
+    baseHp: 75,             // Comfortable in Zone 2-3
+    biomassPerPercent: 8,
     maxBiomassBonus: 100,
     unlockBuilding: 'spawningVat',
   },
   elite: {
     name: 'Elite',
-    jellyCost: 30,        // Increased from 20
-    statMultiplier: 1.6,  // Reduced from 2
+    jellyCost: 50,
+    statMultiplier: 3.5,    // 3.5x basic stats ~17
     traitSlots: 3,
     color: '#a855f7',
-    baseHp: 60,           // Reduced from 120
-    biomassPerPercent: 30,// Even more biomass needed
-    maxBiomassBonus: 100,
+    baseHp: 150,            // Comfortable in Zone 4-5
+    biomassPerPercent: 20,
+    maxBiomassBonus: 120,
     unlockBuilding: 'royalHatchery',
   },
   royal: {
     name: 'Royal',
-    jellyCost: 50,        // Increased from 40
-    statMultiplier: 2,    // Reduced from 3
+    jellyCost: 100,
+    statMultiplier: 5,      // 5x basic stats ~25
     traitSlots: 4,
     color: '#f59e0b',
-    baseHp: 100,          // Reduced from 200
-    biomassPerPercent: 50,// Most biomass needed
-    maxBiomassBonus: 100,
+    baseHp: 300,            // Can tackle Zone 6
+    biomassPerPercent: 40,
+    maxBiomassBonus: 150,
     unlockBuilding: 'primordialChamber',
   },
 };
