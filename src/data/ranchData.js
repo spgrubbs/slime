@@ -17,7 +17,7 @@ export const RANCH_TYPES = {
     cycleTime: 30 * 60,                 // 30 minutes (in real seconds)
     capacity: 3,
     unlock: { type: 'level', value: 3 },
-    cost: { biomass: 100 },             // Increased from 50
+    cost: { biomass: 100 },
     upgradeCost: { biomass: 250, multiplier: 2 },
     color: '#22c55e',
   },
@@ -81,19 +81,50 @@ export const RANCH_TYPES = {
     upgradeCost: { biomass: 800, multiplier: 2 },
     color: '#16a34a',
   },
-  trainingPit: {
-    id: 'trainingPit',
-    name: 'Training Pit',
-    icon: '⚔️',
-    desc: 'An arena where slimes spar to add bonus stats.',
-    effect: 'stats',
-    effectValue: 0.5,                   // Base stat point bonus per cycle
-    cycleTime: 2 * 60 * 60,             // 2 hours
-    capacity: 4,
+  healingSpring: {
+    id: 'healingSpring',
+    name: 'Healing Spring',
+    icon: '💚',
+    desc: 'A restorative hot spring. Slimes here grant expedition regen based on total Viscosity.',
+    effect: 'expeditionBuff',
+    buffType: 'regen',
+    effectValue: 0.1,                   // 0.1 HP regen per Viscosity point per slime
+    cycleTime: 45 * 60,                 // 45 minutes
+    capacity: 3,
     unlock: { type: 'materials' },
-    cost: { biomass: 1000, mats: { 'Bone Dust': 8, 'Ogre Hide': 3 } },
+    cost: { biomass: 800, mats: { 'Life Essence': 3, 'Mana Crystal': 2 } },
+    upgradeCost: { biomass: 1200, multiplier: 2 },
+    color: '#10b981',
+  },
+  viscousVat: {
+    id: 'viscousVat',
+    name: 'Viscous Vat',
+    icon: '🧪',
+    desc: 'A thick, gooey chamber that permanently increases slime Viscosity.',
+    effect: 'statBoost',
+    statType: 'viscosity',
+    effectValue: 0.5,                   // +0.5 base viscosity per cycle
+    cycleTime: 2 * 60 * 60,             // 2 hours
+    capacity: 2,
+    unlock: { type: 'materials' },
+    cost: { biomass: 1000, mats: { 'Slime Core': 5, 'Mana Crystal': 3 } },
     upgradeCost: { biomass: 1500, multiplier: 2 },
-    color: '#dc2626',
+    color: '#a855f7',
+  },
+  hardeningChamber: {
+    id: 'hardeningChamber',
+    name: 'Hardening Chamber',
+    icon: '💎',
+    desc: 'A pressure chamber that permanently increases slime Firmness.',
+    effect: 'statBoost',
+    statType: 'firmness',
+    effectValue: 0.5,                   // +0.5 base firmness per cycle
+    cycleTime: 2 * 60 * 60,             // 2 hours
+    capacity: 2,
+    unlock: { type: 'materials' },
+    cost: { biomass: 1000, mats: { 'Iron Ore': 5, 'Golem Core': 2 } },
+    upgradeCost: { biomass: 1500, multiplier: 2 },
+    color: '#6b7280',
   },
   nullifier: {
     id: 'nullifier',
@@ -150,13 +181,22 @@ export const RANCH_EVENTS = [
     ranchTypes: ['fireGrove', 'tidalPool', 'earthenDen', 'verdantNest'],
   },
   {
-    id: 'friendlyRivalry',
-    msg: 'A friendly rivalry! Enhanced training.',
+    id: 'viscousOverflow',
+    msg: 'The chamber overflows with thick ooze!',
     type: 'bonus',
     effect: 'statsBoost',
     value: 1.5,                         // 50% more stats
     weight: 8,
-    ranchTypes: ['trainingPit'],
+    ranchTypes: ['viscousVat', 'hardeningChamber'],
+  },
+  {
+    id: 'healingWaters',
+    msg: 'The spring pulses with life energy!',
+    type: 'bonus',
+    effect: 'healingBoost',
+    value: 2,                           // Double healing effect
+    weight: 8,
+    ranchTypes: ['healingSpring'],
   },
   {
     id: 'luckyFind',
@@ -165,7 +205,7 @@ export const RANCH_EVENTS = [
     effect: 'material',
     value: 1,
     weight: 5,
-    ranchTypes: ['feedingPool', 'trainingPit'],
+    ranchTypes: ['feedingPool', 'healingSpring'],
   },
   {
     id: 'napTime',

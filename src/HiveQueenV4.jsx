@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 
 // Data imports
 import {
@@ -22,14 +22,14 @@ import { BUILDINGS, RESEARCH } from './data/buildingData.js';
 import { HUMAN_TYPES, TD_WAVES, getTDScaling } from './data/towerDefenseData.js';
 import { RANCH_TYPES, RANCH_EVENTS, RANCH_UPGRADE_BONUSES, MAX_RANCH_LEVEL, RANCH_MAX_ACCUMULATION_TIME } from './data/ranchData.js';
 import { HIVE_ABILITIES, PRISM_SHOP, PHEROMONE_UPDATE_INTERVAL, PHEROMONES_PER_SLIME_PER_HOUR } from './data/hiveData.js';
-import { SKILL_TREES, SKILL_POINTS_PER_LEVEL, getSkillEffects } from './data/skillTreeData.js';
+import { SKILL_TREES, SKILL_POINTS_PER_LEVEL, getSkillEffects, isZoneUnlocked, isBuildingUnlocked, isPheromoneUnlocked, isFeatureUnlocked } from './data/skillTreeData.js';
 
 // Utility imports
 import { genName, genId, formatTime, calculateElementalDamage, createDefaultElements, canGainElement, calculateElementGain } from './utils/helpers.js';
 import { saveGame, loadGame, deleteSave } from './utils/saveSystem.js';
 
-// Weighted monster spawning - rare monsters have 5% spawn rate, common share 95%
-const selectMonster = (zone) => {
+// Weighted monster spawning - rare monsters have 5% spawn rate (modified by rareSpawnMult), common share rest
+const selectMonster = (zone, rareSpawnMult = 1) => {
   const zd = ZONES[zone];
   if (!zd || !zd.monsters?.length) return null;
 
@@ -37,12 +37,13 @@ const selectMonster = (zone) => {
   const common = zd.monsters.filter(m => !MONSTER_TYPES[m]?.rare);
   const rare = zd.monsters.filter(m => MONSTER_TYPES[m]?.rare);
 
-  // 5% chance for rare monster (if any exist)
-  if (rare.length > 0 && Math.random() < 0.05) {
+  // Base 5% chance for rare monster, modified by skill tree bonus (e.g. 2x = 10%)
+  const rareChance = Math.min(0.25, 0.05 * rareSpawnMult); // Cap at 25%
+  if (rare.length > 0 && Math.random() < rareChance) {
     return rare[Math.floor(Math.random() * rare.length)];
   }
 
-  // 95% chance for common monster
+  // Rest chance for common monster
   if (common.length > 0) {
     return common[Math.floor(Math.random() * common.length)];
   }
@@ -274,7 +275,7 @@ export default function HiveQueenGame() {
     { id: 8, icon: '⚙️', label: 'Settings' },
   ];
 
-  const maxJelly = BASE_JELLY + (queen.level - 1) * JELLY_PER_QUEEN_LEVEL + (builds.slimePit || 0) * 10;
+  const maxJelly = BASE_JELLY + (queen.level - 1) * JELLY_PER_QUEEN_LEVEL + (builds.slimePit || 0) * 10 + (skillBonuses.maxJelly || 0);
   const usedJelly = slimes.reduce((s, sl) => s + sl.magCost, 0);
   const freeJelly = maxJelly - usedJelly;
   // BALANCE: Slime tiers are unlocked by buildings, not queen level
@@ -283,13 +284,43 @@ export default function HiveQueenGame() {
     if (!tier.unlockBuilding) return true; // Basic tier is always available
     return builds[tier.unlockBuilding] > 0;
   });
+  // Calculate skill effects from purchased skills (must be first, before bon)
+  const skillEffects = useMemo(() => getSkillEffects(purchasedSkills), [purchasedSkills]);
+  const skillBonuses = skillEffects.bonuses;
+
   const bon = {
     bio: 1 + (research.includes('efficientDigestion') ? 0.2 : 0),
     xp: 1 + (research.includes('enhancedAbsorption') ? 0.25 : 0),
     spd: 1 + (research.includes('swiftSlimes') ? 0.2 : 0),
     hp: 1 + (research.includes('slimeVitality') ? 0.15 : 0),
-    res: 1 + (builds.researchLab || 0) * 0.25,
+    res: (1 + (builds.researchLab || 0) * 0.25) * (1 + (skillBonuses.researchSpeed || 0) / 100),
   };
+
+  // Combined bonuses applying skill tree effects
+  const combatBonuses = {
+    firmness: 1 + ((skillBonuses.firmness || 0) + (skillBonuses.allCombat || 0)) / 100,
+    maxHp: 1 + ((skillBonuses.maxHp || 0) + (skillBonuses.allCombat || 0)) / 100,
+    viscosity: 1 + ((skillBonuses.viscosity || 0) + (skillBonuses.allCombat || 0)) / 100,
+    critChance: (skillBonuses.critChance || 0) / 100, // Flat addition to crit chance
+    damageReduction: skillBonuses.damageReduction || 0, // Flat damage reduction
+    elementalDamage: 1 + (skillBonuses.elementalDamage || 0) / 100, // Element damage multiplier
+    statusChance: 1 + (skillBonuses.statusChance || 0) / 100, // Status effect chance multiplier
+    executeDamage: 1 + (skillBonuses.executeDamage || 0) / 100, // Damage vs low HP targets
+    damageVsHighHp: 1 + (skillBonuses.damageVsHighHp || 0) / 100, // Damage vs high HP targets
+    lowHpDamage: 1 + (skillBonuses.lowHpDamage || 0) / 100, // Damage when low HP
+    lowHpDefense: (skillBonuses.lowHpDefense || 0) / 100, // Damage reduction when low HP
+    mutationPower: 1 + (skillBonuses.mutationPower || 0) / 100, // Mutation passive strength
+    expeditionBiomass: 1 + (skillBonuses.expeditionBiomass || 0) / 100,
+    materialDrop: 1 + (skillBonuses.materialDrop || 0) / 100,
+    rareSpawn: 1 + (skillBonuses.rareSpawn || 0) / 100,
+    expeditionRewards: 1 + (skillBonuses.expeditionRewards || 0) / 100,
+    biomassGain: 1 + ((skillBonuses.biomassGain || 0) + (skillBonuses.allResources || 0)) / 100,
+    defenseSlots: skillBonuses.defenseSlots || 0, // Extra tower defense slots
+    mutationSlots: skillBonuses.mutationSlots || 0, // Extra mutation slots for slimes
+  };
+
+  // Check if passive skill is purchased
+  const hasPassive = (passiveId) => skillEffects.passives.includes(passiveId);
 
   // Hive Ability Functions
   const isHiveAbilityActive = (abilityId) => {
@@ -594,8 +625,8 @@ export default function HiveQueenGame() {
     // Generate name with potential title from trait
     const slimeName = spawnTraits.length > 0 ? genName(spawnTraits) : name;
 
-    // Apply hardy trait HP bonus and glutton HP penalty
-    let maxHp = Math.floor((td.baseHp + baseStats.firmness * 3) * bon.hp);
+    // Apply hardy trait HP bonus, glutton HP penalty, and skill tree bonus
+    let maxHp = Math.floor((td.baseHp + baseStats.firmness * 3) * bon.hp * combatBonuses.maxHp);
     if (spawnTraits.includes('hardy')) maxHp = Math.floor(maxHp * 1.03);
     if (spawnTraits.includes('glutton')) maxHp = Math.floor(maxHp * 0.97);
 
@@ -749,7 +780,7 @@ export default function HiveQueenGame() {
     const ranch = RANCH_TYPES[ranchId];
     const building = ranchBuildings[ranchId];
     if (!ranch || !building) return 0;
-    return ranch.capacity + (building.level - 1) * RANCH_UPGRADE_BONUSES.capacity;
+    return ranch.capacity + (building.level - 1) * RANCH_UPGRADE_BONUSES.capacity + (skillBonuses.ranchSlots || 0);
   };
 
   const getAssignedSlimeIds = (ranchId) => {
@@ -917,37 +948,42 @@ export default function HiveQueenGame() {
     setEditingSlimeName(null);
   };
 
-  // Helper function to calculate current stats based on biomass
+  // Helper function to calculate current stats based on biomass and skill bonuses
   const getSlimeStats = (slime) => {
     if (!slime) return { firmness: 0, slipperiness: 0, viscosity: 0 };
 
+    let baseF, baseS, baseV;
+
     // Backward compatibility: if slime has old stats property, use it directly
     if (slime.stats && !slime.baseStats) {
-      return slime.stats;
-    }
-
-    // If no baseStats, return defaults based on tier
-    if (!slime.baseStats) {
+      baseF = slime.stats.firmness;
+      baseS = slime.stats.slipperiness;
+      baseV = slime.stats.viscosity;
+    } else if (!slime.baseStats) {
+      // If no baseStats, return defaults based on tier
       const tier = SLIME_TIERS[slime.tier];
       const baseStat = 4; // Default base stat for legacy slimes
-      return {
-        firmness: Math.floor(baseStat * (tier?.statMultiplier || 1)),
-        slipperiness: Math.floor(baseStat * (tier?.statMultiplier || 1)),
-        viscosity: Math.floor(baseStat * (tier?.statMultiplier || 1)),
-      };
+      baseF = Math.floor(baseStat * (tier?.statMultiplier || 1));
+      baseS = Math.floor(baseStat * (tier?.statMultiplier || 1));
+      baseV = Math.floor(baseStat * (tier?.statMultiplier || 1));
+    } else {
+      const tier = SLIME_TIERS[slime.tier];
+      const biomass = slime.biomass || 0;
+      const percentBonus = biomass / tier.biomassPerPercent; // How many percent increases
+      // BALANCE: Cap at maxBiomassBonus (default 100% = double stats)
+      const cappedBonus = Math.min(percentBonus, tier.maxBiomassBonus || 100);
+      const multiplier = 1 + (cappedBonus / 100); // Convert to multiplier
+
+      baseF = Math.floor(slime.baseStats.firmness * multiplier);
+      baseS = Math.floor(slime.baseStats.slipperiness * multiplier);
+      baseV = Math.floor(slime.baseStats.viscosity * multiplier);
     }
 
-    const tier = SLIME_TIERS[slime.tier];
-    const biomass = slime.biomass || 0;
-    const percentBonus = biomass / tier.biomassPerPercent; // How many percent increases
-    // BALANCE: Cap at maxBiomassBonus (default 100% = double stats)
-    const cappedBonus = Math.min(percentBonus, tier.maxBiomassBonus || 100);
-    const multiplier = 1 + (cappedBonus / 100); // Convert to multiplier
-
+    // Apply skill tree bonuses
     return {
-      firmness: Math.floor(slime.baseStats.firmness * multiplier),
-      slipperiness: Math.floor(slime.baseStats.slipperiness * multiplier),
-      viscosity: Math.floor(slime.baseStats.viscosity * multiplier),
+      firmness: Math.floor(baseF * combatBonuses.firmness),
+      slipperiness: baseS, // No skill bonus for slipperiness yet
+      viscosity: Math.floor(baseV * combatBonuses.viscosity),
     };
   };
 
@@ -1075,13 +1111,17 @@ export default function HiveQueenGame() {
     log(`Researching ${r.name}...`);
   };
 
+  // Calculate building cost with skill discount
+  const getBuildingDiscount = () => 1 + (skillBonuses.buildingCost || 0) / 100; // buildingCost is -20, so discount = 0.8
+
   const build = (id) => {
     const b = BUILDINGS[id];
     if (!b) return;
 
-    // Handle different cost formats
+    // Handle different cost formats with skill discount
+    const discount = getBuildingDiscount();
     const hasMats = b.cost.mats;
-    const biomassCost = b.cost.biomass || 0;
+    const biomassCost = Math.floor((b.cost.biomass || 0) * discount);
     const matCosts = hasMats ? b.cost.mats : (!b.cost.biomass ? b.cost : {});
 
     // Check affordability
@@ -1101,7 +1141,7 @@ export default function HiveQueenGame() {
   };
 
   // Tower Defense Functions
-  const tdSlots = 4 + (builds.defenseSlot || 0);
+  const tdSlots = 4 + (builds.defenseSlot || 0) + combatBonuses.defenseSlots;
   const tdAvailable = () => Date.now() - lastTowerDefense >= TOWER_DEFENSE_COOLDOWN;
 
   const startTowerDefense = (deployedSlimes) => {
@@ -1299,8 +1339,8 @@ export default function HiveQueenGame() {
             // Check if intermission is over
             if (exp.intermission.timer >= exp.intermission.duration) {
               exp.intermission = null;
-              // Spawn next monster (weighted by rarity)
-              const mt = selectMonster(zone) || zd.monsters[0];
+              // Spawn next monster (weighted by rarity, with skill bonus)
+              const mt = selectMonster(zone, combatBonuses.rareSpawn) || zd.monsters[0];
               const md = MONSTER_TYPES[mt];
               exp.monster = { type: mt, hp: md.hp, maxHp: md.hp, dmg: md.dmg, status: [] };
               bLog(zone, `A ${md.name} appears!`, '#22d3ee');
@@ -1345,17 +1385,17 @@ export default function HiveQueenGame() {
                 }
               }
             } else {
-              // Spawn monster immediately (weighted by rarity)
-              const mt = selectMonster(zone) || zd.monsters[0];
+              // Spawn monster immediately (weighted by rarity, with skill bonus)
+              const mt = selectMonster(zone, combatBonuses.rareSpawn) || zd.monsters[0];
               const md = MONSTER_TYPES[mt];
               exp.monster = { type: mt, hp: md.hp, maxHp: md.hp, dmg: md.dmg, status: [] };
               bLog(zone, `A ${md.name} appears!`, '#22d3ee');
               exp.turn = 0;
             }
           } else if (exp.exploring) {
-            // After exploration event, spawn the monster (weighted by rarity)
+            // After exploration event, spawn the monster (weighted by rarity, with skill bonus)
             exp.exploring = false;
-            const mt = selectMonster(zone) || zd.monsters[0];
+            const mt = selectMonster(zone, combatBonuses.rareSpawn) || zd.monsters[0];
             const md = MONSTER_TYPES[mt];
             exp.monster = { type: mt, hp: md.hp, maxHp: md.hp, dmg: md.dmg, status: [] };
             bLog(zone, `A ${md.name} appears!`, '#22d3ee');
@@ -1403,34 +1443,49 @@ export default function HiveQueenGame() {
                   let crit = false;
                   // Primordial trait: +10% all stats (applied to damage)
                   if (sl.traits?.includes('primordial')) dmg = Math.floor(dmg * 1.10);
-                  // Mutation passives
-                  if (sl.pass?.includes('ferocity')) dmg *= 1.15;
+                  // Mutation passives (apply mutationPower bonus from skill tree)
+                  const mutPower = combatBonuses.mutationPower;
+                  if (sl.pass?.includes('ferocity')) dmg *= 1 + (0.15 * mutPower);
                   // Personality traits affecting damage
                   if (sl.traits?.includes('brave') && p.hp < p.maxHp * 0.5) dmg = Math.floor(dmg * 1.05);
                   if (sl.traits?.includes('lazy')) dmg = Math.floor(dmg * 0.95);
                   if (sl.traits?.includes('timid')) dmg = Math.floor(dmg * 0.95);
                   if (sl.traits?.includes('reckless')) dmg = Math.floor(dmg * 1.10);
                   if (sl.traits?.includes('fierce') && !p.usedFierce) { dmg = Math.floor(dmg * 1.08); p.usedFierce = true; }
-                  // Crit chance calculation
-                  let critCh = 0.05 + stats.slipperiness * 0.01 + (sl.pass?.includes('trickster') ? 0.08 : 0);
+                  // Skill tree: +damage when slime is low HP (berserkMode)
+                  if (p.hp < p.maxHp * 0.3) dmg = Math.floor(dmg * combatBonuses.lowHpDamage);
+                  // Skill tree: +damage vs monsters with more HP (brutalForce)
+                  if (mon.maxHp > p.maxHp) dmg = Math.floor(dmg * combatBonuses.damageVsHighHp);
+                  // Skill tree: +damage vs low HP monsters (executioner)
+                  if (mon.hp < mon.maxHp * 0.25) dmg = Math.floor(dmg * combatBonuses.executeDamage);
+                  // Crit chance calculation - apply skill tree bonus
+                  let critCh = 0.05 + combatBonuses.critChance + stats.slipperiness * 0.01 + (sl.pass?.includes('trickster') ? 0.08 * mutPower : 0);
                   if (sl.traits?.includes('swift')) critCh += 0.03;
                   if (sl.pass?.includes('ambush') && !p.usedAmbush) { crit = true; p.usedAmbush = true; }
                   else if (Math.random() < critCh) crit = true;
-                  if (crit) dmg *= (1.5 + (sl.pass?.includes('crushing') ? 0.3 : 0));
+                  if (crit) dmg *= (1.5 + (sl.pass?.includes('crushing') ? 0.3 * mutPower : 0));
                   dmg = Math.floor(dmg * (1 + bon.spd * 0.1));
-                  // Apply elemental damage modifier (slime element vs monster element)
+                  // Apply elemental damage modifier (slime element vs monster element) with skill bonus
                   const preDmg = dmg;
                   dmg = calculateElementalDamage(dmg, sl.primaryElement, md.element);
+                  // Apply elemental damage skill bonus
+                  if (dmg > preDmg) dmg = Math.floor(dmg * combatBonuses.elementalDamage);
                   const elementBonus = dmg !== preDmg;
                   mon.hp -= dmg;
-                  if (sl.pass?.includes('fireBreath') && !(mon.status || []).some(s => s.type === 'burn') && Math.random() < 0.3 + stats.viscosity * 0.02) { mon.status.push({ type: 'burn', dur: STATUS_EFFECTS.burn.dur }); bLog(zone, `${sl.name} burns ${md.name}! 🔥`, '#f97316'); }
-                  if (sl.pass?.includes('poison') && !(mon.status || []).some(s => s.type === 'poison') && Math.random() < 0.35 + stats.viscosity * 0.02) { mon.status.push({ type: 'poison', dur: STATUS_EFFECTS.poison.dur }); bLog(zone, `${sl.name} poisons ${md.name}! 🧪`, '#22c55e'); }
+                  // Status effects with skill tree bonus
+                  const statusMult = combatBonuses.statusChance;
+                  if (sl.pass?.includes('fireBreath') && !(mon.status || []).some(s => s.type === 'burn') && Math.random() < (0.3 + stats.viscosity * 0.02) * statusMult) { mon.status.push({ type: 'burn', dur: STATUS_EFFECTS.burn.dur }); bLog(zone, `${sl.name} burns ${md.name}! 🔥`, '#f97316'); }
+                  if (sl.pass?.includes('poison') && !(mon.status || []).some(s => s.type === 'poison') && Math.random() < (0.35 + stats.viscosity * 0.02) * statusMult) { mon.status.push({ type: 'poison', dur: STATUS_EFFECTS.poison.dur }); bLog(zone, `${sl.name} poisons ${md.name}! 🧪`, '#22c55e'); }
                   exp.animSlime = p.id; exp.slimeAnim = 'attack'; exp.monAnim = 'hurt';
                   // Shared Vigor hive ability: heal 2 HP when attacking
                   if (isHiveAbilityActive('sharedVigor') && p.hp < p.maxHp) {
                     const healAmt = Math.min(2, p.maxHp - p.hp);
                     p.hp = Math.min(p.maxHp, p.hp + 2);
                     if (healAmt > 0) bLog(zone, `❤️‍🩹 ${sl.name} healed +${healAmt} (Shared Vigor)`, '#ec4899');
+                  }
+                  // Skill tree passive: regeneration (1 HP per battle tick)
+                  if (hasPassive('regeneration') && p.hp < p.maxHp) {
+                    p.hp = Math.min(p.maxHp, p.hp + 1);
                   }
                   // Show element effectiveness in battle log
                   let dmgMsg = `${sl.name} ${crit ? '💥CRITS' : 'hits'} for ${Math.floor(dmg)}!`;
@@ -1445,7 +1500,8 @@ export default function HiveQueenGame() {
                 exp.monsterKillCounts = exp.monsterKillCounts || {};
                 exp.monsterKillCounts[mon.type] = (exp.monsterKillCounts[mon.type] || 0) + 1;
 
-                let bioG = Math.floor(md.biomass * bon.bio);
+                // Apply skill tree bonuses: expeditionBiomass and biomassGain
+                let bioG = Math.floor(md.biomass * bon.bio * combatBonuses.expeditionBiomass * combatBonuses.biomassGain);
                 living.forEach(p => { const sl = slimes.find(s => s.id === p.id); if (sl?.pass?.includes('manaLeech')) bioG = Math.floor(bioG * 1.1); });
                 // Personality traits affecting biomass gain
                 let bioMultiplier = 1;
@@ -1484,8 +1540,8 @@ export default function HiveQueenGame() {
                   log('💎 Prism discovered!');
                 }
 
-                // Material drops - check for lucky trait bonus
-                let matDropChance = 0.5;
+                // Material drops - check for lucky trait bonus and skill tree bonus
+                let matDropChance = 0.5 * combatBonuses.materialDrop;
                 living.forEach(p => {
                   const sl = slimes.find(s => s.id === p.id);
                   if (sl?.traits?.includes('lucky')) matDropChance += 0.05;
@@ -1568,6 +1624,10 @@ export default function HiveQueenGame() {
                   if (tgtSl?.pass?.includes('armored')) inc *= 0.8;
                   // Reckless trait: +5% damage taken
                   if (tgtSl?.traits?.includes('reckless')) inc = Math.floor(inc * 1.05);
+                  // Skill tree: flat damage reduction (toughHide)
+                  if (combatBonuses.damageReduction > 0) inc = Math.max(1, inc - combatBonuses.damageReduction);
+                  // Skill tree: 50% less damage when below 20% HP (lastStand)
+                  if (tgt.hp < tgt.maxHp * 0.2 && combatBonuses.lowHpDefense > 0) inc = Math.floor(inc * (1 - combatBonuses.lowHpDefense));
                   // Apply elemental damage modifier (monster element vs slime element)
                   const preInc = Math.floor(inc);
                   inc = calculateElementalDamage(Math.floor(inc), md.element, tgtSl?.primaryElement);
@@ -1582,6 +1642,12 @@ export default function HiveQueenGame() {
                   if ((md.trait === 'dragonHeart' || md.trait === 'phoenixFeather') && !(tgt.status || []).some(s => s.type === 'burn') && Math.random() < 0.25) { tgt.status.push({ type: 'burn', dur: STATUS_EFFECTS.burn.dur }); bLog(zone, `${tgtSl?.name} burning! 🔥`, '#f97316'); }
                   if (md.trait === 'wolfFang' && !(tgt.status || []).some(s => s.type === 'bleed') && Math.random() < 0.2) { tgt.status.push({ type: 'bleed', dur: STATUS_EFFECTS.bleed.dur }); bLog(zone, `${tgtSl?.name} bleeding! 🩸`, '#ef4444'); }
                   exp.monAnim = 'attack'; exp.animSlime = tgt.id; exp.slimeAnim = 'hurt';
+                }
+                // Skill tree passive: tactical retreat (escape with 1 HP instead of dying, once per expedition)
+                if (tgt.hp <= 0 && tgtSl && hasPassive('tacticalRetreat') && !tgt.usedTacticalRetreat) {
+                  tgt.hp = 1;
+                  tgt.usedTacticalRetreat = true;
+                  bLog(zone, `${tgtSl.name} barely escapes! (Tactical Retreat) 💧`, '#22d3ee');
                 }
                 if (tgt.hp <= 0 && tgtSl) {
                   if (tgtSl.pass?.includes('undying') && !tgt.usedUndying) { tgt.hp = 1; tgt.usedUndying = true; bLog(zone, `${tgtSl.name} survives! (Undying) 💀`, '#d4d4d4'); }
@@ -1692,9 +1758,10 @@ export default function HiveQueenGame() {
                 const timeInRanch = (Date.now() - assignment.startTime) / 1000;
                 if (timeInRanch >= RANCH_MAX_ACCUMULATION_TIME) return; // Capped
 
-                // Calculate lazy trait bonus
+                // Calculate lazy trait bonus and skill tree ranch yield bonus
                 const lazyBonus = slime.traits?.includes('lazy') ? 1.1 : 1;
-                const totalMult = effectMult * eventMult * lazyBonus;
+                const ranchYieldBonus = 1 + (skillBonuses.ranchYield || 0) / 100;
+                const totalMult = effectMult * eventMult * lazyBonus * ranchYieldBonus;
 
                 const acc = { ...assignment.accumulated };
 
@@ -2213,9 +2280,9 @@ export default function HiveQueenGame() {
                 </div>
               )}
 
-              {/* Ability List */}
+              {/* Ability List - Only show unlocked abilities */}
               <div style={{ display: 'grid', gap: 10 }}>
-                {Object.entries(HIVE_ABILITIES).map(([id, ability]) => {
+                {Object.entries(HIVE_ABILITIES).filter(([id]) => isPheromoneUnlocked(id, purchasedSkills)).map(([id, ability]) => {
                   const isActive = isHiveAbilityActive(id);
                   const canAfford = pheromones >= ability.cost;
                   return (
@@ -2256,6 +2323,11 @@ export default function HiveQueenGame() {
                     </div>
                   );
                 })}
+                {Object.entries(HIVE_ABILITIES).filter(([id]) => !isPheromoneUnlocked(id, purchasedSkills)).length > 0 && (
+                  <div style={{ opacity: 0.5, fontSize: 11, textAlign: 'center', padding: 10 }}>
+                    🔒 {Object.entries(HIVE_ABILITIES).filter(([id]) => !isPheromoneUnlocked(id, purchasedSkills)).length} more abilities locked - unlock via Skill Tree
+                  </div>
+                )}
                   </div>
                 </div>
               )}
@@ -2293,14 +2365,15 @@ export default function HiveQueenGame() {
                     </div>
                   )}
                   <div style={{ display: 'grid', gap: 10 }}>
-                    {Object.entries(BUILDINGS).map(([k, b]) => {
+                    {Object.entries(BUILDINGS).filter(([k]) => isBuildingUnlocked(k, purchasedSkills)).map(([k, b]) => {
                       // Handle different cost formats:
                       // - number: research item (biomass only, has time)
                       // - { biomass, mats }: building with biomass + materials
                       // - { mat: count, ... }: legacy material-only format
                       const isResearch = typeof b.cost === 'number';
                       const hasMats = !isResearch && b.cost.mats;
-                      const biomassCost = isResearch ? b.cost : (b.cost.biomass || 0);
+                      const discount = getBuildingDiscount();
+                      const biomassCost = Math.floor((isResearch ? b.cost : (b.cost.biomass || 0)) * discount);
                       const matCosts = hasMats ? b.cost.mats : (!isResearch && !b.cost.biomass ? b.cost : {});
 
                       const done = research.includes(k);
@@ -2398,7 +2471,7 @@ export default function HiveQueenGame() {
             </div>
           ) : (
             <div>
-              <SlimeForge unlockedMutations={unlockedMutations} biomass={bio} freeJelly={freeJelly} tiers={unlockedTiers} onSpawn={spawn} />
+              <SlimeForge unlockedMutations={unlockedMutations} biomass={bio} freeJelly={freeJelly} tiers={unlockedTiers} onSpawn={spawn} extraMutationSlots={combatBonuses.mutationSlots} />
               {slimes.length ? (
                 <div style={{ display: 'grid', gap: 10 }}>
                 {slimes.map(s => {
@@ -2466,7 +2539,7 @@ export default function HiveQueenGame() {
             )}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 15 }}>
               {Object.entries(ZONES).map(([k, z]) => {
-                const ok = z.unlocked || queen.level >= (z.unlock || 0);
+                const ok = isZoneUnlocked(k, purchasedSkills);
                 const has = exps[k];
                 const zoneElement = z.element ? ELEMENTS[z.element] : null;
                 return <button key={k} onClick={() => ok && setSelZone(k)} style={{ padding: 10, background: selZone === k ? 'rgba(34,211,238,0.2)' : 'rgba(0,0,0,0.3)', border: `2px solid ${selZone === k ? '#22d3ee' : has ? '#4ade80' : 'transparent'}`, borderRadius: 8, color: '#fff', cursor: ok ? 'pointer' : 'not-allowed', opacity: ok ? 1 : 0.4, textAlign: 'center', position: 'relative' }}>
@@ -2477,7 +2550,7 @@ export default function HiveQueenGame() {
                       {zoneElement.icon}
                     </div>
                   )}
-                  {!ok && <div style={{ fontSize: 9, color: '#f59e0b' }}>Lv.{z.unlock}</div>}
+                  {!ok && <div style={{ fontSize: 9, color: '#f59e0b' }}>🔒 Skills</div>}
                   {has && <div style={{ fontSize: 9, color: '#4ade80' }}>⚔️ {has.kills}</div>}
                 </button>;
               })}
@@ -2490,11 +2563,11 @@ export default function HiveQueenGame() {
                 <div style={{ fontSize: 12, marginBottom: 8, opacity: 0.7 }}>Expedition Duration</div>
                 <div style={{ display: 'flex', gap: 8, marginBottom: 15 }}>
                   {[
-                    { value: '10', label: '10 Enemies', icon: '⚡', unlock: null },
-                    { value: '100', label: '100 Enemies', icon: '⚔️', unlock: 'extendedExpedition' },
-                    { value: 'infinite', label: 'Infinite', icon: '♾️', unlock: 'infiniteExpedition' }
+                    { value: '10', label: '10 Enemies', icon: '⚡', unlock: null, skillUnlock: null },
+                    { value: '100', label: '100 Enemies', icon: '⚔️', unlock: 'extendedExpedition', skillUnlock: null },
+                    { value: 'infinite', label: 'Infinite', icon: '♾️', unlock: null, skillUnlock: 'infiniteExpedition' }
                   ].map(opt => {
-                    const unlocked = !opt.unlock || research.includes(opt.unlock);
+                    const unlocked = (!opt.unlock || research.includes(opt.unlock)) && (!opt.skillUnlock || isFeatureUnlocked(opt.skillUnlock, purchasedSkills));
                     return (
                       <button
                         key={opt.value}
@@ -2546,7 +2619,7 @@ export default function HiveQueenGame() {
         )}
 
         {tab === 3 && (
-          queen.level >= 3 ? (
+          isFeatureUnlocked('ranch', purchasedSkills) ? (
             <Ranch
               queen={queen}
               bio={bio}
@@ -2576,8 +2649,7 @@ export default function HiveQueenGame() {
             <div style={{ textAlign: 'center', padding: 40 }}>
               <div style={{ fontSize: 48, marginBottom: 15 }}>🏠</div>
               <div style={{ fontSize: 16, fontWeight: 'bold', marginBottom: 10 }}>Slime Ranch</div>
-              <div style={{ opacity: 0.7, marginBottom: 15 }}>Unlock at Queen Level 3</div>
-              <div style={{ fontSize: 12, color: '#f59e0b' }}>Current Level: {queen.level}</div>
+              <div style={{ opacity: 0.7, marginBottom: 15 }}>🔒 Unlock via Skill Tree (Hive Growth → Cultivation Pools)</div>
             </div>
           )
         )}
