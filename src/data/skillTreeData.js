@@ -5,7 +5,7 @@
 // Effect types:
 // - passive: Always active once purchased
 // - unlock: Unlocks a feature/ability
-// - pheromone: Unlocks a new pheromone ability
+// - mana: Unlocks a new mana ability
 // - bonus: Provides a percentage bonus
 
 export const SKILL_TREES = {
@@ -77,7 +77,7 @@ export const SKILL_TREES = {
         id: 'swiftExpeditionSkill',
         name: 'Quickslime Secretion',
         icon: '🏃',
-        desc: 'Unlock Swift Expedition pheromone',
+        desc: 'Unlock Swift Expedition ability',
         cost: 2,
         requires: ['scoutingParty'],
         effect: { type: 'pheromone', ability: 'swiftExpedition' },
@@ -122,7 +122,7 @@ export const SKILL_TREES = {
         id: 'sharedVigorSkill',
         name: 'Hivemind Pulse',
         icon: '❤️‍🩹',
-        desc: 'Unlock Shared Vigor pheromone',
+        desc: 'Unlock Shared Vigor ability',
         cost: 3,
         requires: ['swiftExpeditionSkill'],
         effect: { type: 'pheromone', ability: 'sharedVigor' },
@@ -156,7 +156,7 @@ export const SKILL_TREES = {
         id: 'evolutionPulseSkill',
         name: 'Mutagenic Burst',
         icon: '⚡',
-        desc: 'Unlock Evolution Pulse pheromone',
+        desc: 'Unlock Evolution Pulse ability',
         cost: 4,
         requires: ['sharedVigorSkill'],
         effect: { type: 'pheromone', ability: 'evolutionPulse' },
@@ -290,7 +290,7 @@ export const SKILL_TREES = {
         id: 'bountifulHarvestSkill',
         name: 'Harvest Secretion',
         icon: '🌾',
-        desc: 'Unlock Bountiful Harvest pheromone',
+        desc: 'Unlock Bountiful Harvest ability',
         cost: 2,
         requires: ['jellyProduction'],
         effect: { type: 'pheromone', ability: 'bountifulHarvest' },
@@ -335,7 +335,7 @@ export const SKILL_TREES = {
         id: 'nurturingAuraSkill',
         name: 'Nurturing Mist',
         icon: '💚',
-        desc: 'Unlock Nurturing Aura pheromone',
+        desc: 'Unlock Nurturing Aura ability',
         cost: 3,
         requires: ['bountifulHarvestSkill'],
         effect: { type: 'pheromone', ability: 'nurturingAura' },
@@ -515,7 +515,7 @@ export const SKILL_TREES = {
         id: 'spawnBoostSkill',
         name: 'Primal Ooze',
         icon: '🌟',
-        desc: 'Unlock Primal Blessing pheromone',
+        desc: 'Unlock Primal Blessing ability',
         cost: 3,
         requires: ['criticalStrikes'],
         effect: { type: 'pheromone', ability: 'spawnBoost' },
@@ -582,7 +582,7 @@ export const SKILL_TREES = {
         id: 'decoySkill',
         name: 'Decoy Blob',
         icon: '🎭',
-        desc: 'Unlock Slime Decoy pheromone',
+        desc: 'Unlock Slime Decoy ability',
         cost: 3,
         requires: ['mutationSynergy'],
         effect: { type: 'pheromone', ability: 'decoy' },

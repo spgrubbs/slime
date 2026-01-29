@@ -228,7 +228,7 @@ const SettingsTab = ({ onSave, onDelete, lastSave, prisms, slimes, purchasePrism
             <li>Assign slimes to ranches for passive gains (up to 24 hours)</li>
             <li>Higher tier slimes have more trait slots</li>
             <li>Check the Compendium for mutation unlock requirements</li>
-            <li>Activate Hive Abilities from the Queen tab using Pheromones!</li>
+            <li>Activate Hive Abilities from the Queen tab using Mana!</li>
           </ul>
         </div>
       </div>

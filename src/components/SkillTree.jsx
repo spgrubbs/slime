@@ -411,7 +411,7 @@ const SkillDetailPanel = ({ skill, state, treeColor, purchasedSkills, allSkills,
         <div style={{ fontSize: 13, color: '#4ade80' }}>
           {skill.effect.type === 'bonus' && `${skill.effect.stat}: ${skill.effect.value > 0 ? '+' : ''}${skill.effect.value}%`}
           {skill.effect.type === 'unlock' && `Unlocks: ${skill.effect.zone || skill.effect.building || skill.effect.feature}`}
-          {skill.effect.type === 'pheromone' && `Unlocks pheromone ability: ${skill.effect.ability}`}
+          {skill.effect.type === 'pheromone' && `Unlocks mana ability: ${skill.effect.ability}`}
           {skill.effect.type === 'passive' && skill.effect.desc}
         </div>
       </div>
