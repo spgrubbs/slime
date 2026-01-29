@@ -11,10 +11,10 @@
 // To enable custom element icons, uncomment the require statements below:
 
 export const ELEMENT_SPRITES = {
-  fire: null,    // require('../assets/sprites/elements/fire.png'),
-  water: null,   // require('../assets/sprites/elements/water.png'),
-  nature: null,  // require('../assets/sprites/elements/nature.png'),
-  earth: null,   // require('../assets/sprites/elements/earth.png'),
+  fire: require('../assets/sprites/elements/fire.png'),
+  water: require('../assets/sprites/elements/water.png'),
+  nature: require('../assets/sprites/elements/nature.png'),
+  earth: require('../assets/sprites/elements/earth.png'),
 };
 
 // =============================================================================
@@ -28,7 +28,7 @@ export const ELEMENT_SPRITES = {
 
 export const SLIME_SPRITES = {
   basic: {
-    idle: null,   // require('../assets/sprites/slime-basic-idle.png'),
+    idle: require('../assets/sprites/slime-basic-idle.png'),
     attack: null, // require('../assets/sprites/slime-basic-attack.png'),
     hurt: null,   // require('../assets/sprites/slime-basic-hurt.png'),
   },
