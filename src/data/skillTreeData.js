@@ -10,29 +10,29 @@
 
 export const SKILL_TREES = {
   expedition: {
-    name: 'Expedition',
+    name: 'Ooze Outreach',
     icon: '🗺️',
     color: '#22d3ee',
-    description: 'Explore farther, fight smarter, survive longer',
+    description: 'Send your slimes farther, smarter, stronger',
     skills: {
       // Root skill
       expeditionBasics: {
         id: 'expeditionBasics',
-        name: 'Expedition Basics',
+        name: 'Slime Scouts',
         icon: '🥾',
-        desc: 'Begin training slimes for expeditions',
-        cost: 0, // Free starting node
+        desc: 'Train slimes to venture beyond the hive',
+        cost: 0,
         requires: [],
         effect: { type: 'passive', desc: 'Enables expeditions' },
         position: { x: 50, y: 10 },
       },
 
-      // First tier - basic improvements
+      // First tier
       swampAccess: {
         id: 'swampAccess',
-        name: 'Swamp Navigation',
+        name: 'Mucus Membrane',
         icon: '🌿',
-        desc: 'Unlock the Murky Swamp zone',
+        desc: 'Slimes can traverse the Murky Swamp',
         cost: 2,
         requires: ['expeditionBasics'],
         effect: { type: 'unlock', zone: 'swamp' },
@@ -41,7 +41,7 @@ export const SKILL_TREES = {
 
       scoutingParty: {
         id: 'scoutingParty',
-        name: 'Scouting Party',
+        name: 'Sensory Tendrils',
         icon: '👁️',
         desc: 'See monster stats before engaging',
         cost: 1,
@@ -52,7 +52,7 @@ export const SKILL_TREES = {
 
       forageExpertise: {
         id: 'forageExpertise',
-        name: 'Forage Expertise',
+        name: 'Absorptive Coating',
         icon: '🍄',
         desc: '+15% biomass from expeditions',
         cost: 1,
@@ -64,9 +64,9 @@ export const SKILL_TREES = {
       // Second tier
       cavesAccess: {
         id: 'cavesAccess',
-        name: 'Cave Delving',
+        name: 'Crystalline Adaptation',
         icon: '💎',
-        desc: 'Unlock the Crystal Grotto zone',
+        desc: 'Slimes can explore Crystal Grotto',
         cost: 3,
         requires: ['swampAccess'],
         effect: { type: 'unlock', zone: 'caves' },
@@ -75,9 +75,9 @@ export const SKILL_TREES = {
 
       swiftExpeditionSkill: {
         id: 'swiftExpeditionSkill',
-        name: 'Swift March',
+        name: 'Quickslime Secretion',
         icon: '🏃',
-        desc: 'Unlock Swift Expedition pheromone ability',
+        desc: 'Unlock Swift Expedition pheromone',
         cost: 2,
         requires: ['scoutingParty'],
         effect: { type: 'pheromone', ability: 'swiftExpedition' },
@@ -86,7 +86,7 @@ export const SKILL_TREES = {
 
       materialScavenger: {
         id: 'materialScavenger',
-        name: 'Material Scavenger',
+        name: 'Sticky Retrieval',
         icon: '📦',
         desc: '+20% material drop rate',
         cost: 2,
@@ -97,8 +97,8 @@ export const SKILL_TREES = {
 
       tacticalRetreat: {
         id: 'tacticalRetreat',
-        name: 'Tactical Retreat',
-        icon: '🏳️',
+        name: 'Emergency Liquefaction',
+        icon: '💧',
         desc: 'Slimes escape with 1 HP instead of dying (once per expedition)',
         cost: 2,
         requires: ['scoutingParty'],
@@ -109,9 +109,9 @@ export const SKILL_TREES = {
       // Third tier
       ruinsAccess: {
         id: 'ruinsAccess',
-        name: 'Fire Walking',
+        name: 'Thermal Resistance',
         icon: '🔥',
-        desc: 'Unlock the Cinderspire zone',
+        desc: 'Slimes can survive in Cinderspire',
         cost: 4,
         requires: ['cavesAccess'],
         effect: { type: 'unlock', zone: 'ruins' },
@@ -120,9 +120,9 @@ export const SKILL_TREES = {
 
       sharedVigorSkill: {
         id: 'sharedVigorSkill',
-        name: 'Battle Meditation',
+        name: 'Hivemind Pulse',
         icon: '❤️‍🩹',
-        desc: 'Unlock Shared Vigor pheromone ability',
+        desc: 'Unlock Shared Vigor pheromone',
         cost: 3,
         requires: ['swiftExpeditionSkill'],
         effect: { type: 'pheromone', ability: 'sharedVigor' },
@@ -131,7 +131,7 @@ export const SKILL_TREES = {
 
       rareHunter: {
         id: 'rareHunter',
-        name: 'Rare Hunter',
+        name: 'Predator Instinct',
         icon: '⭐',
         desc: 'Double rare monster spawn chance',
         cost: 3,
@@ -143,9 +143,9 @@ export const SKILL_TREES = {
       // Fourth tier
       peaksAccess: {
         id: 'peaksAccess',
-        name: 'Mountain Climbing',
+        name: 'Altitude Gel',
         icon: '⛰️',
-        desc: 'Unlock the Stormspire Summit zone',
+        desc: 'Slimes can climb Stormspire Summit',
         cost: 5,
         requires: ['ruinsAccess'],
         effect: { type: 'unlock', zone: 'peaks' },
@@ -154,9 +154,9 @@ export const SKILL_TREES = {
 
       evolutionPulseSkill: {
         id: 'evolutionPulseSkill',
-        name: 'Evolution Mastery',
+        name: 'Mutagenic Burst',
         icon: '⚡',
-        desc: 'Unlock Evolution Pulse pheromone ability',
+        desc: 'Unlock Evolution Pulse pheromone',
         cost: 4,
         requires: ['sharedVigorSkill'],
         effect: { type: 'pheromone', ability: 'evolutionPulse' },
@@ -165,7 +165,7 @@ export const SKILL_TREES = {
 
       veteranBonuses: {
         id: 'veteranBonuses',
-        name: 'Veteran Bonuses',
+        name: 'Battle-Hardened Membrane',
         icon: '🎖️',
         desc: 'Slimes gain +1% stats per 10 kills',
         cost: 4,
@@ -177,9 +177,9 @@ export const SKILL_TREES = {
       // Fifth tier
       voidAccess: {
         id: 'voidAccess',
-        name: 'Void Attunement',
+        name: 'Void Membrane',
         icon: '🕳️',
-        desc: 'Unlock the Void Abyss zone',
+        desc: 'Slimes can enter the Void Abyss',
         cost: 6,
         requires: ['peaksAccess'],
         effect: { type: 'unlock', zone: 'volcano' },
@@ -188,7 +188,7 @@ export const SKILL_TREES = {
 
       infiniteEndurance: {
         id: 'infiniteEndurance',
-        name: 'Infinite Endurance',
+        name: 'Endless Ooze',
         icon: '♾️',
         desc: 'Unlock infinite expeditions',
         cost: 5,
@@ -200,7 +200,7 @@ export const SKILL_TREES = {
       // Capstone
       expeditionMastery: {
         id: 'expeditionMastery',
-        name: 'Expedition Mastery',
+        name: 'Apex Ooze',
         icon: '🌟',
         desc: '+25% all expedition rewards',
         cost: 6,
@@ -212,17 +212,17 @@ export const SKILL_TREES = {
   },
 
   economy: {
-    name: 'Economy',
+    name: 'Hive Growth',
     icon: '🏛️',
     color: '#f59e0b',
-    description: 'Build your hive, grow your resources',
+    description: 'Expand the hive, multiply your resources',
     skills: {
       // Root
       hiveFoundation: {
         id: 'hiveFoundation',
-        name: 'Hive Foundation',
+        name: 'Core Chamber',
         icon: '🏠',
-        desc: 'Establish the basics of hive building',
+        desc: 'Establish the foundations of your hive',
         cost: 0,
         requires: [],
         effect: { type: 'passive', desc: 'Enables buildings' },
@@ -232,7 +232,7 @@ export const SKILL_TREES = {
       // First tier
       biomassEfficiency: {
         id: 'biomassEfficiency',
-        name: 'Biomass Efficiency',
+        name: 'Efficient Digestion',
         icon: '🧬',
         desc: '+10% biomass from all sources',
         cost: 1,
@@ -243,7 +243,7 @@ export const SKILL_TREES = {
 
       jellyProduction: {
         id: 'jellyProduction',
-        name: 'Jelly Production',
+        name: 'Jelly Glands',
         icon: '🍯',
         desc: '+5 max Royal Jelly capacity',
         cost: 1,
@@ -252,12 +252,12 @@ export const SKILL_TREES = {
         position: { x: 70, y: 22 },
       },
 
-      // Second tier - branching
+      // Second tier
       spawningVatUnlock: {
         id: 'spawningVatUnlock',
-        name: 'Spawning Vat Plans',
+        name: 'Spawning Vat Blueprint',
         icon: '🧫',
-        desc: 'Unlock Spawning Vat building (Enhanced slimes)',
+        desc: 'Unlock Spawning Vat (Enhanced slimes)',
         cost: 2,
         requires: ['biomassEfficiency'],
         effect: { type: 'unlock', building: 'spawningVat' },
@@ -266,9 +266,9 @@ export const SKILL_TREES = {
 
       researchLabUnlock: {
         id: 'researchLabUnlock',
-        name: 'Research Methods',
+        name: 'Cerebral Node',
         icon: '🔬',
-        desc: 'Unlock Research Chamber building',
+        desc: 'Unlock Research Chamber',
         cost: 2,
         requires: ['biomassEfficiency'],
         effect: { type: 'unlock', building: 'researchLab' },
@@ -277,8 +277,8 @@ export const SKILL_TREES = {
 
       ranchBasics: {
         id: 'ranchBasics',
-        name: 'Ranch Basics',
-        icon: '🐄',
+        name: 'Cultivation Pools',
+        icon: '🌱',
         desc: 'Unlock the Ranch system',
         cost: 2,
         requires: ['jellyProduction'],
@@ -288,7 +288,7 @@ export const SKILL_TREES = {
 
       bountifulHarvestSkill: {
         id: 'bountifulHarvestSkill',
-        name: 'Bountiful Harvest',
+        name: 'Harvest Secretion',
         icon: '🌾',
         desc: 'Unlock Bountiful Harvest pheromone',
         cost: 2,
@@ -300,9 +300,9 @@ export const SKILL_TREES = {
       // Third tier
       royalHatcheryUnlock: {
         id: 'royalHatcheryUnlock',
-        name: 'Royal Hatchery Plans',
+        name: 'Royal Hatchery Blueprint',
         icon: '🥚',
-        desc: 'Unlock Royal Hatchery building (Elite slimes)',
+        desc: 'Unlock Royal Hatchery (Elite slimes)',
         cost: 3,
         requires: ['spawningVatUnlock'],
         effect: { type: 'unlock', building: 'royalHatchery' },
@@ -311,7 +311,7 @@ export const SKILL_TREES = {
 
       researchSpeed: {
         id: 'researchSpeed',
-        name: 'Accelerated Research',
+        name: 'Neural Acceleration',
         icon: '⚗️',
         desc: '+25% research speed',
         cost: 2,
@@ -322,9 +322,9 @@ export const SKILL_TREES = {
 
       ranchExpansion: {
         id: 'ranchExpansion',
-        name: 'Ranch Expansion',
+        name: 'Expanded Pools',
         icon: '🏡',
-        desc: '+2 ranch slots',
+        desc: '+2 ranch building slots',
         cost: 3,
         requires: ['ranchBasics'],
         effect: { type: 'bonus', stat: 'ranchSlots', value: 2 },
@@ -333,7 +333,7 @@ export const SKILL_TREES = {
 
       nurturingAuraSkill: {
         id: 'nurturingAuraSkill',
-        name: 'Nurturing Ways',
+        name: 'Nurturing Mist',
         icon: '💚',
         desc: 'Unlock Nurturing Aura pheromone',
         cost: 3,
@@ -345,7 +345,7 @@ export const SKILL_TREES = {
       // Fourth tier
       primordialChamberUnlock: {
         id: 'primordialChamberUnlock',
-        name: 'Primordial Chamber Plans',
+        name: 'Primordial Chamber Blueprint',
         icon: '👑',
         desc: 'Unlock Primordial Chamber (Royal slimes)',
         cost: 5,
@@ -356,7 +356,7 @@ export const SKILL_TREES = {
 
       buildingDiscount: {
         id: 'buildingDiscount',
-        name: 'Efficient Construction',
+        name: 'Organic Architecture',
         icon: '🔨',
         desc: '-20% building costs',
         cost: 3,
@@ -367,9 +367,9 @@ export const SKILL_TREES = {
 
       premiumCreatures: {
         id: 'premiumCreatures',
-        name: 'Premium Creatures',
+        name: 'Enriched Cultivation',
         icon: '✨',
-        desc: 'Ranch creatures give +50% resources',
+        desc: 'Ranch buildings give +50% resources',
         cost: 4,
         requires: ['ranchExpansion', 'nurturingAuraSkill'],
         effect: { type: 'bonus', stat: 'ranchYield', value: 50 },
@@ -379,9 +379,9 @@ export const SKILL_TREES = {
       // Fifth tier
       slimePitUnlock: {
         id: 'slimePitUnlock',
-        name: 'Slime Pit Plans',
+        name: 'Slime Pit Blueprint',
         icon: '🕳️',
-        desc: 'Unlock Slime Pit building (+10 jelly cap each)',
+        desc: 'Unlock Slime Pit (+10 jelly cap each)',
         cost: 4,
         requires: ['primordialChamberUnlock', 'buildingDiscount'],
         effect: { type: 'unlock', building: 'slimePit' },
@@ -391,7 +391,7 @@ export const SKILL_TREES = {
       // Capstone
       economyMastery: {
         id: 'economyMastery',
-        name: 'Economy Mastery',
+        name: 'Hive Overmind',
         icon: '💰',
         desc: '+15% all resource gains',
         cost: 6,
@@ -403,17 +403,17 @@ export const SKILL_TREES = {
   },
 
   combat: {
-    name: 'Combat',
+    name: 'Slime Combat',
     icon: '⚔️',
     color: '#ef4444',
-    description: 'Strengthen your slimes for battle',
+    description: 'Harden your slimes for battle',
     skills: {
       // Root
       combatTraining: {
         id: 'combatTraining',
-        name: 'Combat Training',
+        name: 'Combat Instincts',
         icon: '🎯',
-        desc: 'Train slimes in the art of battle',
+        desc: 'Awaken the predator within your slimes',
         cost: 0,
         requires: [],
         effect: { type: 'passive', desc: 'Enables combat' },
@@ -423,7 +423,7 @@ export const SKILL_TREES = {
       // First tier - three branches
       offensiveFocus: {
         id: 'offensiveFocus',
-        name: 'Offensive Focus',
+        name: 'Hardened Core',
         icon: '💪',
         desc: '+10% Firmness for all slimes',
         cost: 1,
@@ -434,7 +434,7 @@ export const SKILL_TREES = {
 
       defensiveFocus: {
         id: 'defensiveFocus',
-        name: 'Defensive Focus',
+        name: 'Resilient Gel',
         icon: '🛡️',
         desc: '+10% max HP for all slimes',
         cost: 1,
@@ -445,7 +445,7 @@ export const SKILL_TREES = {
 
       utilityFocus: {
         id: 'utilityFocus',
-        name: 'Utility Focus',
+        name: 'Thickened Viscosity',
         icon: '🌀',
         desc: '+10% Viscosity for all slimes',
         cost: 1,
@@ -457,7 +457,7 @@ export const SKILL_TREES = {
       // Second tier
       criticalStrikes: {
         id: 'criticalStrikes',
-        name: 'Critical Strikes',
+        name: 'Piercing Pseudopods',
         icon: '💥',
         desc: '+5% critical hit chance',
         cost: 2,
@@ -468,7 +468,7 @@ export const SKILL_TREES = {
 
       brutalForce: {
         id: 'brutalForce',
-        name: 'Brutal Force',
+        name: 'Crushing Mass',
         icon: '🔥',
         desc: '+15% damage vs monsters with more HP',
         cost: 2,
@@ -479,7 +479,7 @@ export const SKILL_TREES = {
 
       toughHide: {
         id: 'toughHide',
-        name: 'Tough Hide',
+        name: 'Rubbery Membrane',
         icon: '🧱',
         desc: 'Reduce incoming damage by 2 (min 1)',
         cost: 2,
@@ -490,7 +490,7 @@ export const SKILL_TREES = {
 
       elementalAffinity: {
         id: 'elementalAffinity',
-        name: 'Elemental Affinity',
+        name: 'Elemental Absorption',
         icon: '🔮',
         desc: '+25% elemental damage bonuses',
         cost: 2,
@@ -501,7 +501,7 @@ export const SKILL_TREES = {
 
       statusMastery: {
         id: 'statusMastery',
-        name: 'Status Mastery',
+        name: 'Toxic Secretions',
         icon: '☠️',
         desc: '+20% status effect chance',
         cost: 2,
@@ -513,7 +513,7 @@ export const SKILL_TREES = {
       // Third tier
       spawnBoostSkill: {
         id: 'spawnBoostSkill',
-        name: 'Primal Blessing',
+        name: 'Primal Ooze',
         icon: '🌟',
         desc: 'Unlock Primal Blessing pheromone',
         cost: 3,
@@ -524,7 +524,7 @@ export const SKILL_TREES = {
 
       executioner: {
         id: 'executioner',
-        name: 'Executioner',
+        name: 'Finishing Surge',
         icon: '⚡',
         desc: '+30% damage to monsters below 25% HP',
         cost: 3,
@@ -535,7 +535,7 @@ export const SKILL_TREES = {
 
       regeneration: {
         id: 'regeneration',
-        name: 'Regeneration',
+        name: 'Regenerative Gel',
         icon: '💚',
         desc: 'Slimes heal 1 HP per battle tick',
         cost: 3,
@@ -546,7 +546,7 @@ export const SKILL_TREES = {
 
       mutationSynergy: {
         id: 'mutationSynergy',
-        name: 'Mutation Synergy',
+        name: 'Mutation Resonance',
         icon: '🧬',
         desc: '+25% mutation passive effects',
         cost: 3,
@@ -558,7 +558,7 @@ export const SKILL_TREES = {
       // Fourth tier
       berserkMode: {
         id: 'berserkMode',
-        name: 'Berserk Mode',
+        name: 'Feral Ooze',
         icon: '😤',
         desc: '+50% damage when below 30% HP',
         cost: 4,
@@ -569,7 +569,7 @@ export const SKILL_TREES = {
 
       lastStand: {
         id: 'lastStand',
-        name: 'Last Stand',
+        name: 'Desperate Coagulation',
         icon: '🏰',
         desc: 'Take 50% less damage when below 20% HP',
         cost: 4,
@@ -580,7 +580,7 @@ export const SKILL_TREES = {
 
       decoySkill: {
         id: 'decoySkill',
-        name: 'Decoy Tactics',
+        name: 'Decoy Blob',
         icon: '🎭',
         desc: 'Unlock Slime Decoy pheromone',
         cost: 3,
@@ -592,7 +592,7 @@ export const SKILL_TREES = {
       // Fifth tier
       towerDefenseSlots: {
         id: 'towerDefenseSlots',
-        name: 'Defense Formation',
+        name: 'Defensive Formation',
         icon: '🎯',
         desc: '+2 Tower Defense party slots',
         cost: 4,
@@ -615,7 +615,7 @@ export const SKILL_TREES = {
       // Capstone
       combatMastery: {
         id: 'combatMastery',
-        name: 'Combat Mastery',
+        name: 'Apex Predator',
         icon: '🏆',
         desc: '+10% all combat stats',
         cost: 6,
@@ -628,7 +628,6 @@ export const SKILL_TREES = {
 };
 
 // Calculate skill points needed to reach a level
-// Level 1 = 0 points total, Level 2 = 1 point, Level 3 = 2 points, etc.
 export const getSkillPointsForLevel = (level) => level - 1;
 
 // Calculate total skill points earned at a given level
@@ -661,6 +660,9 @@ export const getSkillEffects = (purchasedSkills) => {
     unlocks: [],
     pheromones: [],
     passives: [],
+    unlockedZones: ['forest'], // Forest always unlocked
+    unlockedBuildings: [],
+    unlockedFeatures: [],
   };
 
   Object.values(SKILL_TREES).forEach(tree => {
@@ -673,6 +675,9 @@ export const getSkillEffects = (purchasedSkills) => {
             break;
           case 'unlock':
             effects.unlocks.push(eff);
+            if (eff.zone) effects.unlockedZones.push(eff.zone);
+            if (eff.building) effects.unlockedBuildings.push(eff.building);
+            if (eff.feature) effects.unlockedFeatures.push(eff.feature);
             break;
           case 'pheromone':
             effects.pheromones.push(eff.ability);
@@ -686,4 +691,40 @@ export const getSkillEffects = (purchasedSkills) => {
   });
 
   return effects;
+};
+
+// Helper to check if a zone is unlocked
+export const isZoneUnlocked = (zoneId, purchasedSkills) => {
+  if (zoneId === 'forest') return true; // Always unlocked
+  const effects = getSkillEffects(purchasedSkills);
+  return effects.unlockedZones.includes(zoneId);
+};
+
+// Helper to check if a building is unlocked
+export const isBuildingUnlocked = (buildingId, purchasedSkills) => {
+  // Some buildings don't need skill unlocks (research items)
+  const skillGatedBuildings = ['spawningVat', 'royalHatchery', 'primordialChamber', 'slimePit', 'researchLab'];
+  if (!skillGatedBuildings.includes(buildingId)) return true;
+
+  const effects = getSkillEffects(purchasedSkills);
+  return effects.unlockedBuildings.includes(buildingId);
+};
+
+// Helper to check if a pheromone ability is unlocked
+export const isPheromoneUnlocked = (abilityId, purchasedSkills) => {
+  const effects = getSkillEffects(purchasedSkills);
+  return effects.pheromones.includes(abilityId);
+};
+
+// Helper to check if a feature is unlocked
+export const isFeatureUnlocked = (featureId, purchasedSkills) => {
+  // Ranch requires ranchBasics skill
+  if (featureId === 'ranch') {
+    return purchasedSkills.includes('ranchBasics');
+  }
+  if (featureId === 'infiniteExpedition') {
+    return purchasedSkills.includes('infiniteEndurance');
+  }
+  const effects = getSkillEffects(purchasedSkills);
+  return effects.unlockedFeatures.includes(featureId);
 };

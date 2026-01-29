@@ -5,13 +5,13 @@ import { BASE_SLIME_COST, TRAIT_JELLY_COST, ELEMENTS } from '../data/gameConstan
 import { genName } from '../utils/helpers.js';
 import SlimeSprite from './SlimeSprite.jsx';
 
-const SlimeForge = ({ unlockedMutations, biomass, freeJelly, tiers, onSpawn }) => {
+const SlimeForge = ({ unlockedMutations, biomass, freeJelly, tiers, onSpawn, extraMutationSlots = 0 }) => {
   const [tier, setTier] = useState('basic');
   const [selMutations, setSelMutations] = useState([]);
   const [name, setName] = useState(genName());
 
   const td = SLIME_TIERS[tier];
-  const maxM = td.traitSlots;
+  const maxM = td.traitSlots + extraMutationSlots;
   const bioCost = BASE_SLIME_COST + selMutations.length * 5;
   const jellyCost = td.jellyCost + selMutations.length * TRAIT_JELLY_COST;
 
@@ -104,7 +104,9 @@ const SlimeForge = ({ unlockedMutations, biomass, freeJelly, tiers, onSpawn }) =
                 <div style={{fontSize:10,color:'#4ade80',marginBottom:4}}>+{m.bonus} {STAT_INFO[m.stat]?.name}</div>
                 <div style={{fontSize:10,color:'#c084fc',marginBottom:4,lineHeight:1.3}}>{passiveText}</div>
                 {m.viscScale && (
-                  <div style={{fontSize:9,opacity:0.6,marginBottom:2}}>Scales with Viscosity</div>
+                  <div style={{fontSize:9,opacity:0.6,marginBottom:2}}>
+                    Formula: {m.baseValue || m.baseChance || 0} + {m.viscScale} × VISC
+                  </div>
                 )}
                 {m.elementBonus && (
                   <div style={{fontSize:9,marginTop:2,display:'flex',gap:4}}>
