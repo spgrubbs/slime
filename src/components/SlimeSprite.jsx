@@ -4,6 +4,17 @@ import { STATUS_EFFECTS, MUTATION_LIBRARY } from '../data/traitData.js';
 import { ELEMENTS } from '../data/gameConstants.js';
 import { SLIME_SPRITES, ELEMENT_SPRITES, ANIMATION_CONFIG } from '../data/spriteConfig.js';
 
+// Helper to normalize sprite imports (handles both CommonJS and ES module formats)
+const getSpriteSrc = (sprite) => {
+  if (!sprite) return null;
+  // Handle ES module default export: { default: "path" }
+  if (typeof sprite === 'object' && sprite.default) {
+    return sprite.default;
+  }
+  // Handle direct string path
+  return sprite;
+};
+
 // Use centralized config
 const SPRITE_SHEETS = SLIME_SPRITES;
 const FRAME_DURATION = ANIMATION_CONFIG.frameDuration;
@@ -29,7 +40,8 @@ const SlimeSprite = ({
   const hpPct = hp !== undefined && maxHp ? (hp / maxHp) * 100 : 100;
 
   // Get sprite sheet for this tier and animation
-  const spriteSheet = SPRITE_SHEETS[tier]?.[anim] || SPRITE_SHEETS[tier]?.idle;
+  const rawSpriteSheet = SPRITE_SHEETS[tier]?.[anim] || SPRITE_SHEETS[tier]?.idle;
+  const spriteSheet = getSpriteSrc(rawSpriteSheet);
   const useSprite = !!spriteSheet;
 
   // Animate through frames for sprite sheet
@@ -207,7 +219,7 @@ const ElementBadge = ({ element, size }) => {
   if (!elementData) return null;
 
   // Check if element has a custom sprite in the config
-  const spriteIcon = ELEMENT_SPRITES[element];
+  const spriteIcon = getSpriteSrc(ELEMENT_SPRITES[element]);
   const useSprite = !!spriteIcon;
 
   return (
