@@ -21,7 +21,7 @@ import { ZONES, EXPLORATION_EVENTS, INTERMISSION_EVENTS, INTERMISSION_DURATION }
 import { BUILDINGS, RESEARCH } from './data/buildingData.js';
 import { HUMAN_TYPES, TD_WAVES, getTDScaling } from './data/towerDefenseData.js';
 import { RANCH_TYPES, RANCH_EVENTS, RANCH_UPGRADE_BONUSES, MAX_RANCH_LEVEL, RANCH_MAX_ACCUMULATION_TIME } from './data/ranchData.js';
-import { HIVE_ABILITIES, PRISM_SHOP, PHEROMONE_UPDATE_INTERVAL, PHEROMONES_PER_SLIME_PER_HOUR } from './data/hiveData.js';
+import { HIVE_ABILITIES, PRISM_SHOP, MANA_UPDATE_INTERVAL, MANA_PER_SLIME_PER_HOUR } from './data/hiveData.js';
 import { SKILL_TREES, SKILL_POINTS_PER_LEVEL, getSkillEffects, isZoneUnlocked, isBuildingUnlocked, isPheromoneUnlocked, isFeatureUnlocked } from './data/skillTreeData.js';
 
 // Utility imports
@@ -249,9 +249,9 @@ export default function HiveQueenGame() {
   const [ranchProgress, setRanchProgress] = useState({});
   const [ranchEvents, setRanchEvents] = useState([]);
 
-  // Pheromone and Hive Ability system
-  const [pheromones, setPheromones] = useState(0);
-  const [lastPheromoneUpdate, setLastPheromoneUpdate] = useState(Date.now());
+  // Mana and Hive Ability system
+  const [mana, setMana] = useState(0);
+  const [lastManaUpdate, setLastManaUpdate] = useState(Date.now());
   const [activeHiveAbilities, setActiveHiveAbilities] = useState({});
   // Format: { abilityId: expirationTimestamp, ... }
 
@@ -267,13 +267,16 @@ export default function HiveQueenGame() {
     { id: 0, icon: '👑', label: 'Queen' },
     { id: 1, icon: '🟢', label: 'Slimes', badge: slimes.length },
     { id: 2, icon: '🗺️', label: 'Explore' },
-    { id: 3, icon: '🏠', label: 'Ranch', unlock: 3 },
+    { id: 3, icon: '🏠', label: 'Ranch', skillUnlock: 'ranch' },
     { id: 4, icon: '🎯', label: 'Defense' },
     { id: 5, icon: '🌳', label: 'Skills' },
     { id: 6, icon: '📦', label: 'Inventory' },
     { id: 7, icon: '📖', label: 'Compendium' },
     { id: 8, icon: '⚙️', label: 'Settings' },
   ];
+
+  // Filter tabs based on skill unlocks
+  const visibleTabs = tabs.filter(t => !t.skillUnlock || isFeatureUnlocked(t.skillUnlock, purchasedSkills));
 
   const maxJelly = BASE_JELLY + (queen.level - 1) * JELLY_PER_QUEEN_LEVEL + (builds.slimePit || 0) * 10 + (skillBonuses.maxJelly || 0);
   const usedJelly = slimes.reduce((s, sl) => s + sl.magCost, 0);
@@ -322,6 +325,44 @@ export default function HiveQueenGame() {
   // Check if passive skill is purchased
   const hasPassive = (passiveId) => skillEffects.passives.includes(passiveId);
 
+  // Calculate ranch bonuses from active ranch buildings
+  const getRanchBonuses = useCallback(() => {
+    const bonuses = {
+      towerDefenseDamage: 0, // % bonus to TD damage from warDen
+      bonusManaPerHour: 0,   // Extra mana per hour from manaWell
+      expeditionRewards: 0,  // % bonus to expedition rewards from scoutPost
+    };
+
+    Object.entries(ranchBuildings).forEach(([ranchId, building]) => {
+      const ranch = RANCH_TYPES[ranchId];
+      const assigned = ranchAssignments[ranchId] || [];
+      if (!ranch || !building || assigned.length === 0) return;
+
+      const effectMult = 1 + (building.level - 1) * RANCH_UPGRADE_BONUSES.effectMultiplier;
+
+      assigned.forEach(assignment => {
+        const slimeId = typeof assignment === 'object' ? assignment.slimeId : assignment;
+        const slime = slimes.find(s => s.id === slimeId);
+        if (!slime) return;
+
+        const stats = slime.baseStats || { firmness: 4, slipperiness: 4, viscosity: 4 };
+
+        if (ranch.effect === 'defenseBonus' && ranch.buffType === 'damage') {
+          // warDen: +damage% based on firmness
+          bonuses.towerDefenseDamage += stats.firmness * ranch.effectValue * effectMult;
+        } else if (ranch.effect === 'manaBonus') {
+          // manaWell: +mana/hour based on viscosity
+          bonuses.bonusManaPerHour += stats.viscosity * ranch.effectValue * effectMult;
+        } else if (ranch.effect === 'expeditionBonus' && ranch.buffType === 'rewards') {
+          // scoutPost: +rewards% based on slipperiness
+          bonuses.expeditionRewards += stats.slipperiness * ranch.effectValue * effectMult;
+        }
+      });
+    });
+
+    return bonuses;
+  }, [ranchBuildings, ranchAssignments, slimes]);
+
   // Hive Ability Functions
   const isHiveAbilityActive = (abilityId) => {
     const expiration = activeHiveAbilities[abilityId];
@@ -330,10 +371,11 @@ export default function HiveQueenGame() {
 
   const activateHiveAbility = (abilityId) => {
     const ability = HIVE_ABILITIES[abilityId];
-    if (!ability || pheromones < ability.cost) return;
+    if (!ability || mana < ability.cost) return;
+    if (!isPheromoneUnlocked(abilityId, purchasedSkills)) return; // Must be unlocked via skill tree
     if (isHiveAbilityActive(abilityId)) return; // Already active
 
-    setPheromones(p => p - ability.cost);
+    setMana(p => p - ability.cost);
     setActiveHiveAbilities(prev => ({
       ...prev,
       [abilityId]: Date.now() + ability.duration
@@ -494,9 +536,9 @@ export default function HiveQueenGame() {
         setRanchAssignments(saved.ranchAssignments || {});
         setRanchProgress(saved.ranchProgress || {});
 
-        // Load pheromone/hive ability state
-        setPheromones(saved.pheromones || 0);
-        setLastPheromoneUpdate(saved.lastPheromoneUpdate || Date.now());
+        // Load mana/hive ability state
+        setMana(saved.mana || saved.pheromones || 0);
+        setLastManaUpdate(saved.lastManaUpdate || saved.lastPheromoneUpdate || Date.now());
         setActiveHiveAbilities(saved.activeHiveAbilities || {});
 
         setWelcomeBack(offline);
@@ -518,8 +560,8 @@ export default function HiveQueenGame() {
         setRanchBuildings(saved.ranchBuildings || {});
         setRanchAssignments(saved.ranchAssignments || {});
         setRanchProgress(saved.ranchProgress || {});
-        setPheromones(saved.pheromones || 0);
-        setLastPheromoneUpdate(saved.lastPheromoneUpdate || Date.now());
+        setMana(saved.mana || saved.pheromones || 0);
+        setLastManaUpdate(saved.lastManaUpdate || saved.lastPheromoneUpdate || Date.now());
         setActiveHiveAbilities(saved.activeHiveAbilities || {});
       }
       setLastSave(saved.lastSave);
@@ -532,13 +574,13 @@ export default function HiveQueenGame() {
   useEffect(() => {
     if (!gameLoaded) return;
     const interval = setInterval(() => {
-      const state = { queen, bio, mats, slimes, exps, builds, research, activeRes, lastTowerDefense, monsterKills, unlockedMutations, purchasedSkills, prisms, ranchBuildings, ranchAssignments, ranchProgress, pheromones, lastPheromoneUpdate, activeHiveAbilities, lastSave: Date.now() };
+      const state = { queen, bio, mats, slimes, exps, builds, research, activeRes, lastTowerDefense, monsterKills, unlockedMutations, purchasedSkills, prisms, ranchBuildings, ranchAssignments, ranchProgress, mana, lastManaUpdate, activeHiveAbilities, lastSave: Date.now() };
       if (saveGame(state)) {
         setLastSave(Date.now());
       }
     }, AUTO_SAVE_INTERVAL);
     return () => clearInterval(interval);
-  }, [gameLoaded, queen, bio, mats, slimes, exps, builds, research, activeRes, lastTowerDefense, monsterKills, unlockedMutations, purchasedSkills, prisms, ranchBuildings, ranchAssignments, ranchProgress, pheromones, lastPheromoneUpdate, activeHiveAbilities]);
+  }, [gameLoaded, queen, bio, mats, slimes, exps, builds, research, activeRes, lastTowerDefense, monsterKills, unlockedMutations, purchasedSkills, prisms, ranchBuildings, ranchAssignments, ranchProgress, mana, lastManaUpdate, activeHiveAbilities]);
 
   const manualSave = () => {
     const state = { queen, bio, mats, slimes, exps, builds, research, activeRes, lastTowerDefense, monsterKills, unlockedMutations, purchasedSkills, prisms, ranchBuildings, ranchAssignments, ranchProgress, pheromones, lastPheromoneUpdate, activeHiveAbilities, lastSave: Date.now() };
@@ -570,8 +612,8 @@ export default function HiveQueenGame() {
     setRanchAssignments({});
     setRanchProgress({});
     setRanchEvents([]);
-    setPheromones(0);
-    setLastPheromoneUpdate(Date.now());
+    setMana(0);
+    setLastManaUpdate(Date.now());
     setActiveHiveAbilities({});
     log('🗑️ Save deleted. Starting fresh!');
   };
@@ -929,7 +971,7 @@ export default function HiveQueenGame() {
 
   const [expDuration, setExpDuration] = useState('10'); // '10', '100', 'infinite'
   const [expSummaries, setExpSummaries] = useState([]); // Array of expedition summaries
-  const [expandedSections, setExpandedSections] = useState({ research: false, buildings: false, queenUnlocks: false, pheromones: false }); // Collapsible sections
+  const [expandedSections, setExpandedSections] = useState({ research: false, buildings: false, queenUnlocks: false, mana: false }); // Collapsible sections
   const [queenSlimeModal, setQueenSlimeModal] = useState(null); // Slime ID for modal on queen screen
   const [editingSlimeName, setEditingSlimeName] = useState(null); // { id, name, title } for editing
 
@@ -1276,15 +1318,18 @@ export default function HiveQueenGame() {
       const dtSeconds = (now - lastTick) / 1000 * speed; // Real seconds for research/ranch
       setLastTick(now);
 
-      // Pheromone generation - 1 per slime per hour, updated every minute
-      const timeSincePheromoneUpdate = now - lastPheromoneUpdate;
-      if (timeSincePheromoneUpdate >= PHEROMONE_UPDATE_INTERVAL) {
-        const hoursElapsed = timeSincePheromoneUpdate / 3600000;
-        const pheromoneGain = Math.floor(slimes.length * hoursElapsed * PHEROMONES_PER_SLIME_PER_HOUR);
-        if (pheromoneGain > 0) {
-          setPheromones(p => p + pheromoneGain);
+      // Mana generation - 1 per slime per hour + ranch bonus, updated every minute
+      const timeSinceManaUpdate = now - lastManaUpdate;
+      if (timeSinceManaUpdate >= MANA_UPDATE_INTERVAL) {
+        const hoursElapsed = timeSinceManaUpdate / 3600000;
+        const ranchBonuses = getRanchBonuses();
+        const baseManaRate = slimes.length * MANA_PER_SLIME_PER_HOUR;
+        const totalManaRate = baseManaRate + ranchBonuses.bonusManaPerHour;
+        const manaGain = Math.floor(totalManaRate * hoursElapsed);
+        if (manaGain > 0) {
+          setMana(p => p + manaGain);
         }
-        setLastPheromoneUpdate(now);
+        setLastManaUpdate(now);
       }
 
       // Clean up expired hive abilities
@@ -1500,8 +1545,10 @@ export default function HiveQueenGame() {
                 exp.monsterKillCounts = exp.monsterKillCounts || {};
                 exp.monsterKillCounts[mon.type] = (exp.monsterKillCounts[mon.type] || 0) + 1;
 
-                // Apply skill tree bonuses: expeditionBiomass and biomassGain
-                let bioG = Math.floor(md.biomass * bon.bio * combatBonuses.expeditionBiomass * combatBonuses.biomassGain);
+                // Apply skill tree bonuses and ranch bonuses: expeditionBiomass, biomassGain, scoutPost
+                const ranchBonuses = getRanchBonuses();
+                const scoutBonus = 1 + ranchBonuses.expeditionRewards;
+                let bioG = Math.floor(md.biomass * bon.bio * combatBonuses.expeditionBiomass * combatBonuses.biomassGain * scoutBonus);
                 living.forEach(p => { const sl = slimes.find(s => s.id === p.id); if (sl?.pass?.includes('manaLeech')) bioG = Math.floor(bioG * 1.1); });
                 // Personality traits affecting biomass gain
                 let bioMultiplier = 1;
@@ -1540,8 +1587,8 @@ export default function HiveQueenGame() {
                   log('💎 Prism discovered!');
                 }
 
-                // Material drops - check for lucky trait bonus and skill tree bonus
-                let matDropChance = 0.5 * combatBonuses.materialDrop;
+                // Material drops - check for lucky trait bonus, skill tree bonus, and ranch bonus
+                let matDropChance = 0.5 * combatBonuses.materialDrop * scoutBonus;
                 living.forEach(p => {
                   const sl = slimes.find(s => s.id === p.id);
                   if (sl?.traits?.includes('lucky')) matDropChance += 0.05;
@@ -1880,7 +1927,9 @@ export default function HiveQueenGame() {
             ds.attackTimer = 0;
             // Attack the first human
             if (next.humans.length > 0) {
-              const damage = stats.firmness || 5;
+              const ranchBonuses = getRanchBonuses();
+              const warDenBonus = 1 + ranchBonuses.towerDefenseDamage;
+              const damage = Math.floor((stats.firmness || 5) * warDenBonus);
               next.totalDamage += damage;
 
               // Apply damage to first human
@@ -2111,18 +2160,18 @@ export default function HiveQueenGame() {
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'rgba(0,0,0,0.3)', padding: '4px 10px', borderRadius: 12, fontSize: 12 }}>🧬 <strong>{Math.floor(bio)}</strong></div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'rgba(0,0,0,0.3)', padding: '4px 10px', borderRadius: 12, fontSize: 12 }}>🍯 <strong>{freeJelly}/{maxJelly}</strong></div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'rgba(0,0,0,0.3)', padding: '4px 10px', borderRadius: 12, fontSize: 12 }}>🧪 <strong>{pheromones}</strong></div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'rgba(0,0,0,0.3)', padding: '4px 10px', borderRadius: 12, fontSize: 12 }}>🔮 <strong>{mana}</strong></div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'rgba(0,0,0,0.3)', padding: '4px 10px', borderRadius: 12, fontSize: 12 }}>💎 <strong>{prisms}</strong></div>
         </div>
         <button onClick={() => setDev(!dev)} style={{ background: 'none', border: 'none', color: '#fff', fontSize: 20, cursor: 'pointer' }}>🛠️</button>
       </header>
       
       <div style={{ display: 'flex', justifyContent: 'center', gap: 6, padding: '8px 0', background: 'rgba(0,0,0,0.2)' }}>
-        {tabs.map((t, i) => <div key={t.id} onClick={() => setTab(i)} style={{ width: 8, height: 8, borderRadius: '50%', background: tab === i ? '#ec4899' : 'rgba(255,255,255,0.3)', cursor: 'pointer' }} />)}
+        {visibleTabs.map((t) => <div key={t.id} onClick={() => setTab(t.id)} style={{ width: 8, height: 8, borderRadius: '50%', background: tab === t.id ? '#ec4899' : 'rgba(255,255,255,0.3)', cursor: 'pointer' }} />)}
       </div>
       
       <main style={{ padding: 15, paddingBottom: 100 }}>
-        <h2 style={{ margin: '0 0 15px', fontSize: 20 }}>{tabs[tab].icon} {tabs[tab].label}</h2>
+        <h2 style={{ margin: '0 0 15px', fontSize: 20 }}>{tabs.find(t => t.id === tab)?.icon} {tabs.find(t => t.id === tab)?.label}</h2>
         
         {tab === 0 && (
           <div>
@@ -2223,10 +2272,10 @@ export default function HiveQueenGame() {
               </div>
             </div>
 
-            {/* Collapsible Hive Pheromones & Abilities */}
+            {/* Collapsible Mana & Abilities */}
             <div style={{ background: 'rgba(168,85,247,0.1)', borderRadius: 12, marginBottom: 20, overflow: 'hidden' }}>
               <button
-                onClick={() => setExpandedSections(s => ({ ...s, pheromones: !s.pheromones }))}
+                onClick={() => setExpandedSections(s => ({ ...s, mana: !s.mana }))}
                 style={{
                   width: '100%',
                   padding: 15,
@@ -2240,9 +2289,9 @@ export default function HiveQueenGame() {
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <span style={{ fontSize: 16, fontWeight: 'bold' }}>🧪 Hive Pheromones</span>
+                  <span style={{ fontSize: 16, fontWeight: 'bold' }}>🔮 Mana & Abilities</span>
                   <span style={{ background: 'rgba(0,0,0,0.3)', padding: '4px 10px', borderRadius: 6, fontSize: 14, fontWeight: 'bold' }}>
-                    {pheromones}
+                    {mana}
                   </span>
                   {Object.keys(activeHiveAbilities).filter(id => activeHiveAbilities[id] > Date.now()).length > 0 && (
                     <span style={{ fontSize: 10, padding: '2px 6px', background: 'rgba(74,222,128,0.3)', borderRadius: 4, color: '#4ade80' }}>
@@ -2250,13 +2299,13 @@ export default function HiveQueenGame() {
                     </span>
                   )}
                 </div>
-                <span>{expandedSections.pheromones ? '▼' : '▶'}</span>
+                <span>{expandedSections.mana ? '▼' : '▶'}</span>
               </button>
 
-              {expandedSections.pheromones && (
+              {expandedSections.mana && (
                 <div style={{ padding: '0 20px 20px' }}>
                   <div style={{ fontSize: 11, opacity: 0.6, marginBottom: 15 }}>
-                    +{slimes.length} pheromones/hour ({slimes.length} slimes × 1/hour)
+                    +{slimes.length} mana/hour ({slimes.length} slimes × 1/hour)
                   </div>
 
                   {/* Active Abilities */}
@@ -2284,7 +2333,7 @@ export default function HiveQueenGame() {
               <div style={{ display: 'grid', gap: 10 }}>
                 {Object.entries(HIVE_ABILITIES).filter(([id]) => isPheromoneUnlocked(id, purchasedSkills)).map(([id, ability]) => {
                   const isActive = isHiveAbilityActive(id);
-                  const canAfford = pheromones >= ability.cost;
+                  const canAfford = mana >= ability.cost;
                   return (
                     <div key={id} style={{
                       background: isActive ? 'rgba(74,222,128,0.2)' : 'rgba(0,0,0,0.2)',
@@ -2882,7 +2931,7 @@ export default function HiveQueenGame() {
             <button onClick={() => setQueen(q => ({ ...q, level: q.level + 5 }))} style={{ padding: 8, background: '#ec4899', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 12 }}>+5 Queen Lv</button>
             <button onClick={() => { setLastTowerDefense(0); setTowerDefense(null); log('🎯 Tower Defense reset!'); }} style={{ padding: 8, background: '#22d3ee', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 12 }}>Reset TD Timer</button>
             <button onClick={() => setPrisms(p => p + 100)} style={{ padding: 8, background: '#8b5cf6', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 12 }}>+100 Prisms</button>
-            <button onClick={() => setPheromones(p => p + 100)} style={{ padding: 8, background: '#10b981', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 12 }}>+100 Pheromones</button>
+            <button onClick={() => setMana(p => p + 100)} style={{ padding: 8, background: '#10b981', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 12 }}>+100 Mana</button>
           </div>
         </div>
       )}

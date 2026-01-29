@@ -203,11 +203,11 @@ const Compendium = ({ queen, monsterKills, unlockedMutations }) => {
             </div>
           </div>
 
-          {/* Pheromone System */}
+          {/* Mana System */}
           <div style={{ background: 'rgba(0,0,0,0.3)', borderRadius: 10, padding: 15 }}>
-            <div style={{ fontSize: 14, fontWeight: 'bold', marginBottom: 10, color: '#10b981' }}>🧪 Pheromone System</div>
+            <div style={{ fontSize: 14, fontWeight: 'bold', marginBottom: 10, color: '#10b981' }}>🔮 Mana System</div>
             <div style={{ display: 'grid', gap: 10, fontSize: 12 }}>
-              <div><strong>Earning Pheromones</strong> - Each slime generates 1 pheromone per hour. More slimes = faster accumulation.</div>
+              <div><strong>Earning Mana</strong> - Each slime generates 1 mana per hour. More slimes = faster accumulation.</div>
               <div><strong>Hive Abilities</strong>:</div>
               <ul style={{ margin: '0 0 0 20px', padding: 0 }}>
                 <li><strong>Primal Blessing</strong> - +10% stats for newly spawned slimes (2h)</li>

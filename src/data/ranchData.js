@@ -96,35 +96,49 @@ export const RANCH_TYPES = {
     upgradeCost: { biomass: 1200, multiplier: 2 },
     color: '#10b981',
   },
-  viscousVat: {
-    id: 'viscousVat',
-    name: 'Viscous Vat',
-    icon: '🧪',
-    desc: 'A thick, gooey chamber that permanently increases slime Viscosity.',
-    effect: 'statBoost',
-    statType: 'viscosity',
-    effectValue: 0.5,                   // +0.5 base viscosity per cycle
-    cycleTime: 2 * 60 * 60,             // 2 hours
-    capacity: 2,
+  warDen: {
+    id: 'warDen',
+    name: 'War Den',
+    icon: '⚔️',
+    desc: 'A training barracks. Slimes here boost Tower Defense damage based on total Firmness.',
+    effect: 'defenseBonus',
+    buffType: 'damage',
+    effectValue: 0.02,                   // +2% tower defense damage per Firmness point per slime
+    cycleTime: 45 * 60,                 // 45 minutes
+    capacity: 3,
     unlock: { type: 'materials' },
-    cost: { biomass: 1000, mats: { 'Slime Core': 5, 'Mana Crystal': 3 } },
+    cost: { biomass: 1000, mats: { 'Iron Ore': 5, 'Wolf Pelt': 3 } },
+    upgradeCost: { biomass: 1500, multiplier: 2 },
+    color: '#dc2626',
+  },
+  manaWell: {
+    id: 'manaWell',
+    name: 'Mana Well',
+    icon: '🔮',
+    desc: 'A mystical fountain. Slimes here generate bonus mana based on total Viscosity.',
+    effect: 'manaBonus',
+    effectValue: 0.1,                   // +0.1 mana per hour per Viscosity point per slime
+    cycleTime: 60 * 60,                 // 1 hour
+    capacity: 3,
+    unlock: { type: 'materials' },
+    cost: { biomass: 1000, mats: { 'Mana Crystal': 5, 'Crystal Shard': 3 } },
     upgradeCost: { biomass: 1500, multiplier: 2 },
     color: '#a855f7',
   },
-  hardeningChamber: {
-    id: 'hardeningChamber',
-    name: 'Hardening Chamber',
-    icon: '💎',
-    desc: 'A pressure chamber that permanently increases slime Firmness.',
-    effect: 'statBoost',
-    statType: 'firmness',
-    effectValue: 0.5,                   // +0.5 base firmness per cycle
-    cycleTime: 2 * 60 * 60,             // 2 hours
-    capacity: 2,
+  scoutPost: {
+    id: 'scoutPost',
+    name: 'Scout Post',
+    icon: '🔭',
+    desc: 'A lookout tower. Slimes here boost expedition rewards based on total Slipperiness.',
+    effect: 'expeditionBonus',
+    buffType: 'rewards',
+    effectValue: 0.01,                   // +1% expedition rewards per Slipperiness point per slime
+    cycleTime: 45 * 60,                 // 45 minutes
+    capacity: 3,
     unlock: { type: 'materials' },
-    cost: { biomass: 1000, mats: { 'Iron Ore': 5, 'Golem Core': 2 } },
+    cost: { biomass: 1000, mats: { 'Bat Wing': 5, 'Snake Scale': 3 } },
     upgradeCost: { biomass: 1500, multiplier: 2 },
-    color: '#6b7280',
+    color: '#0ea5e9',
   },
   nullifier: {
     id: 'nullifier',
@@ -181,13 +195,13 @@ export const RANCH_EVENTS = [
     ranchTypes: ['fireGrove', 'tidalPool', 'earthenDen', 'verdantNest'],
   },
   {
-    id: 'viscousOverflow',
-    msg: 'The chamber overflows with thick ooze!',
+    id: 'tacticalInsight',
+    msg: 'A flash of tactical insight!',
     type: 'bonus',
-    effect: 'statsBoost',
-    value: 1.5,                         // 50% more stats
+    effect: 'buffBoost',
+    value: 1.5,                         // 50% stronger buff effect
     weight: 8,
-    ranchTypes: ['viscousVat', 'hardeningChamber'],
+    ranchTypes: ['warDen', 'scoutPost', 'manaWell'],
   },
   {
     id: 'healingWaters',

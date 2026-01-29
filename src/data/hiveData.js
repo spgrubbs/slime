@@ -1,4 +1,4 @@
-// Hive Abilities - Activated with Pheromones
+// Hive Abilities - Activated with Mana
 export const HIVE_ABILITIES = {
   spawnBoost: {
     name: 'Primal Blessing',
@@ -105,6 +105,6 @@ export const PRISM_SHOP = {
   },
 };
 
-// Pheromone generation rate
-export const PHEROMONE_UPDATE_INTERVAL = 60000; // Update every minute
-export const PHEROMONES_PER_SLIME_PER_HOUR = 1;
+// Mana generation rate
+export const MANA_UPDATE_INTERVAL = 60000; // Update every minute
+export const MANA_PER_SLIME_PER_HOUR = 1;
