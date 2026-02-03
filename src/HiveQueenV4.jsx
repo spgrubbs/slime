@@ -263,6 +263,10 @@ export default function HiveQueenGame() {
   const [selSlime, setSelSlime] = useState(null);
   const touchX = useRef(null);
 
+  // Calculate skill effects from purchased skills (must be first, before other calculations)
+  const skillEffects = useMemo(() => getSkillEffects(purchasedSkills), [purchasedSkills]);
+  const skillBonuses = skillEffects.bonuses;
+
   const tabs = [
     { id: 0, icon: '👑', label: 'Queen' },
     { id: 1, icon: '🟢', label: 'Slimes', badge: slimes.length },
@@ -287,9 +291,6 @@ export default function HiveQueenGame() {
     if (!tier.unlockBuilding) return true; // Basic tier is always available
     return builds[tier.unlockBuilding] > 0;
   });
-  // Calculate skill effects from purchased skills (must be first, before bon)
-  const skillEffects = useMemo(() => getSkillEffects(purchasedSkills), [purchasedSkills]);
-  const skillBonuses = skillEffects.bonuses;
 
   const bon = {
     bio: 1 + (research.includes('efficientDigestion') ? 0.2 : 0),
