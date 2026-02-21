@@ -87,7 +87,8 @@ const calculateOfflineProgress = (saved, bonuses) => {
 
   let { bio, slimes, exps, mats, activeRes, research, builds } = JSON.parse(JSON.stringify(saved));
   const battleTicks = Math.floor(offlineSec / 2.5);
-  const hasBiomassReclaimer = builds?.biomassReclaimer > 0;
+  const reclaimerTier = builds?.biomassReclaimer || 0;
+  const reclaimerRate = reclaimerTier * 0.25; // 25% per tier
 
   // Helper to get slime stats (handles both old and new format)
   const getStats = (sl) => {
@@ -183,9 +184,9 @@ const calculateOfflineProgress = (saved, bonuses) => {
         }
         if (tgt.hp <= 0) {
           results.slimesLost.push(tgtSl?.name || 'Slime');
-          // Biomass Reclaimer: recover 50% of stored biomass
-          if (hasBiomassReclaimer && tgtSl?.biomass > 0) {
-            const recovered = Math.floor(tgtSl.biomass * 0.5);
+          // Biomass Reclaimer: recover biomass based on tier (25% per tier)
+          if (reclaimerRate > 0 && tgtSl?.biomass > 0) {
+            const recovered = Math.floor(tgtSl.biomass * reclaimerRate);
             bio += recovered;
             results.biomassGained += recovered;
           }
@@ -627,7 +628,8 @@ export default function HiveQueenGame() {
   };
 
   const log = useCallback((m) => setLogs(p => [...p.slice(-50), { t: new Date().toLocaleTimeString(), m }]), []);
-  const bLog = useCallback((z, m, c) => setBLogs(p => ({ ...p, [z]: [...(p[z] || []).slice(-30), { m, c }] })), []);
+  // bLog: z=zone, m=message, c=color, v=verbose details (optional)
+  const bLog = useCallback((z, m, c, v) => setBLogs(p => ({ ...p, [z]: [...(p[z] || []).slice(-30), { m, c, v }] })), []);
 
   const onTouch = (e) => { touchX.current = e.touches[0].clientX; };
   const onTouchEnd = (e) => {
@@ -980,6 +982,7 @@ export default function HiveQueenGame() {
   const [expDuration, setExpDuration] = useState('10'); // '10', '100', 'infinite'
   const [expSummaries, setExpSummaries] = useState([]); // Array of expedition summaries
   const [expandedSections, setExpandedSections] = useState({ research: false, buildings: false, queenUnlocks: false, mana: false }); // Collapsible sections
+  const [verboseLogs, setVerboseLogs] = useState(false); // Toggle for detailed combat calculations in logs
   const [queenSlimeModal, setQueenSlimeModal] = useState(null); // Slime ID for modal on queen screen
   const [editingSlimeName, setEditingSlimeName] = useState(null); // { id, name, title } for editing
 
@@ -999,7 +1002,8 @@ export default function HiveQueenGame() {
   };
 
   // Helper function to calculate current stats based on biomass and skill bonuses
-  const getSlimeStats = (slime) => {
+  // pendingBiomass: optional extra biomass to consider (e.g., earned during expedition but not yet applied)
+  const getSlimeStats = (slime, pendingBiomass = 0) => {
     if (!slime) return { firmness: 0, slipperiness: 0, viscosity: 0 };
 
     let baseF, baseS, baseV;
@@ -1018,7 +1022,7 @@ export default function HiveQueenGame() {
       baseV = Math.floor(baseStat * (tier?.statMultiplier || 1));
     } else {
       const tier = SLIME_TIERS[slime.tier];
-      const biomass = slime.biomass || 0;
+      const biomass = (slime.biomass || 0) + pendingBiomass; // Include pending biomass
       const percentBonus = biomass / tier.biomassPerPercent; // How many percent increases
       // BALANCE: Cap at maxBiomassBonus (default 100% = double stats)
       const cappedBonus = Math.min(percentBonus, tier.maxBiomassBonus || 100);
@@ -1027,6 +1031,21 @@ export default function HiveQueenGame() {
       baseF = Math.floor(slime.baseStats.firmness * multiplier);
       baseS = Math.floor(slime.baseStats.slipperiness * multiplier);
       baseV = Math.floor(slime.baseStats.viscosity * multiplier);
+    }
+
+    // Apply mutation passive bonuses that scale with stats
+    // e.g., stoneskin adds +5 + 0.1*viscosity to firmness
+    if (slime.mutations) {
+      slime.mutations.forEach(mutId => {
+        const mut = MUTATION_LIBRARY[mutId];
+        if (mut?.baseValue !== undefined && mut?.viscScale !== undefined) {
+          // This mutation has a scaling passive bonus
+          const scalingBonus = mut.baseValue + mut.viscScale * baseV;
+          if (mut.stat === 'firmness') baseF += Math.floor(scalingBonus);
+          else if (mut.stat === 'slipperiness') baseS += Math.floor(scalingBonus);
+          else if (mut.stat === 'viscosity') baseV += Math.floor(scalingBonus);
+        }
+      });
     }
 
     // Apply skill tree bonuses
@@ -1491,38 +1510,41 @@ export default function HiveQueenGame() {
               if (mon.hp > 0 && p) {
                 const sl = slimes.find(s => s.id === p.id);
                 if (sl) {
-                  const stats = getSlimeStats(sl);
+                  const stats = getSlimeStats(sl, p.biomassGained || 0);
                   let dmg = stats.firmness;
                   let crit = false;
+                  // Track modifiers for verbose logging
+                  const mods = [`Base: ${stats.firmness} (firm)`];
                   // Primordial trait: +10% all stats (applied to damage)
-                  if (sl.traits?.includes('primordial')) dmg = Math.floor(dmg * 1.10);
+                  if (sl.traits?.includes('primordial')) { dmg = Math.floor(dmg * 1.10); mods.push('+10% primordial'); }
                   // Mutation passives (apply mutationPower bonus from skill tree)
                   const mutPower = combatBonuses.mutationPower;
-                  if (sl.pass?.includes('ferocity')) dmg *= 1 + (0.15 * mutPower);
+                  if (sl.pass?.includes('ferocity')) { dmg *= 1 + (0.15 * mutPower); mods.push(`+${Math.round(15 * mutPower)}% ferocity`); }
                   // Personality traits affecting damage
-                  if (sl.traits?.includes('brave') && p.hp < p.maxHp * 0.5) dmg = Math.floor(dmg * 1.05);
-                  if (sl.traits?.includes('lazy')) dmg = Math.floor(dmg * 0.95);
-                  if (sl.traits?.includes('timid')) dmg = Math.floor(dmg * 0.95);
-                  if (sl.traits?.includes('reckless')) dmg = Math.floor(dmg * 1.10);
-                  if (sl.traits?.includes('fierce') && !p.usedFierce) { dmg = Math.floor(dmg * 1.08); p.usedFierce = true; }
+                  if (sl.traits?.includes('brave') && p.hp < p.maxHp * 0.5) { dmg = Math.floor(dmg * 1.05); mods.push('+5% brave'); }
+                  if (sl.traits?.includes('lazy')) { dmg = Math.floor(dmg * 0.95); mods.push('-5% lazy'); }
+                  if (sl.traits?.includes('timid')) { dmg = Math.floor(dmg * 0.95); mods.push('-5% timid'); }
+                  if (sl.traits?.includes('reckless')) { dmg = Math.floor(dmg * 1.10); mods.push('+10% reckless'); }
+                  if (sl.traits?.includes('fierce') && !p.usedFierce) { dmg = Math.floor(dmg * 1.08); p.usedFierce = true; mods.push('+8% fierce'); }
                   // Skill tree: +damage when slime is low HP (berserkMode)
-                  if (p.hp < p.maxHp * 0.3) dmg = Math.floor(dmg * combatBonuses.lowHpDamage);
+                  if (p.hp < p.maxHp * 0.3 && combatBonuses.lowHpDamage > 1) { dmg = Math.floor(dmg * combatBonuses.lowHpDamage); mods.push(`+${Math.round((combatBonuses.lowHpDamage - 1) * 100)}% berserk`); }
                   // Skill tree: +damage vs monsters with more HP (brutalForce)
-                  if (mon.maxHp > p.maxHp) dmg = Math.floor(dmg * combatBonuses.damageVsHighHp);
+                  if (mon.maxHp > p.maxHp && combatBonuses.damageVsHighHp > 1) { dmg = Math.floor(dmg * combatBonuses.damageVsHighHp); mods.push(`+${Math.round((combatBonuses.damageVsHighHp - 1) * 100)}% brutal`); }
                   // Skill tree: +damage vs low HP monsters (executioner)
-                  if (mon.hp < mon.maxHp * 0.25) dmg = Math.floor(dmg * combatBonuses.executeDamage);
+                  if (mon.hp < mon.maxHp * 0.25 && combatBonuses.executeDamage > 1) { dmg = Math.floor(dmg * combatBonuses.executeDamage); mods.push(`+${Math.round((combatBonuses.executeDamage - 1) * 100)}% execute`); }
                   // Crit chance calculation - apply skill tree bonus
                   let critCh = 0.05 + combatBonuses.critChance + stats.slipperiness * 0.01 + (sl.pass?.includes('trickster') ? 0.08 * mutPower : 0);
                   if (sl.traits?.includes('swift')) critCh += 0.03;
-                  if (sl.pass?.includes('ambush') && !p.usedAmbush) { crit = true; p.usedAmbush = true; }
-                  else if (Math.random() < critCh) crit = true;
-                  if (crit) dmg *= (1.5 + (sl.pass?.includes('crushing') ? 0.3 * mutPower : 0));
-                  dmg = Math.floor(dmg * (1 + bon.spd * 0.1));
+                  if (sl.pass?.includes('ambush') && !p.usedAmbush) { crit = true; p.usedAmbush = true; mods.push('ambush crit!'); }
+                  else if (Math.random() < critCh) { crit = true; mods.push(`crit! (${Math.round(critCh * 100)}%)`); }
+                  if (crit) { const critMult = 1.5 + (sl.pass?.includes('crushing') ? 0.3 * mutPower : 0); dmg *= critMult; mods.push(`x${critMult.toFixed(1)} crit dmg`); }
+                  if (bon.spd > 0) { dmg = Math.floor(dmg * (1 + bon.spd * 0.1)); mods.push(`+${bon.spd * 10}% upgrades`); }
                   // Apply elemental damage modifier (slime element vs monster element) with skill bonus
-                  const preDmg = dmg;
-                  dmg = calculateElementalDamage(dmg, sl.primaryElement, md.element);
+                  const preDmg = Math.floor(dmg);
+                  dmg = calculateElementalDamage(preDmg, sl.primaryElement, md.element);
                   // Apply elemental damage skill bonus
-                  if (dmg > preDmg) dmg = Math.floor(dmg * combatBonuses.elementalDamage);
+                  if (dmg > preDmg) { dmg = Math.floor(dmg * combatBonuses.elementalDamage); mods.push(`+elem (${sl.primaryElement}>${md.element})`); }
+                  else if (dmg < preDmg) { mods.push(`-elem (${sl.primaryElement}<${md.element})`); }
                   const elementBonus = dmg !== preDmg;
                   mon.hp -= dmg;
                   // Status effects with skill tree bonus
@@ -1544,7 +1566,8 @@ export default function HiveQueenGame() {
                   let dmgMsg = `${sl.name} ${crit ? '💥CRITS' : 'hits'} for ${Math.floor(dmg)}!`;
                   if (elementBonus && dmg > preDmg) dmgMsg += ' ⚡ Super effective!';
                   else if (elementBonus && dmg < preDmg) dmgMsg += ' 💫 Not effective...';
-                  bLog(zone, dmgMsg, crit ? '#f59e0b' : elementBonus && dmg > preDmg ? '#4ade80' : elementBonus ? '#94a3b8' : '#4ade80');
+                  const verboseDetail = mods.join(' → ');
+                  bLog(zone, dmgMsg, crit ? '#f59e0b' : elementBonus && dmg > preDmg ? '#4ade80' : elementBonus ? '#94a3b8' : '#4ade80', verboseDetail);
                 }
               }
               if (mon.hp <= 0) {
@@ -1556,17 +1579,22 @@ export default function HiveQueenGame() {
                 // Apply skill tree bonuses and ranch bonuses: expeditionBiomass, biomassGain, scoutPost
                 const ranchBonuses = getRanchBonuses();
                 const scoutBonus = 1 + ranchBonuses.expeditionRewards;
+                const bioMods = [`Base: ${md.biomass}`];
                 let bioG = Math.floor(md.biomass * bon.bio * combatBonuses.expeditionBiomass * combatBonuses.biomassGain * scoutBonus);
-                living.forEach(p => { const sl = slimes.find(s => s.id === p.id); if (sl?.pass?.includes('manaLeech')) bioG = Math.floor(bioG * 1.1); });
+                if (bon.bio > 1) bioMods.push(`×${bon.bio.toFixed(1)} upgrades`);
+                if (combatBonuses.expeditionBiomass > 1) bioMods.push(`×${combatBonuses.expeditionBiomass.toFixed(1)} expedition`);
+                if (combatBonuses.biomassGain > 1) bioMods.push(`×${combatBonuses.biomassGain.toFixed(1)} skill`);
+                if (scoutBonus > 1) bioMods.push(`×${scoutBonus.toFixed(1)} scout`);
+                living.forEach(p => { const sl = slimes.find(s => s.id === p.id); if (sl?.pass?.includes('manaLeech')) { bioG = Math.floor(bioG * 1.1); bioMods.push('+10% manaLeech'); } });
                 // Personality traits affecting biomass gain
                 let bioMultiplier = 1;
                 living.forEach(p => {
                   const sl = slimes.find(s => s.id === p.id);
-                  if (sl?.traits?.includes('greedy')) bioMultiplier += 0.05;
-                  if (sl?.traits?.includes('glutton')) bioMultiplier += 0.10;
+                  if (sl?.traits?.includes('greedy')) { bioMultiplier += 0.05; bioMods.push('+5% greedy'); }
+                  if (sl?.traits?.includes('glutton')) { bioMultiplier += 0.10; bioMods.push('+10% glutton'); }
                 });
                 // Bountiful Harvest hive ability: +25% biomass
-                if (isHiveAbilityActive('bountifulHarvest')) bioMultiplier += 0.25;
+                if (isHiveAbilityActive('bountifulHarvest')) { bioMultiplier += 0.25; bioMods.push('+25% bountiful'); }
                 bioG = Math.floor(bioG * bioMultiplier);
 
                 // Resilient trait: recover 1 HP per kill
@@ -1583,10 +1611,11 @@ export default function HiveQueenGame() {
                 living.forEach(p => {
                   p.biomassGained = (p.biomassGained || 0) + bioPerSlime;
                 });
+                bioMods.push(`÷${living.length} slimes = ${Math.floor(bioPerSlime)} each`);
                 const bioMsg = hasBountiful
                   ? `${md.name} defeated! +${Math.floor(bioPerSlime)}🧬 each (🌾+25%)`
                   : `${md.name} defeated! +${Math.floor(bioPerSlime)}🧬 each`;
-                bLog(zone, bioMsg, '#4ade80');
+                bLog(zone, bioMsg, '#4ade80', bioMods.join(' → '));
 
                 // Rare Prism drop (0.1% per kill)
                 if (Math.random() < 0.001) {
@@ -1666,7 +1695,7 @@ export default function HiveQueenGame() {
               if (mon.hp > 0) {
                 const tgt = living[Math.floor(Math.random() * living.length)];
                 const tgtSl = slimes.find(s => s.id === tgt.id);
-                const tgtStats = tgtSl ? getSlimeStats(tgtSl) : { slipperiness: 0 };
+                const tgtStats = tgtSl ? getSlimeStats(tgtSl, tgt.biomassGained || 0) : { slipperiness: 0 };
                 let inc = md.dmg;
 
                 // Check for monster ability usage
@@ -1680,7 +1709,7 @@ export default function HiveQueenGame() {
                     // Self heal ability
                     const healAmt = Math.floor(mon.maxHp * ab.healPercent);
                     mon.hp = Math.min(mon.maxHp, mon.hp + healAmt);
-                    bLog(zone, `${md.name} uses ${ab.name}! ${ab.icon} +${healAmt} HP`, '#4ade80');
+                    bLog(zone, `${md.name} uses ${ab.name}! ${ab.icon} +${healAmt} HP`, '#4ade80', `${Math.round(ab.healPercent * 100)}% of ${mon.maxHp} maxHP`);
                     exp.monAnim = 'attack';
                   } else if (ab.effect === 'aoe') {
                     // AOE attack - hits all slimes
@@ -1692,12 +1721,13 @@ export default function HiveQueenGame() {
                       if (combatBonuses.damageReduction > 0) dmg = Math.max(1, dmg - combatBonuses.damageReduction);
                       p.hp -= Math.floor(dmg);
                     });
-                    bLog(zone, `${md.name} uses ${ab.name}! ${ab.icon} Hits everyone for ${aoeDmg}!`, '#ef4444');
+                    bLog(zone, `${md.name} uses ${ab.name}! ${ab.icon} Hits everyone for ${aoeDmg}!`, '#ef4444', `Base ${md.dmg} × ${ab.multiplier} AOE`);
                     exp.monAnim = 'attack';
                   } else {
                     // Single target ability
                     let abilityDmg = md.dmg * (ab.multiplier || 1);
                     if (ab.damageMultiplier) abilityDmg = md.dmg * ab.damageMultiplier;
+                    const abMods = [`Base: ${md.dmg} × ${ab.multiplier || ab.damageMultiplier || 1}`];
 
                     // Dodge check still applies
                     let dodgeCh = 0.05 + (tgtStats.slipperiness || 0) * 0.015;
@@ -1705,43 +1735,45 @@ export default function HiveQueenGame() {
                     if (tgtSl?.traits?.includes('timid')) dodgeCh += 0.10;
 
                     if (Math.random() < dodgeCh) {
-                      bLog(zone, `${tgtSl?.name} dodges ${md.name}'s ${ab.name}! 💨`, '#22d3ee');
+                      bLog(zone, `${tgtSl?.name} dodges ${md.name}'s ${ab.name}! 💨`, '#22d3ee', `Dodge ${Math.round(dodgeCh * 100)}%`);
                     } else {
                       // Apply ability damage
                       if (ab.effect !== 'trueDamage') {
-                        if (tgtSl?.pass?.includes('armored')) abilityDmg *= 0.8;
-                        if (combatBonuses.damageReduction > 0) abilityDmg = Math.max(1, abilityDmg - combatBonuses.damageReduction);
+                        if (tgtSl?.pass?.includes('armored')) { abilityDmg *= 0.8; abMods.push('-20% armor'); }
+                        if (combatBonuses.damageReduction > 0) { abilityDmg = Math.max(1, abilityDmg - combatBonuses.damageReduction); abMods.push(`-${combatBonuses.damageReduction} toughHide`); }
+                      } else {
+                        abMods.push('TRUE DMG');
                       }
                       tgt.hp -= Math.floor(abilityDmg);
-                      bLog(zone, `${md.name} uses ${ab.name}! ${ab.icon} ${tgtSl?.name} takes ${Math.floor(abilityDmg)}!`, '#ef4444');
+                      bLog(zone, `${md.name} uses ${ab.name}! ${ab.icon} ${tgtSl?.name} takes ${Math.floor(abilityDmg)}!`, '#ef4444', abMods.join(' → '));
 
                       // Apply status effects
                       if (ab.effect === 'poison' && !(tgt.status || []).some(s => s.type === 'poison')) {
                         tgt.status = tgt.status || [];
                         tgt.status.push({ type: 'poison', dur: ab.duration, dmg: ab.damagePerTick });
-                        bLog(zone, `${tgtSl?.name} poisoned! 🧪`, '#22c55e');
+                        bLog(zone, `${tgtSl?.name} poisoned! 🧪`, '#22c55e', `${ab.damagePerTick} dmg/tick for ${ab.duration} ticks`);
                       } else if (ab.effect === 'burn' && !(tgt.status || []).some(s => s.type === 'burn')) {
                         tgt.status = tgt.status || [];
                         tgt.status.push({ type: 'burn', dur: ab.duration, dmg: ab.damagePerTick });
-                        bLog(zone, `${tgtSl?.name} burning! 🔥`, '#f97316');
+                        bLog(zone, `${tgtSl?.name} burning! 🔥`, '#f97316', `${ab.damagePerTick} dmg/tick for ${ab.duration} ticks`);
                       } else if (ab.effect === 'stun' && !(tgt.status || []).some(s => s.type === 'stun')) {
                         tgt.status = tgt.status || [];
                         tgt.status.push({ type: 'stun', dur: ab.duration });
-                        bLog(zone, `${tgtSl?.name} stunned! 💫`, '#f59e0b');
+                        bLog(zone, `${tgtSl?.name} stunned! 💫`, '#f59e0b', `Duration: ${ab.duration} ticks`);
                       } else if (ab.effect === 'freeze' && !(tgt.status || []).some(s => s.type === 'slow')) {
                         tgt.status = tgt.status || [];
                         tgt.status.push({ type: 'slow', dur: ab.duration });
-                        bLog(zone, `${tgtSl?.name} slowed! ❄️`, '#3b82f6');
+                        bLog(zone, `${tgtSl?.name} slowed! ❄️`, '#3b82f6', `Duration: ${ab.duration} ticks`);
                       } else if (ab.effect === 'lifesteal') {
                         const healAmt = Math.floor(abilityDmg * ab.healPercent);
                         mon.hp = Math.min(mon.maxHp, mon.hp + healAmt);
-                        bLog(zone, `${md.name} drains ${healAmt} HP! 💀`, '#a855f7');
+                        bLog(zone, `${md.name} drains ${healAmt} HP! 💀`, '#a855f7', `${Math.round(ab.healPercent * 100)}% of ${Math.floor(abilityDmg)} dmg`);
                       }
 
                       if (tgtSl?.pass?.includes('reflect')) {
                         const ref = Math.floor(abilityDmg * 0.15);
                         mon.hp -= ref;
-                        bLog(zone, `Reflected ${ref}! 💎`, '#06b6d4');
+                        bLog(zone, `Reflected ${ref}! 💎`, '#06b6d4', '15% reflect mutation');
                       }
                       exp.monAnim = 'attack'; exp.animSlime = tgt.id; exp.slimeAnim = 'hurt';
                     }
@@ -1750,29 +1782,36 @@ export default function HiveQueenGame() {
                   // Normal attack
                   // Calculate dodge chance with trait bonuses
                   let dodgeCh = 0.05 + (tgtStats.slipperiness || 0) * 0.015 + (tgtSl?.pass?.includes('echolocation') ? 0.12 : 0) + (tgtSl?.pass?.includes('trickster') ? 0.08 : 0);
+                  const dodgeMods = [`5% base`];
+                  if (tgtStats.slipperiness > 0) dodgeMods.push(`+${(tgtStats.slipperiness * 1.5).toFixed(1)}% slip`);
+                  if (tgtSl?.pass?.includes('echolocation')) dodgeMods.push('+12% echo');
+                  if (tgtSl?.pass?.includes('trickster')) dodgeMods.push('+8% trick');
                   // Cautious: +5% dodge when HP below 50%
-                  if (tgtSl?.traits?.includes('cautious') && tgt.hp < tgt.maxHp * 0.5) dodgeCh += 0.05;
+                  if (tgtSl?.traits?.includes('cautious') && tgt.hp < tgt.maxHp * 0.5) { dodgeCh += 0.05; dodgeMods.push('+5% cautious'); }
                   // Timid: +10% dodge
-                  if (tgtSl?.traits?.includes('timid')) dodgeCh += 0.10;
-                  if (Math.random() < dodgeCh) { bLog(zone, `${tgtSl?.name} dodges! 💨`, '#22d3ee'); }
+                  if (tgtSl?.traits?.includes('timid')) { dodgeCh += 0.10; dodgeMods.push('+10% timid'); }
+                  if (Math.random() < dodgeCh) { bLog(zone, `${tgtSl?.name} dodges! 💨`, '#22d3ee', `Dodge: ${dodgeMods.join(' → ')} = ${Math.round(dodgeCh * 100)}%`); }
                   else {
-                    if (tgtSl?.pass?.includes('armored')) inc *= 0.8;
+                    const defMods = [`Base: ${md.dmg}`];
+                    if (tgtSl?.pass?.includes('armored')) { inc *= 0.8; defMods.push('-20% armor'); }
                     // Reckless trait: +5% damage taken
-                    if (tgtSl?.traits?.includes('reckless')) inc = Math.floor(inc * 1.05);
+                    if (tgtSl?.traits?.includes('reckless')) { inc = Math.floor(inc * 1.05); defMods.push('+5% reckless'); }
                     // Skill tree: flat damage reduction (toughHide)
-                    if (combatBonuses.damageReduction > 0) inc = Math.max(1, inc - combatBonuses.damageReduction);
+                    if (combatBonuses.damageReduction > 0) { inc = Math.max(1, inc - combatBonuses.damageReduction); defMods.push(`-${combatBonuses.damageReduction} toughHide`); }
                     // Skill tree: 50% less damage when below 20% HP (lastStand)
-                    if (tgt.hp < tgt.maxHp * 0.2 && combatBonuses.lowHpDefense > 0) inc = Math.floor(inc * (1 - combatBonuses.lowHpDefense));
+                    if (tgt.hp < tgt.maxHp * 0.2 && combatBonuses.lowHpDefense > 0) { inc = Math.floor(inc * (1 - combatBonuses.lowHpDefense)); defMods.push(`-${Math.round(combatBonuses.lowHpDefense * 100)}% lastStand`); }
                     // Apply elemental damage modifier (monster element vs slime element)
                     const preInc = Math.floor(inc);
                     inc = calculateElementalDamage(Math.floor(inc), md.element, tgtSl?.primaryElement);
                     const elementBonus = inc !== preInc;
+                    if (elementBonus && inc > preInc) defMods.push(`+elem (${md.element}>${tgtSl?.primaryElement})`);
+                    else if (elementBonus && inc < preInc) defMods.push(`-elem (${md.element}<${tgtSl?.primaryElement})`);
                     tgt.hp -= inc;
                     let hitMsg = `${md.name} hits ${tgtSl?.name} for ${inc}!`;
                     if (elementBonus && inc > preInc) hitMsg += ' ⚡';
                     else if (elementBonus && inc < preInc) hitMsg += ' 💫';
-                    bLog(zone, hitMsg, '#ef4444');
-                    if (tgtSl?.pass?.includes('reflect')) { const ref = Math.floor(inc * 0.15); mon.hp -= ref; bLog(zone, `Reflected ${ref}! 💎`, '#06b6d4'); }
+                    bLog(zone, hitMsg, '#ef4444', defMods.join(' → '));
+                    if (tgtSl?.pass?.includes('reflect')) { const ref = Math.floor(inc * 0.15); mon.hp -= ref; bLog(zone, `Reflected ${ref}! 💎`, '#06b6d4', `15% of ${inc} dmg reflected`); }
                     if (md.trait === 'venomSac' && !(tgt.status || []).some(s => s.type === 'poison') && Math.random() < 0.3) { tgt.status.push({ type: 'poison', dur: STATUS_EFFECTS.poison.dur }); bLog(zone, `${tgtSl?.name} poisoned! 🧪`, '#22c55e'); }
                     if ((md.trait === 'dragonHeart' || md.trait === 'phoenixFeather') && !(tgt.status || []).some(s => s.type === 'burn') && Math.random() < 0.25) { tgt.status.push({ type: 'burn', dur: STATUS_EFFECTS.burn.dur }); bLog(zone, `${tgtSl?.name} burning! 🔥`, '#f97316'); }
                     if (md.trait === 'wolfFang' && !(tgt.status || []).some(s => s.type === 'bleed') && Math.random() < 0.2) { tgt.status.push({ type: 'bleed', dur: STATUS_EFFECTS.bleed.dur }); bLog(zone, `${tgtSl?.name} bleeding! 🩸`, '#ef4444'); }
@@ -1792,11 +1831,13 @@ export default function HiveQueenGame() {
                 if (tgt.hp <= 0) {
                   bLog(zone, `${tgtSl?.name} fell! 💔`, '#ef4444');
                   log(`${tgtSl?.name} was defeated!`);
-                  // Biomass Reclaimer: recover 50% of stored biomass
-                  if (builds.biomassReclaimer && tgtSl?.biomass > 0) {
-                    const recovered = Math.floor(tgtSl.biomass * 0.5);
+                  // Biomass Reclaimer: recover biomass based on tier (25% per tier)
+                  const reclaimerTier = builds.biomassReclaimer || 0;
+                  if (reclaimerTier > 0 && tgtSl?.biomass > 0) {
+                    const reclaimerRate = reclaimerTier * 0.25;
+                    const recovered = Math.floor(tgtSl.biomass * reclaimerRate);
                     setBio(b => b + recovered);
-                    bLog(zone, `♻️ Reclaimed ${recovered} biomass`, '#4ade80');
+                    bLog(zone, `♻️ Reclaimed ${recovered} biomass (${reclaimerTier * 25}%)`, '#4ade80');
                   }
                   setSlimes(s => s.filter(sl => sl.id !== tgt.id));
                   exp.party = exp.party.filter(p => p.id !== tgt.id);
@@ -2634,7 +2675,7 @@ export default function HiveQueenGame() {
                 </button>;
               })}
             </div>
-            <BattleArena exp={exps[selZone]} slimes={slimes} zone={selZone} logs={bLogs[selZone]} />
+            <BattleArena exp={exps[selZone]} slimes={slimes} zone={selZone} logs={bLogs[selZone]} verboseLogs={verboseLogs} setVerboseLogs={setVerboseLogs} />
             {exps[selZone] ? (
               <button onClick={() => stopExp(selZone)} style={{ width: '100%', marginTop: 15, padding: 12, background: 'linear-gradient(135deg, #ef4444, #f59e0b)', border: 'none', borderRadius: 8, color: '#fff', fontWeight: 'bold', cursor: 'pointer' }}>🛑 Recall</button>
             ) : (

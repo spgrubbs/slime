@@ -66,10 +66,12 @@ export const BUILDINGS = {
   biomassReclaimer: {
     name: 'Biomass Reclaimer',
     icon: '♻️',
-    desc: 'Recover 50% of stored biomass when slimes die',
+    desc: 'Recover biomass when slimes die: Tier 1 = 25%, Tier 2 = 50%, Tier 3 = 75%',
     cost: { biomass: 600, mats: { 'Life Essence': 3, 'Digestive Sac': 5 } },
-    max: 1,
+    upgradeCost: { biomass: 2000, mats: { 'Life Essence': 8, 'Fairy Dust': 3 }, multiplier: 3 },
+    max: 3,
     category: 'utility',
+    recoveryPerTier: 0.25, // 25% per tier
   },
 
   // === RESEARCH UPGRADES ===
