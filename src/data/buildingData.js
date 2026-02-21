@@ -63,6 +63,14 @@ export const BUILDINGS = {
     max: 1,
     category: 'utility',
   },
+  biomassReclaimer: {
+    name: 'Biomass Reclaimer',
+    icon: '♻️',
+    desc: 'Recover 50% of stored biomass when slimes die',
+    cost: { biomass: 600, mats: { 'Life Essence': 3, 'Digestive Sac': 5 } },
+    max: 1,
+    category: 'utility',
+  },
 
   // === RESEARCH UPGRADES ===
   // These are permanent upgrades researched with biomass

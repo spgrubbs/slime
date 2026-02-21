@@ -16,7 +16,7 @@ import {
 
 import { STAT_INFO, SLIME_TIERS } from './data/slimeData.js';
 import { MUTATION_LIBRARY, TRAIT_LIBRARY, STATUS_EFFECTS, SLIME_TRAITS } from './data/traitData.js';
-import { MONSTER_TYPES } from './data/monsterData.js';
+import { MONSTER_TYPES, MONSTER_ABILITIES } from './data/monsterData.js';
 import { ZONES, EXPLORATION_EVENTS, INTERMISSION_EVENTS, INTERMISSION_DURATION } from './data/zoneData.js';
 import { BUILDINGS, RESEARCH } from './data/buildingData.js';
 import { HUMAN_TYPES, TD_WAVES, getTDScaling } from './data/towerDefenseData.js';
@@ -85,8 +85,9 @@ const calculateOfflineProgress = (saved, bonuses) => {
     researchCompleted: null,
   };
 
-  let { bio, slimes, exps, mats, activeRes, research } = JSON.parse(JSON.stringify(saved));
+  let { bio, slimes, exps, mats, activeRes, research, builds } = JSON.parse(JSON.stringify(saved));
   const battleTicks = Math.floor(offlineSec / 2.5);
+  const hasBiomassReclaimer = builds?.biomassReclaimer > 0;
 
   // Helper to get slime stats (handles both old and new format)
   const getStats = (sl) => {
@@ -182,6 +183,12 @@ const calculateOfflineProgress = (saved, bonuses) => {
         }
         if (tgt.hp <= 0) {
           results.slimesLost.push(tgtSl?.name || 'Slime');
+          // Biomass Reclaimer: recover 50% of stored biomass
+          if (hasBiomassReclaimer && tgtSl?.biomass > 0) {
+            const recovered = Math.floor(tgtSl.biomass * 0.5);
+            bio += recovered;
+            results.biomassGained += recovered;
+          }
           slimes = slimes.filter(s => s.id !== tgt.id);
           exp.party = exp.party.filter(p => p.id !== tgt.id);
         }
@@ -1661,35 +1668,116 @@ export default function HiveQueenGame() {
                 const tgtSl = slimes.find(s => s.id === tgt.id);
                 const tgtStats = tgtSl ? getSlimeStats(tgtSl) : { slipperiness: 0 };
                 let inc = md.dmg;
-                // Calculate dodge chance with trait bonuses
-                let dodgeCh = 0.05 + (tgtStats.slipperiness || 0) * 0.015 + (tgtSl?.pass?.includes('echolocation') ? 0.12 : 0) + (tgtSl?.pass?.includes('trickster') ? 0.08 : 0);
-                // Cautious: +5% dodge when HP below 50%
-                if (tgtSl?.traits?.includes('cautious') && tgt.hp < tgt.maxHp * 0.5) dodgeCh += 0.05;
-                // Timid: +10% dodge
-                if (tgtSl?.traits?.includes('timid')) dodgeCh += 0.10;
-                if (Math.random() < dodgeCh) { bLog(zone, `${tgtSl?.name} dodges! 💨`, '#22d3ee'); }
-                else {
-                  if (tgtSl?.pass?.includes('armored')) inc *= 0.8;
-                  // Reckless trait: +5% damage taken
-                  if (tgtSl?.traits?.includes('reckless')) inc = Math.floor(inc * 1.05);
-                  // Skill tree: flat damage reduction (toughHide)
-                  if (combatBonuses.damageReduction > 0) inc = Math.max(1, inc - combatBonuses.damageReduction);
-                  // Skill tree: 50% less damage when below 20% HP (lastStand)
-                  if (tgt.hp < tgt.maxHp * 0.2 && combatBonuses.lowHpDefense > 0) inc = Math.floor(inc * (1 - combatBonuses.lowHpDefense));
-                  // Apply elemental damage modifier (monster element vs slime element)
-                  const preInc = Math.floor(inc);
-                  inc = calculateElementalDamage(Math.floor(inc), md.element, tgtSl?.primaryElement);
-                  const elementBonus = inc !== preInc;
-                  tgt.hp -= inc;
-                  let hitMsg = `${md.name} hits ${tgtSl?.name} for ${inc}!`;
-                  if (elementBonus && inc > preInc) hitMsg += ' ⚡';
-                  else if (elementBonus && inc < preInc) hitMsg += ' 💫';
-                  bLog(zone, hitMsg, '#ef4444');
-                  if (tgtSl?.pass?.includes('reflect')) { const ref = Math.floor(inc * 0.15); mon.hp -= ref; bLog(zone, `Reflected ${ref}! 💎`, '#06b6d4'); }
-                  if (md.trait === 'venomSac' && !(tgt.status || []).some(s => s.type === 'poison') && Math.random() < 0.3) { tgt.status.push({ type: 'poison', dur: STATUS_EFFECTS.poison.dur }); bLog(zone, `${tgtSl?.name} poisoned! 🧪`, '#22c55e'); }
-                  if ((md.trait === 'dragonHeart' || md.trait === 'phoenixFeather') && !(tgt.status || []).some(s => s.type === 'burn') && Math.random() < 0.25) { tgt.status.push({ type: 'burn', dur: STATUS_EFFECTS.burn.dur }); bLog(zone, `${tgtSl?.name} burning! 🔥`, '#f97316'); }
-                  if (md.trait === 'wolfFang' && !(tgt.status || []).some(s => s.type === 'bleed') && Math.random() < 0.2) { tgt.status.push({ type: 'bleed', dur: STATUS_EFFECTS.bleed.dur }); bLog(zone, `${tgtSl?.name} bleeding! 🩸`, '#ef4444'); }
-                  exp.monAnim = 'attack'; exp.animSlime = tgt.id; exp.slimeAnim = 'hurt';
+
+                // Check for monster ability usage
+                const monsterAbility = md.ability ? MONSTER_ABILITIES[md.ability] : null;
+                const usesAbility = monsterAbility && Math.random() < monsterAbility.chance;
+
+                if (usesAbility) {
+                  // Monster uses special ability
+                  const ab = monsterAbility;
+                  if (ab.effect === 'selfHeal') {
+                    // Self heal ability
+                    const healAmt = Math.floor(mon.maxHp * ab.healPercent);
+                    mon.hp = Math.min(mon.maxHp, mon.hp + healAmt);
+                    bLog(zone, `${md.name} uses ${ab.name}! ${ab.icon} +${healAmt} HP`, '#4ade80');
+                    exp.monAnim = 'attack';
+                  } else if (ab.effect === 'aoe') {
+                    // AOE attack - hits all slimes
+                    const aoeDmg = Math.floor(md.dmg * ab.multiplier);
+                    living.forEach(p => {
+                      const sl = slimes.find(s => s.id === p.id);
+                      let dmg = aoeDmg;
+                      if (sl?.pass?.includes('armored')) dmg *= 0.8;
+                      if (combatBonuses.damageReduction > 0) dmg = Math.max(1, dmg - combatBonuses.damageReduction);
+                      p.hp -= Math.floor(dmg);
+                    });
+                    bLog(zone, `${md.name} uses ${ab.name}! ${ab.icon} Hits everyone for ${aoeDmg}!`, '#ef4444');
+                    exp.monAnim = 'attack';
+                  } else {
+                    // Single target ability
+                    let abilityDmg = md.dmg * (ab.multiplier || 1);
+                    if (ab.damageMultiplier) abilityDmg = md.dmg * ab.damageMultiplier;
+
+                    // Dodge check still applies
+                    let dodgeCh = 0.05 + (tgtStats.slipperiness || 0) * 0.015;
+                    if (tgtSl?.pass?.includes('echolocation')) dodgeCh += 0.12;
+                    if (tgtSl?.traits?.includes('timid')) dodgeCh += 0.10;
+
+                    if (Math.random() < dodgeCh) {
+                      bLog(zone, `${tgtSl?.name} dodges ${md.name}'s ${ab.name}! 💨`, '#22d3ee');
+                    } else {
+                      // Apply ability damage
+                      if (ab.effect !== 'trueDamage') {
+                        if (tgtSl?.pass?.includes('armored')) abilityDmg *= 0.8;
+                        if (combatBonuses.damageReduction > 0) abilityDmg = Math.max(1, abilityDmg - combatBonuses.damageReduction);
+                      }
+                      tgt.hp -= Math.floor(abilityDmg);
+                      bLog(zone, `${md.name} uses ${ab.name}! ${ab.icon} ${tgtSl?.name} takes ${Math.floor(abilityDmg)}!`, '#ef4444');
+
+                      // Apply status effects
+                      if (ab.effect === 'poison' && !(tgt.status || []).some(s => s.type === 'poison')) {
+                        tgt.status = tgt.status || [];
+                        tgt.status.push({ type: 'poison', dur: ab.duration, dmg: ab.damagePerTick });
+                        bLog(zone, `${tgtSl?.name} poisoned! 🧪`, '#22c55e');
+                      } else if (ab.effect === 'burn' && !(tgt.status || []).some(s => s.type === 'burn')) {
+                        tgt.status = tgt.status || [];
+                        tgt.status.push({ type: 'burn', dur: ab.duration, dmg: ab.damagePerTick });
+                        bLog(zone, `${tgtSl?.name} burning! 🔥`, '#f97316');
+                      } else if (ab.effect === 'stun' && !(tgt.status || []).some(s => s.type === 'stun')) {
+                        tgt.status = tgt.status || [];
+                        tgt.status.push({ type: 'stun', dur: ab.duration });
+                        bLog(zone, `${tgtSl?.name} stunned! 💫`, '#f59e0b');
+                      } else if (ab.effect === 'freeze' && !(tgt.status || []).some(s => s.type === 'slow')) {
+                        tgt.status = tgt.status || [];
+                        tgt.status.push({ type: 'slow', dur: ab.duration });
+                        bLog(zone, `${tgtSl?.name} slowed! ❄️`, '#3b82f6');
+                      } else if (ab.effect === 'lifesteal') {
+                        const healAmt = Math.floor(abilityDmg * ab.healPercent);
+                        mon.hp = Math.min(mon.maxHp, mon.hp + healAmt);
+                        bLog(zone, `${md.name} drains ${healAmt} HP! 💀`, '#a855f7');
+                      }
+
+                      if (tgtSl?.pass?.includes('reflect')) {
+                        const ref = Math.floor(abilityDmg * 0.15);
+                        mon.hp -= ref;
+                        bLog(zone, `Reflected ${ref}! 💎`, '#06b6d4');
+                      }
+                      exp.monAnim = 'attack'; exp.animSlime = tgt.id; exp.slimeAnim = 'hurt';
+                    }
+                  }
+                } else {
+                  // Normal attack
+                  // Calculate dodge chance with trait bonuses
+                  let dodgeCh = 0.05 + (tgtStats.slipperiness || 0) * 0.015 + (tgtSl?.pass?.includes('echolocation') ? 0.12 : 0) + (tgtSl?.pass?.includes('trickster') ? 0.08 : 0);
+                  // Cautious: +5% dodge when HP below 50%
+                  if (tgtSl?.traits?.includes('cautious') && tgt.hp < tgt.maxHp * 0.5) dodgeCh += 0.05;
+                  // Timid: +10% dodge
+                  if (tgtSl?.traits?.includes('timid')) dodgeCh += 0.10;
+                  if (Math.random() < dodgeCh) { bLog(zone, `${tgtSl?.name} dodges! 💨`, '#22d3ee'); }
+                  else {
+                    if (tgtSl?.pass?.includes('armored')) inc *= 0.8;
+                    // Reckless trait: +5% damage taken
+                    if (tgtSl?.traits?.includes('reckless')) inc = Math.floor(inc * 1.05);
+                    // Skill tree: flat damage reduction (toughHide)
+                    if (combatBonuses.damageReduction > 0) inc = Math.max(1, inc - combatBonuses.damageReduction);
+                    // Skill tree: 50% less damage when below 20% HP (lastStand)
+                    if (tgt.hp < tgt.maxHp * 0.2 && combatBonuses.lowHpDefense > 0) inc = Math.floor(inc * (1 - combatBonuses.lowHpDefense));
+                    // Apply elemental damage modifier (monster element vs slime element)
+                    const preInc = Math.floor(inc);
+                    inc = calculateElementalDamage(Math.floor(inc), md.element, tgtSl?.primaryElement);
+                    const elementBonus = inc !== preInc;
+                    tgt.hp -= inc;
+                    let hitMsg = `${md.name} hits ${tgtSl?.name} for ${inc}!`;
+                    if (elementBonus && inc > preInc) hitMsg += ' ⚡';
+                    else if (elementBonus && inc < preInc) hitMsg += ' 💫';
+                    bLog(zone, hitMsg, '#ef4444');
+                    if (tgtSl?.pass?.includes('reflect')) { const ref = Math.floor(inc * 0.15); mon.hp -= ref; bLog(zone, `Reflected ${ref}! 💎`, '#06b6d4'); }
+                    if (md.trait === 'venomSac' && !(tgt.status || []).some(s => s.type === 'poison') && Math.random() < 0.3) { tgt.status.push({ type: 'poison', dur: STATUS_EFFECTS.poison.dur }); bLog(zone, `${tgtSl?.name} poisoned! 🧪`, '#22c55e'); }
+                    if ((md.trait === 'dragonHeart' || md.trait === 'phoenixFeather') && !(tgt.status || []).some(s => s.type === 'burn') && Math.random() < 0.25) { tgt.status.push({ type: 'burn', dur: STATUS_EFFECTS.burn.dur }); bLog(zone, `${tgtSl?.name} burning! 🔥`, '#f97316'); }
+                    if (md.trait === 'wolfFang' && !(tgt.status || []).some(s => s.type === 'bleed') && Math.random() < 0.2) { tgt.status.push({ type: 'bleed', dur: STATUS_EFFECTS.bleed.dur }); bLog(zone, `${tgtSl?.name} bleeding! 🩸`, '#ef4444'); }
+                    exp.monAnim = 'attack'; exp.animSlime = tgt.id; exp.slimeAnim = 'hurt';
+                  }
                 }
                 // Skill tree passive: tactical retreat (escape with 1 HP instead of dying, once per expedition)
                 if (tgt.hp <= 0 && tgtSl && hasPassive('tacticalRetreat') && !tgt.usedTacticalRetreat) {
@@ -1701,7 +1789,18 @@ export default function HiveQueenGame() {
                   if (tgtSl.pass?.includes('undying') && !tgt.usedUndying) { tgt.hp = 1; tgt.usedUndying = true; bLog(zone, `${tgtSl.name} survives! (Undying) 💀`, '#d4d4d4'); }
                   else if (tgtSl.pass?.includes('rebirth') && !tgt.usedRebirth) { tgt.hp = Math.floor(tgt.maxHp * 0.3); tgt.usedRebirth = true; bLog(zone, `${tgtSl.name} revives! (Rebirth) 🔥`, '#fb923c'); }
                 }
-                if (tgt.hp <= 0) { bLog(zone, `${tgtSl?.name} fell! 💔`, '#ef4444'); log(`${tgtSl?.name} was defeated!`); setSlimes(s => s.filter(sl => sl.id !== tgt.id)); exp.party = exp.party.filter(p => p.id !== tgt.id); }
+                if (tgt.hp <= 0) {
+                  bLog(zone, `${tgtSl?.name} fell! 💔`, '#ef4444');
+                  log(`${tgtSl?.name} was defeated!`);
+                  // Biomass Reclaimer: recover 50% of stored biomass
+                  if (builds.biomassReclaimer && tgtSl?.biomass > 0) {
+                    const recovered = Math.floor(tgtSl.biomass * 0.5);
+                    setBio(b => b + recovered);
+                    bLog(zone, `♻️ Reclaimed ${recovered} biomass`, '#4ade80');
+                  }
+                  setSlimes(s => s.filter(sl => sl.id !== tgt.id));
+                  exp.party = exp.party.filter(p => p.id !== tgt.id);
+                }
               }
             }
           }
@@ -2201,76 +2300,6 @@ export default function HiveQueenGame() {
                 </div>
               </div>
 
-              {/* Collapsible Unlocks Section */}
-              <div style={{ background: 'rgba(0,0,0,0.2)', borderRadius: 8, overflow: 'hidden' }}>
-                <button
-                  onClick={() => setExpandedSections(s => ({ ...s, queenUnlocks: !s.queenUnlocks }))}
-                  style={{
-                    width: '100%',
-                    padding: 10,
-                    background: 'transparent',
-                    border: 'none',
-                    color: '#fff',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    fontSize: 12,
-                    fontWeight: 'bold',
-                    opacity: 0.9
-                  }}
-                >
-                  <span>✨ Current Benefits & Unlocks</span>
-                  <span>{expandedSections.queenUnlocks ? '▼' : '▶'}</span>
-                </button>
-                {expandedSections.queenUnlocks && (
-                  <div style={{ padding: '0 12px 12px' }}>
-                    <div style={{ display: 'grid', gap: 4, fontSize: 11, marginBottom: 10 }}>
-                      {/* Slime tiers are now building-unlocked, show which are available */}
-                      {unlockedTiers.map(k => (
-                        <div key={k} style={{ color: '#4ade80' }}>• {SLIME_TIERS[k].name} Slimes unlocked</div>
-                      ))}
-                      {Object.entries(ZONES).filter(([_, z]) => !z.unlock || queen.level >= z.unlock).map(([k, z]) => (
-                        <div key={k} style={{ color: '#22d3ee' }}>• {z.name} accessible</div>
-                      ))}
-                    </div>
-
-                    {/* Next Unlock Preview */}
-                    {(() => {
-                      // Find next zone unlock level
-                      const unlockLevels = new Set();
-                      Object.values(ZONES).forEach(z => {
-                        if (z.unlock && z.unlock > queen.level) unlockLevels.add(z.unlock);
-                      });
-
-                      // Find the closest unlock level
-                      const sortedLevels = [...unlockLevels].sort((a, b) => a - b);
-                      if (sortedLevels.length === 0) return null;
-
-                      const nextUnlockLevel = sortedLevels[0];
-                      const nextUnlocks = [];
-
-                      Object.entries(ZONES).forEach(([k, z]) => {
-                        if (z.unlock === nextUnlockLevel) nextUnlocks.push({ type: 'zone', name: z.name, icon: z.icon });
-                      });
-
-                      if (nextUnlocks.length > 0) {
-                        return (
-                          <div style={{ background: 'rgba(236,72,153,0.2)', borderRadius: 8, padding: 12 }}>
-                            <div style={{ fontSize: 12, fontWeight: 'bold', marginBottom: 8, opacity: 0.9 }}>🔮 Next Unlock (Level {nextUnlockLevel})</div>
-                            <div style={{ display: 'grid', gap: 4, fontSize: 11 }}>
-                              {nextUnlocks.map((u, i) => (
-                                <div key={i} style={{ color: '#f472b6' }}>• {u.icon} {u.name}</div>
-                              ))}
-                            </div>
-                          </div>
-                        );
-                      }
-                      return null;
-                    })()}
-                  </div>
-                )}
-              </div>
             </div>
 
             {/* Collapsible Mana & Abilities */}
