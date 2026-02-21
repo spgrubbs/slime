@@ -4,7 +4,7 @@ import { BATTLE_TICK_SPEED } from '../data/gameConstants.js';
 import SlimeSprite from './SlimeSprite.jsx';
 import MonsterSprite from './MonsterSprite.jsx';
 
-const BattleArena = ({ exp, slimes, zone, logs }) => {
+const BattleArena = ({ exp, slimes, zone, logs, verboseLogs, setVerboseLogs }) => {
   const z = ZONES[zone];
   const logRef = useRef(null);
   useEffect(() => { if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight; }, [logs]);
@@ -39,7 +39,11 @@ const BattleArena = ({ exp, slimes, zone, logs }) => {
                 <SlimeSprite tier={sl.tier} size={38} hp={p.hp} maxHp={p.maxHp} mutations={sl.mutations} anim={exp.animSlime === p.id ? exp.slimeAnim : 'idle'} status={p.status || []} primaryElement={sl.primaryElement} />
                 <div style={{ fontSize: 10 }}>
                   <div style={{ fontWeight: 'bold' }}>{sl.name.split(' ')[0]}</div>
-                  <div style={{ opacity: 0.7 }}>🧬{Math.floor(sl.biomass || 0)} • {Math.ceil(p.hp)}/{p.maxHp}</div>
+                  <div style={{ opacity: 0.7 }}>
+                    🧬{Math.floor(sl.biomass || 0)}
+                    {(p.biomassGained || 0) > 0 && <span style={{ color: '#4ade80' }}>+{Math.floor(p.biomassGained)}</span>}
+                    {' • '}{Math.ceil(p.hp)}/{p.maxHp}
+                  </div>
                 </div>
               </div>
             );
@@ -100,9 +104,33 @@ const BattleArena = ({ exp, slimes, zone, logs }) => {
           </div>
         </div>
       )}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 12px', background: 'rgba(0,0,0,0.6)', borderTop: '1px solid rgba(255,255,255,0.1)' }}>
+        <span style={{ fontSize: 10, opacity: 0.6 }}>Battle Log</span>
+        {setVerboseLogs && (
+          <button
+            onClick={() => setVerboseLogs(!verboseLogs)}
+            style={{
+              fontSize: 9,
+              padding: '2px 8px',
+              background: verboseLogs ? 'rgba(168,85,247,0.4)' : 'rgba(255,255,255,0.1)',
+              border: verboseLogs ? '1px solid #a855f7' : '1px solid rgba(255,255,255,0.2)',
+              borderRadius: 4,
+              color: verboseLogs ? '#c084fc' : '#888',
+              cursor: 'pointer'
+            }}
+          >
+            📊 {verboseLogs ? 'Verbose ON' : 'Verbose'}
+          </button>
+        )}
+      </div>
       <div ref={logRef} style={{ height: 100, overflowY: 'auto', background: 'rgba(0,0,0,0.5)', padding: '8px 12px', fontSize: 11 }}>
         {(logs || []).slice(-20).map((l,i) => (
-          <div key={i} style={{ padding: '3px 0', color: l.c || '#888' }}>{l.m}</div>
+          <div key={i} style={{ padding: '3px 0', color: l.c || '#888' }}>
+            {l.m}
+            {verboseLogs && l.v && (
+              <div style={{ fontSize: 9, opacity: 0.6, marginLeft: 12, color: '#a78bfa' }}>{l.v}</div>
+            )}
+          </div>
         ))}
       </div>
     </div>
