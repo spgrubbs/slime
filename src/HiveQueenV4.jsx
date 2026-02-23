@@ -1513,38 +1513,39 @@ export default function HiveQueenGame() {
                   const stats = getSlimeStats(sl, p.biomassGained || 0);
                   let dmg = stats.firmness;
                   let crit = false;
-                  // Track modifiers for verbose logging
-                  const mods = [`Base: ${stats.firmness} (firm)`];
+                  // Track modifiers for verbose logging - show exact values
+                  const parts = []; // Each entry: "+N (source)" or "-N (source)"
+                  parts.push(`${stats.firmness} firmness`);
                   // Primordial trait: +10% all stats (applied to damage)
-                  if (sl.traits?.includes('primordial')) { dmg = Math.floor(dmg * 1.10); mods.push('+10% primordial'); }
+                  if (sl.traits?.includes('primordial')) { const prev = dmg; dmg = Math.floor(dmg * 1.10); parts.push(`+${dmg - prev} (Primordial +10%)`); }
                   // Mutation passives (apply mutationPower bonus from skill tree)
                   const mutPower = combatBonuses.mutationPower;
-                  if (sl.pass?.includes('ferocity')) { dmg *= 1 + (0.15 * mutPower); mods.push(`+${Math.round(15 * mutPower)}% ferocity`); }
+                  if (sl.pass?.includes('ferocity')) { const prev = dmg; dmg = Math.floor(dmg * (1 + 0.15 * mutPower)); parts.push(`+${Math.floor(dmg) - prev} (Ferocity mutation +${Math.round(15 * mutPower)}%)`); }
                   // Personality traits affecting damage
-                  if (sl.traits?.includes('brave') && p.hp < p.maxHp * 0.5) { dmg = Math.floor(dmg * 1.05); mods.push('+5% brave'); }
-                  if (sl.traits?.includes('lazy')) { dmg = Math.floor(dmg * 0.95); mods.push('-5% lazy'); }
-                  if (sl.traits?.includes('timid')) { dmg = Math.floor(dmg * 0.95); mods.push('-5% timid'); }
-                  if (sl.traits?.includes('reckless')) { dmg = Math.floor(dmg * 1.10); mods.push('+10% reckless'); }
-                  if (sl.traits?.includes('fierce') && !p.usedFierce) { dmg = Math.floor(dmg * 1.08); p.usedFierce = true; mods.push('+8% fierce'); }
+                  if (sl.traits?.includes('brave') && p.hp < p.maxHp * 0.5) { const prev = dmg; dmg = Math.floor(dmg * 1.05); parts.push(`+${dmg - prev} (Brave trait, low HP)`); }
+                  if (sl.traits?.includes('lazy')) { const prev = dmg; dmg = Math.floor(dmg * 0.95); parts.push(`${dmg - prev} (Lazy trait -5%)`); }
+                  if (sl.traits?.includes('timid')) { const prev = dmg; dmg = Math.floor(dmg * 0.95); parts.push(`${dmg - prev} (Timid trait -5%)`); }
+                  if (sl.traits?.includes('reckless')) { const prev = dmg; dmg = Math.floor(dmg * 1.10); parts.push(`+${dmg - prev} (Reckless trait +10%)`); }
+                  if (sl.traits?.includes('fierce') && !p.usedFierce) { const prev = dmg; dmg = Math.floor(dmg * 1.08); p.usedFierce = true; parts.push(`+${dmg - prev} (Fierce first strike +8%)`); }
                   // Skill tree: +damage when slime is low HP (berserkMode)
-                  if (p.hp < p.maxHp * 0.3 && combatBonuses.lowHpDamage > 1) { dmg = Math.floor(dmg * combatBonuses.lowHpDamage); mods.push(`+${Math.round((combatBonuses.lowHpDamage - 1) * 100)}% berserk`); }
+                  if (p.hp < p.maxHp * 0.3 && combatBonuses.lowHpDamage > 1) { const prev = dmg; dmg = Math.floor(dmg * combatBonuses.lowHpDamage); parts.push(`+${dmg - prev} (Berserk Mode skill, <30% HP)`); }
                   // Skill tree: +damage vs monsters with more HP (brutalForce)
-                  if (mon.maxHp > p.maxHp && combatBonuses.damageVsHighHp > 1) { dmg = Math.floor(dmg * combatBonuses.damageVsHighHp); mods.push(`+${Math.round((combatBonuses.damageVsHighHp - 1) * 100)}% brutal`); }
+                  if (mon.maxHp > p.maxHp && combatBonuses.damageVsHighHp > 1) { const prev = dmg; dmg = Math.floor(dmg * combatBonuses.damageVsHighHp); parts.push(`+${dmg - prev} (Brutal Force skill, vs high HP)`); }
                   // Skill tree: +damage vs low HP monsters (executioner)
-                  if (mon.hp < mon.maxHp * 0.25 && combatBonuses.executeDamage > 1) { dmg = Math.floor(dmg * combatBonuses.executeDamage); mods.push(`+${Math.round((combatBonuses.executeDamage - 1) * 100)}% execute`); }
+                  if (mon.hp < mon.maxHp * 0.25 && combatBonuses.executeDamage > 1) { const prev = dmg; dmg = Math.floor(dmg * combatBonuses.executeDamage); parts.push(`+${dmg - prev} (Executioner skill, <25% HP)`); }
                   // Crit chance calculation - apply skill tree bonus
                   let critCh = 0.05 + combatBonuses.critChance + stats.slipperiness * 0.01 + (sl.pass?.includes('trickster') ? 0.08 * mutPower : 0);
                   if (sl.traits?.includes('swift')) critCh += 0.03;
-                  if (sl.pass?.includes('ambush') && !p.usedAmbush) { crit = true; p.usedAmbush = true; mods.push('ambush crit!'); }
-                  else if (Math.random() < critCh) { crit = true; mods.push(`crit! (${Math.round(critCh * 100)}%)`); }
-                  if (crit) { const critMult = 1.5 + (sl.pass?.includes('crushing') ? 0.3 * mutPower : 0); dmg *= critMult; mods.push(`x${critMult.toFixed(1)} crit dmg`); }
-                  if (bon.spd > 0) { dmg = Math.floor(dmg * (1 + bon.spd * 0.1)); mods.push(`+${bon.spd * 10}% upgrades`); }
+                  if (sl.pass?.includes('ambush') && !p.usedAmbush) { crit = true; p.usedAmbush = true; parts.push('AMBUSH guaranteed crit'); }
+                  else if (Math.random() < critCh) { crit = true; parts.push(`CRIT (${Math.round(critCh * 100)}% chance)`); }
+                  if (crit) { const critMult = 1.5 + (sl.pass?.includes('crushing') ? 0.3 * mutPower : 0); const prev = dmg; dmg = Math.floor(dmg * critMult); parts.push(`+${dmg - prev} (x${critMult.toFixed(1)} crit multiplier${sl.pass?.includes('crushing') ? ' +Crushing' : ''})`); }
+                  if (bon.spd > 0) { const prev = dmg; dmg = Math.floor(dmg * (1 + bon.spd * 0.1)); if (dmg !== prev) parts.push(`+${dmg - prev} (Swift Slimes research +${Math.round(bon.spd * 10)}%)`); }
                   // Apply elemental damage modifier (slime element vs monster element) with skill bonus
                   const preDmg = Math.floor(dmg);
                   dmg = calculateElementalDamage(preDmg, sl.primaryElement, md.element);
                   // Apply elemental damage skill bonus
-                  if (dmg > preDmg) { dmg = Math.floor(dmg * combatBonuses.elementalDamage); mods.push(`+elem (${sl.primaryElement}>${md.element})`); }
-                  else if (dmg < preDmg) { mods.push(`-elem (${sl.primaryElement}<${md.element})`); }
+                  if (dmg > preDmg) { dmg = Math.floor(dmg * combatBonuses.elementalDamage); parts.push(`+${dmg - preDmg} (${sl.primaryElement} strong vs ${md.element}, +25%)`); }
+                  else if (dmg < preDmg) { parts.push(`${dmg - preDmg} (${sl.primaryElement} weak vs ${md.element}, -25%)`); }
                   const elementBonus = dmg !== preDmg;
                   mon.hp -= dmg;
                   // Status effects with skill tree bonus
@@ -1566,7 +1567,7 @@ export default function HiveQueenGame() {
                   let dmgMsg = `${sl.name} ${crit ? '💥CRITS' : 'hits'} for ${Math.floor(dmg)}!`;
                   if (elementBonus && dmg > preDmg) dmgMsg += ' ⚡ Super effective!';
                   else if (elementBonus && dmg < preDmg) dmgMsg += ' 💫 Not effective...';
-                  const verboseDetail = mods.join(' → ');
+                  const verboseDetail = parts.join(', ');
                   bLog(zone, dmgMsg, crit ? '#f59e0b' : elementBonus && dmg > preDmg ? '#4ade80' : elementBonus ? '#94a3b8' : '#4ade80', verboseDetail);
                 }
               }
@@ -1579,23 +1580,23 @@ export default function HiveQueenGame() {
                 // Apply skill tree bonuses and ranch bonuses: expeditionBiomass, biomassGain, scoutPost
                 const ranchBonuses = getRanchBonuses();
                 const scoutBonus = 1 + ranchBonuses.expeditionRewards;
-                const bioMods = [`Base: ${md.biomass}`];
-                let bioG = Math.floor(md.biomass * bon.bio * combatBonuses.expeditionBiomass * combatBonuses.biomassGain * scoutBonus);
-                if (bon.bio > 1) bioMods.push(`×${bon.bio.toFixed(1)} upgrades`);
-                if (combatBonuses.expeditionBiomass > 1) bioMods.push(`×${combatBonuses.expeditionBiomass.toFixed(1)} expedition`);
-                if (combatBonuses.biomassGain > 1) bioMods.push(`×${combatBonuses.biomassGain.toFixed(1)} skill`);
-                if (scoutBonus > 1) bioMods.push(`×${scoutBonus.toFixed(1)} scout`);
-                living.forEach(p => { const sl = slimes.find(s => s.id === p.id); if (sl?.pass?.includes('manaLeech')) { bioG = Math.floor(bioG * 1.1); bioMods.push('+10% manaLeech'); } });
+                const bioParts = [`${md.biomass} base drop`];
+                let bioG = md.biomass;
+                if (bon.bio > 1) { const prev = bioG; bioG = Math.floor(bioG * bon.bio); bioParts.push(`+${bioG - prev} (Efficient Digestion research +${Math.round((bon.bio - 1) * 100)}%)`); }
+                if (combatBonuses.expeditionBiomass > 1) { const prev = bioG; bioG = Math.floor(bioG * combatBonuses.expeditionBiomass); bioParts.push(`+${bioG - prev} (Expedition Biomass skill +${Math.round((combatBonuses.expeditionBiomass - 1) * 100)}%)`); }
+                if (combatBonuses.biomassGain > 1) { const prev = bioG; bioG = Math.floor(bioG * combatBonuses.biomassGain); bioParts.push(`+${bioG - prev} (Biomass Gain skill +${Math.round((combatBonuses.biomassGain - 1) * 100)}%)`); }
+                if (scoutBonus > 1) { const prev = bioG; bioG = Math.floor(bioG * scoutBonus); bioParts.push(`+${bioG - prev} (Scout Post ranch +${Math.round((scoutBonus - 1) * 100)}%)`); }
+                living.forEach(p => { const sl = slimes.find(s => s.id === p.id); if (sl?.pass?.includes('manaLeech')) { const prev = bioG; bioG = Math.floor(bioG * 1.1); bioParts.push(`+${bioG - prev} (Mana Leech mutation +10%)`); } });
                 // Personality traits affecting biomass gain
                 let bioMultiplier = 1;
                 living.forEach(p => {
                   const sl = slimes.find(s => s.id === p.id);
-                  if (sl?.traits?.includes('greedy')) { bioMultiplier += 0.05; bioMods.push('+5% greedy'); }
-                  if (sl?.traits?.includes('glutton')) { bioMultiplier += 0.10; bioMods.push('+10% glutton'); }
+                  if (sl?.traits?.includes('greedy')) { bioMultiplier += 0.05; bioParts.push(`+5% (${sl.name} Greedy trait)`); }
+                  if (sl?.traits?.includes('glutton')) { bioMultiplier += 0.10; bioParts.push(`+10% (${sl.name} Glutton trait)`); }
                 });
                 // Bountiful Harvest hive ability: +25% biomass
-                if (isHiveAbilityActive('bountifulHarvest')) { bioMultiplier += 0.25; bioMods.push('+25% bountiful'); }
-                bioG = Math.floor(bioG * bioMultiplier);
+                if (isHiveAbilityActive('bountifulHarvest')) { bioMultiplier += 0.25; bioParts.push('+25% (Bountiful Harvest hive ability)'); }
+                if (bioMultiplier > 1) { const prev = bioG; bioG = Math.floor(bioG * bioMultiplier); bioParts.push(`= ${bioG} total`); }
 
                 // Resilient trait: recover 1 HP per kill
                 living.forEach(p => {
@@ -1611,11 +1612,11 @@ export default function HiveQueenGame() {
                 living.forEach(p => {
                   p.biomassGained = (p.biomassGained || 0) + bioPerSlime;
                 });
-                bioMods.push(`÷${living.length} slimes = ${Math.floor(bioPerSlime)} each`);
+                if (living.length > 1) bioParts.push(`${bioG} / ${living.length} slimes = ${Math.floor(bioPerSlime)} each`);
                 const bioMsg = hasBountiful
                   ? `${md.name} defeated! +${Math.floor(bioPerSlime)}🧬 each (🌾+25%)`
                   : `${md.name} defeated! +${Math.floor(bioPerSlime)}🧬 each`;
-                bLog(zone, bioMsg, '#4ade80', bioMods.join(' → '));
+                bLog(zone, bioMsg, '#4ade80', bioParts.join(', '));
 
                 // Rare Prism drop (0.1% per kill)
                 if (Math.random() < 0.001) {
@@ -1709,7 +1710,7 @@ export default function HiveQueenGame() {
                     // Self heal ability
                     const healAmt = Math.floor(mon.maxHp * ab.healPercent);
                     mon.hp = Math.min(mon.maxHp, mon.hp + healAmt);
-                    bLog(zone, `${md.name} uses ${ab.name}! ${ab.icon} +${healAmt} HP`, '#4ade80', `${Math.round(ab.healPercent * 100)}% of ${mon.maxHp} maxHP`);
+                    bLog(zone, `${md.name} uses ${ab.name}! ${ab.icon} +${healAmt} HP`, '#4ade80', `${healAmt} = ${Math.round(ab.healPercent * 100)}% of ${mon.maxHp} max HP (${ab.name} ability)`);
                     exp.monAnim = 'attack';
                   } else if (ab.effect === 'aoe') {
                     // AOE attack - hits all slimes
@@ -1721,13 +1722,13 @@ export default function HiveQueenGame() {
                       if (combatBonuses.damageReduction > 0) dmg = Math.max(1, dmg - combatBonuses.damageReduction);
                       p.hp -= Math.floor(dmg);
                     });
-                    bLog(zone, `${md.name} uses ${ab.name}! ${ab.icon} Hits everyone for ${aoeDmg}!`, '#ef4444', `Base ${md.dmg} × ${ab.multiplier} AOE`);
+                    bLog(zone, `${md.name} uses ${ab.name}! ${ab.icon} Hits everyone for ${aoeDmg}!`, '#ef4444', `${aoeDmg} = ${md.dmg} base x${ab.multiplier} ${ab.name} AOE multiplier`);
                     exp.monAnim = 'attack';
                   } else {
                     // Single target ability
                     let abilityDmg = md.dmg * (ab.multiplier || 1);
                     if (ab.damageMultiplier) abilityDmg = md.dmg * ab.damageMultiplier;
-                    const abMods = [`Base: ${md.dmg} × ${ab.multiplier || ab.damageMultiplier || 1}`];
+                    const abParts = [`${Math.floor(abilityDmg)} = ${md.dmg} base x${ab.multiplier || ab.damageMultiplier || 1} (${ab.name})`];
 
                     // Dodge check still applies
                     let dodgeCh = 0.05 + (tgtStats.slipperiness || 0) * 0.015;
@@ -1735,45 +1736,45 @@ export default function HiveQueenGame() {
                     if (tgtSl?.traits?.includes('timid')) dodgeCh += 0.10;
 
                     if (Math.random() < dodgeCh) {
-                      bLog(zone, `${tgtSl?.name} dodges ${md.name}'s ${ab.name}! 💨`, '#22d3ee', `Dodge ${Math.round(dodgeCh * 100)}%`);
+                      bLog(zone, `${tgtSl?.name} dodges ${md.name}'s ${ab.name}! 💨`, '#22d3ee', `Dodge chance ${Math.round(dodgeCh * 100)}% (5% base${tgtStats.slipperiness > 0 ? ` +${(tgtStats.slipperiness * 1.5).toFixed(1)}% slip` : ''}${tgtSl?.pass?.includes('echolocation') ? ' +12% Echolocation' : ''}${tgtSl?.traits?.includes('timid') ? ' +10% Timid' : ''})`);
                     } else {
                       // Apply ability damage
                       if (ab.effect !== 'trueDamage') {
-                        if (tgtSl?.pass?.includes('armored')) { abilityDmg *= 0.8; abMods.push('-20% armor'); }
-                        if (combatBonuses.damageReduction > 0) { abilityDmg = Math.max(1, abilityDmg - combatBonuses.damageReduction); abMods.push(`-${combatBonuses.damageReduction} toughHide`); }
+                        if (tgtSl?.pass?.includes('armored')) { const prev = abilityDmg; abilityDmg *= 0.8; abParts.push(`${Math.floor(abilityDmg) - Math.floor(prev)} (Armored mutation -20%)`); }
+                        if (combatBonuses.damageReduction > 0) { const prev = Math.floor(abilityDmg); abilityDmg = Math.max(1, abilityDmg - combatBonuses.damageReduction); abParts.push(`-${prev - Math.floor(abilityDmg)} (Tough Hide skill)`); }
                       } else {
-                        abMods.push('TRUE DMG');
+                        abParts.push('ignores armor (true damage)');
                       }
                       tgt.hp -= Math.floor(abilityDmg);
-                      bLog(zone, `${md.name} uses ${ab.name}! ${ab.icon} ${tgtSl?.name} takes ${Math.floor(abilityDmg)}!`, '#ef4444', abMods.join(' → '));
+                      bLog(zone, `${md.name} uses ${ab.name}! ${ab.icon} ${tgtSl?.name} takes ${Math.floor(abilityDmg)}!`, '#ef4444', abParts.join(', '));
 
                       // Apply status effects
                       if (ab.effect === 'poison' && !(tgt.status || []).some(s => s.type === 'poison')) {
                         tgt.status = tgt.status || [];
                         tgt.status.push({ type: 'poison', dur: ab.duration, dmg: ab.damagePerTick });
-                        bLog(zone, `${tgtSl?.name} poisoned! 🧪`, '#22c55e', `${ab.damagePerTick} dmg/tick for ${ab.duration} ticks`);
+                        bLog(zone, `${tgtSl?.name} poisoned! 🧪`, '#22c55e', `Takes ${ab.damagePerTick} damage each tick for ${ab.duration} ticks (${ab.damagePerTick * ab.duration} total)`);
                       } else if (ab.effect === 'burn' && !(tgt.status || []).some(s => s.type === 'burn')) {
                         tgt.status = tgt.status || [];
                         tgt.status.push({ type: 'burn', dur: ab.duration, dmg: ab.damagePerTick });
-                        bLog(zone, `${tgtSl?.name} burning! 🔥`, '#f97316', `${ab.damagePerTick} dmg/tick for ${ab.duration} ticks`);
+                        bLog(zone, `${tgtSl?.name} burning! 🔥`, '#f97316', `Takes ${ab.damagePerTick} damage each tick for ${ab.duration} ticks (${ab.damagePerTick * ab.duration} total)`);
                       } else if (ab.effect === 'stun' && !(tgt.status || []).some(s => s.type === 'stun')) {
                         tgt.status = tgt.status || [];
                         tgt.status.push({ type: 'stun', dur: ab.duration });
-                        bLog(zone, `${tgtSl?.name} stunned! 💫`, '#f59e0b', `Duration: ${ab.duration} ticks`);
+                        bLog(zone, `${tgtSl?.name} stunned! 💫`, '#f59e0b', `Loses next ${ab.duration} turn(s)`);
                       } else if (ab.effect === 'freeze' && !(tgt.status || []).some(s => s.type === 'slow')) {
                         tgt.status = tgt.status || [];
                         tgt.status.push({ type: 'slow', dur: ab.duration });
-                        bLog(zone, `${tgtSl?.name} slowed! ❄️`, '#3b82f6', `Duration: ${ab.duration} ticks`);
+                        bLog(zone, `${tgtSl?.name} slowed! ❄️`, '#3b82f6', `Slowed for ${ab.duration} turn(s)`);
                       } else if (ab.effect === 'lifesteal') {
                         const healAmt = Math.floor(abilityDmg * ab.healPercent);
                         mon.hp = Math.min(mon.maxHp, mon.hp + healAmt);
-                        bLog(zone, `${md.name} drains ${healAmt} HP! 💀`, '#a855f7', `${Math.round(ab.healPercent * 100)}% of ${Math.floor(abilityDmg)} dmg`);
+                        bLog(zone, `${md.name} drains ${healAmt} HP! 💀`, '#a855f7', `${healAmt} = ${Math.round(ab.healPercent * 100)}% of ${Math.floor(abilityDmg)} damage dealt (Life Drain)`);
                       }
 
                       if (tgtSl?.pass?.includes('reflect')) {
                         const ref = Math.floor(abilityDmg * 0.15);
                         mon.hp -= ref;
-                        bLog(zone, `Reflected ${ref}! 💎`, '#06b6d4', '15% reflect mutation');
+                        bLog(zone, `Reflected ${ref}! 💎`, '#06b6d4', `${ref} = 15% of ${Math.floor(abilityDmg)} damage (Reflect mutation)`);
                       }
                       exp.monAnim = 'attack'; exp.animSlime = tgt.id; exp.slimeAnim = 'hurt';
                     }
@@ -1782,36 +1783,36 @@ export default function HiveQueenGame() {
                   // Normal attack
                   // Calculate dodge chance with trait bonuses
                   let dodgeCh = 0.05 + (tgtStats.slipperiness || 0) * 0.015 + (tgtSl?.pass?.includes('echolocation') ? 0.12 : 0) + (tgtSl?.pass?.includes('trickster') ? 0.08 : 0);
-                  const dodgeMods = [`5% base`];
-                  if (tgtStats.slipperiness > 0) dodgeMods.push(`+${(tgtStats.slipperiness * 1.5).toFixed(1)}% slip`);
-                  if (tgtSl?.pass?.includes('echolocation')) dodgeMods.push('+12% echo');
-                  if (tgtSl?.pass?.includes('trickster')) dodgeMods.push('+8% trick');
+                  const dodgeParts = ['5% base'];
+                  if (tgtStats.slipperiness > 0) dodgeParts.push(`+${(tgtStats.slipperiness * 1.5).toFixed(1)}% from ${tgtStats.slipperiness} slipperiness`);
+                  if (tgtSl?.pass?.includes('echolocation')) dodgeParts.push('+12% Echolocation mutation');
+                  if (tgtSl?.pass?.includes('trickster')) dodgeParts.push('+8% Trickster mutation');
                   // Cautious: +5% dodge when HP below 50%
-                  if (tgtSl?.traits?.includes('cautious') && tgt.hp < tgt.maxHp * 0.5) { dodgeCh += 0.05; dodgeMods.push('+5% cautious'); }
+                  if (tgtSl?.traits?.includes('cautious') && tgt.hp < tgt.maxHp * 0.5) { dodgeCh += 0.05; dodgeParts.push('+5% Cautious trait (<50% HP)'); }
                   // Timid: +10% dodge
-                  if (tgtSl?.traits?.includes('timid')) { dodgeCh += 0.10; dodgeMods.push('+10% timid'); }
-                  if (Math.random() < dodgeCh) { bLog(zone, `${tgtSl?.name} dodges! 💨`, '#22d3ee', `Dodge: ${dodgeMods.join(' → ')} = ${Math.round(dodgeCh * 100)}%`); }
+                  if (tgtSl?.traits?.includes('timid')) { dodgeCh += 0.10; dodgeParts.push('+10% Timid trait'); }
+                  if (Math.random() < dodgeCh) { bLog(zone, `${tgtSl?.name} dodges! 💨`, '#22d3ee', `Dodge chance: ${dodgeParts.join(', ')} = ${Math.round(dodgeCh * 100)}% total`); }
                   else {
-                    const defMods = [`Base: ${md.dmg}`];
-                    if (tgtSl?.pass?.includes('armored')) { inc *= 0.8; defMods.push('-20% armor'); }
+                    const defParts = [`${md.dmg} base attack`];
+                    if (tgtSl?.pass?.includes('armored')) { const prev = inc; inc *= 0.8; defParts.push(`${Math.floor(inc) - prev} (Armored mutation -20%)`); }
                     // Reckless trait: +5% damage taken
-                    if (tgtSl?.traits?.includes('reckless')) { inc = Math.floor(inc * 1.05); defMods.push('+5% reckless'); }
+                    if (tgtSl?.traits?.includes('reckless')) { const prev = inc; inc = Math.floor(inc * 1.05); defParts.push(`+${Math.floor(inc) - prev} (Reckless trait +5% taken)`); }
                     // Skill tree: flat damage reduction (toughHide)
-                    if (combatBonuses.damageReduction > 0) { inc = Math.max(1, inc - combatBonuses.damageReduction); defMods.push(`-${combatBonuses.damageReduction} toughHide`); }
+                    if (combatBonuses.damageReduction > 0) { const prev = Math.floor(inc); inc = Math.max(1, inc - combatBonuses.damageReduction); defParts.push(`-${prev - Math.floor(inc)} (Tough Hide skill)`); }
                     // Skill tree: 50% less damage when below 20% HP (lastStand)
-                    if (tgt.hp < tgt.maxHp * 0.2 && combatBonuses.lowHpDefense > 0) { inc = Math.floor(inc * (1 - combatBonuses.lowHpDefense)); defMods.push(`-${Math.round(combatBonuses.lowHpDefense * 100)}% lastStand`); }
+                    if (tgt.hp < tgt.maxHp * 0.2 && combatBonuses.lowHpDefense > 0) { const prev = Math.floor(inc); inc = Math.floor(inc * (1 - combatBonuses.lowHpDefense)); defParts.push(`-${prev - Math.floor(inc)} (Last Stand skill, <20% HP)`); }
                     // Apply elemental damage modifier (monster element vs slime element)
                     const preInc = Math.floor(inc);
                     inc = calculateElementalDamage(Math.floor(inc), md.element, tgtSl?.primaryElement);
                     const elementBonus = inc !== preInc;
-                    if (elementBonus && inc > preInc) defMods.push(`+elem (${md.element}>${tgtSl?.primaryElement})`);
-                    else if (elementBonus && inc < preInc) defMods.push(`-elem (${md.element}<${tgtSl?.primaryElement})`);
+                    if (elementBonus && inc > preInc) defParts.push(`+${inc - preInc} (${md.element} strong vs ${tgtSl?.primaryElement})`);
+                    else if (elementBonus && inc < preInc) defParts.push(`${inc - preInc} (${md.element} weak vs ${tgtSl?.primaryElement})`);
                     tgt.hp -= inc;
                     let hitMsg = `${md.name} hits ${tgtSl?.name} for ${inc}!`;
                     if (elementBonus && inc > preInc) hitMsg += ' ⚡';
                     else if (elementBonus && inc < preInc) hitMsg += ' 💫';
-                    bLog(zone, hitMsg, '#ef4444', defMods.join(' → '));
-                    if (tgtSl?.pass?.includes('reflect')) { const ref = Math.floor(inc * 0.15); mon.hp -= ref; bLog(zone, `Reflected ${ref}! 💎`, '#06b6d4', `15% of ${inc} dmg reflected`); }
+                    bLog(zone, hitMsg, '#ef4444', defParts.join(', '));
+                    if (tgtSl?.pass?.includes('reflect')) { const ref = Math.floor(inc * 0.15); mon.hp -= ref; bLog(zone, `Reflected ${ref}! 💎`, '#06b6d4', `${ref} = 15% of ${inc} damage (Reflect mutation)`); }
                     if (md.trait === 'venomSac' && !(tgt.status || []).some(s => s.type === 'poison') && Math.random() < 0.3) { tgt.status.push({ type: 'poison', dur: STATUS_EFFECTS.poison.dur }); bLog(zone, `${tgtSl?.name} poisoned! 🧪`, '#22c55e'); }
                     if ((md.trait === 'dragonHeart' || md.trait === 'phoenixFeather') && !(tgt.status || []).some(s => s.type === 'burn') && Math.random() < 0.25) { tgt.status.push({ type: 'burn', dur: STATUS_EFFECTS.burn.dur }); bLog(zone, `${tgtSl?.name} burning! 🔥`, '#f97316'); }
                     if (md.trait === 'wolfFang' && !(tgt.status || []).some(s => s.type === 'bleed') && Math.random() < 0.2) { tgt.status.push({ type: 'bleed', dur: STATUS_EFFECTS.bleed.dur }); bLog(zone, `${tgtSl?.name} bleeding! 🩸`, '#ef4444'); }
