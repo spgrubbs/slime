@@ -125,25 +125,27 @@ export const MONSTER_TYPES = {
   youngWolf: {
     name: 'Young Wolf',
     icon: '🐺',
+    desc: 'A scrappy young predator learning to hunt. Fast but fragile, it relies on sharp fangs to bring down prey.',
     tier: 1,
     hp: 25,
     dmg: 4,
-    biomass: 3,
+    biomass: 6,
     mats: ['Wolf Fang', 'Wolf Pelt'],
     trait: null,
     drop: 0.03,
     abilities: ['Basic attacks'],
-    ability: null, // No special ability
+    ability: null,
     element: null,
     mutation: 'sharp',
   },
   venusSlimetrap: {
     name: 'Venus Slimetrap',
     icon: '🌱',
+    desc: 'A carnivorous plant that evolved to trap slimes specifically. Its digestive juices are prized by alchemists.',
     tier: 1,
     hp: 35,
     dmg: 3,
-    biomass: 4,
+    biomass: 8,
     mats: ['Slimetrap Vine', 'Digestive Sac'],
     trait: null,
     drop: 0.03,
@@ -154,10 +156,11 @@ export const MONSTER_TYPES = {
   pebblet: {
     name: 'Pebblet',
     icon: '🪨',
+    desc: 'A small living rock that tumbles through the forest floor. Its stony exterior makes it surprisingly tough.',
     tier: 1,
     hp: 40,
     dmg: 3,
-    biomass: 3,
+    biomass: 7,
     mats: ['Pebble Shard', 'Earthite'],
     trait: null,
     drop: 0.03,
@@ -168,10 +171,11 @@ export const MONSTER_TYPES = {
   vineSpider: {
     name: 'Vine Spider',
     icon: '🕷️',
+    desc: 'An aggressive arachnid that weaves webs from living vines. Its bite is quick and its traps are sticky.',
     tier: 1,
     hp: 20,
     dmg: 6,
-    biomass: 3,
+    biomass: 5,
     mats: ['Spider Silk', 'Vine Weave'],
     trait: null,
     drop: 0.03,
@@ -183,10 +187,11 @@ export const MONSTER_TYPES = {
   lifeFairy: {
     name: 'Life Fairy',
     icon: '🧚',
+    desc: 'A rare magical creature that radiates life energy. Fragile but immensely valuable, its essence holds the secret to resurrection.',
     tier: 1,
     hp: 15,
     dmg: 2,
-    biomass: 8,
+    biomass: 15,
     mats: ['Fairy Dust', 'Life Essence'],
     trait: null,
     drop: 0.01,
@@ -200,6 +205,7 @@ export const MONSTER_TYPES = {
   serratedCarp: {
     name: 'Serrated Carp',
     icon: '🐟',
+    desc: 'A vicious fish with razor-edged scales that can shred through slime membranes. Thrives in the murky swamp waters.',
     tier: 2,
     hp: 70,
     dmg: 10,
@@ -214,6 +220,7 @@ export const MONSTER_TYPES = {
   antSeaLion: {
     name: 'Ant Sea Lion',
     icon: '🦭',
+    desc: 'A bizarre hybrid creature with a chitinous exoskeleton. Its crushing jaws can crack even the toughest slime shell.',
     tier: 2,
     hp: 90,
     dmg: 8,
@@ -228,6 +235,7 @@ export const MONSTER_TYPES = {
   swampStrider: {
     name: 'Swamp Strider',
     icon: '🦟',
+    desc: 'A giant mosquito-like insect that skates across swamp water. Its venomous proboscis injects a slow-acting toxin.',
     tier: 2,
     hp: 55,
     dmg: 12,
@@ -243,6 +251,7 @@ export const MONSTER_TYPES = {
   wilOWisp: {
     name: "Wil-o'-Wisp",
     icon: '👻',
+    desc: 'A flickering ball of spectral energy that lures prey deeper into the swamp. Elementally neutral but hits hard.',
     tier: 2,
     hp: 50,
     dmg: 14,
@@ -257,6 +266,7 @@ export const MONSTER_TYPES = {
   theSnail: {
     name: 'Ancient Snail',
     icon: '🐌',
+    desc: 'An ancient mollusk that has lived for centuries. Its shell is nearly impenetrable and it yields exceptional biomass.',
     tier: 2,
     hp: 120,
     dmg: 5,
@@ -274,6 +284,7 @@ export const MONSTER_TYPES = {
   vampireBat: {
     name: 'Vampire Bat',
     icon: '🦇',
+    desc: 'A cave-dwelling predator that feeds on life essence. Its bite drains vitality and heals its own wounds.',
     tier: 3,
     hp: 130,
     dmg: 18,
@@ -289,6 +300,7 @@ export const MONSTER_TYPES = {
   rockWorm: {
     name: 'Rock Worm',
     icon: '🪱',
+    desc: 'A massive segmented worm that burrows through crystal-laden stone. It hurls rocks from underground to stun prey.',
     tier: 3,
     hp: 160,
     dmg: 16,
@@ -304,6 +316,7 @@ export const MONSTER_TYPES = {
   coalSprite: {
     name: 'Coal Sprite',
     icon: '🔥',
+    desc: 'A living ember born from the grotto\'s volcanic vents. Small but intensely hot, its attacks leave scorching burns.',
     tier: 3,
     hp: 110,
     dmg: 22,
@@ -318,6 +331,7 @@ export const MONSTER_TYPES = {
   stalagMite: {
     name: 'Stalag-Mite',
     icon: '⛰️',
+    desc: 'A crystal golem formed from living stalagmites. Extremely durable with natural spike armor that punishes attackers.',
     tier: 3,
     hp: 180,
     dmg: 15,
@@ -332,6 +346,7 @@ export const MONSTER_TYPES = {
   sapphireNewt: {
     name: 'Sapphire Newt',
     icon: '🦎',
+    desc: 'A rare amphibian covered in sapphire-like crystal scales. It can regenerate rapidly and is highly sought after.',
     tier: 3,
     hp: 140,
     dmg: 12,
@@ -349,6 +364,7 @@ export const MONSTER_TYPES = {
   embermander: {
     name: 'Embermander',
     icon: '🔥',
+    desc: 'A fire-breathing salamander that thrives in volcanic heat. Its fireballs leave lingering burns on anything they touch.',
     tier: 4,
     hp: 220,
     dmg: 32,
@@ -364,6 +380,7 @@ export const MONSTER_TYPES = {
   animatedAlloy: {
     name: 'Animated Alloy',
     icon: '🤖',
+    desc: 'A construct of living metal animated by ancient magic. Elementally neutral but incredibly durable.',
     tier: 4,
     hp: 300,
     dmg: 28,
@@ -378,6 +395,7 @@ export const MONSTER_TYPES = {
   magmaOoze: {
     name: 'Magma Ooze',
     icon: '🌋',
+    desc: 'A sentient pool of magma that flows through the cinderspire. Extremely dangerous up close, it leaves trails of lava.',
     tier: 4,
     hp: 250,
     dmg: 35,
@@ -392,6 +410,7 @@ export const MONSTER_TYPES = {
   burntSpirit: {
     name: 'Burnt Spirit',
     icon: '💀',
+    desc: 'The restless ghost of a creature consumed by the spire\'s flames. Fragile but hits with devastating ghostly fire.',
     tier: 4,
     hp: 200,
     dmg: 40,
@@ -406,6 +425,7 @@ export const MONSTER_TYPES = {
   wyrm: {
     name: 'Fire Wyrm',
     icon: '🐉',
+    desc: 'A juvenile dragon that guards the deepest chambers of the cinderspire. Immensely powerful with draconic fury.',
     tier: 4,
     hp: 350,
     dmg: 38,
@@ -423,6 +443,7 @@ export const MONSTER_TYPES = {
   thunderHawk: {
     name: 'Thunder Hawk',
     icon: '🦅',
+    desc: 'A raptor crackling with electrical energy. Its diving attacks carry the force of a lightning bolt.',
     tier: 5,
     hp: 420,
     dmg: 50,
@@ -437,6 +458,7 @@ export const MONSTER_TYPES = {
   boulderTroll: {
     name: 'Boulder Troll',
     icon: '🧌',
+    desc: 'A massive troll with skin like granite. It can regenerate wounds mid-battle, making prolonged fights dangerous.',
     tier: 5,
     hp: 600,
     dmg: 45,
@@ -452,6 +474,7 @@ export const MONSTER_TYPES = {
   stormElemental: {
     name: 'Storm Elemental',
     icon: '⛈️',
+    desc: 'A being of pure storm energy. Its chain lightning can arc between multiple targets simultaneously.',
     tier: 5,
     hp: 480,
     dmg: 55,
@@ -466,6 +489,7 @@ export const MONSTER_TYPES = {
   frostGiant: {
     name: 'Frost Giant',
     icon: '🥶',
+    desc: 'A towering ice creature whose freezing breath can slow enemies to a crawl. Durable and relentless.',
     tier: 5,
     hp: 550,
     dmg: 52,
@@ -481,6 +505,7 @@ export const MONSTER_TYPES = {
   thunderbird: {
     name: 'Thunderbird',
     icon: '🦜',
+    desc: 'A legendary avian spirit that commands the storms themselves. Among the most powerful aerial predators.',
     tier: 5,
     hp: 500,
     dmg: 65,
@@ -498,6 +523,7 @@ export const MONSTER_TYPES = {
   voidTendril: {
     name: 'Void Tendril',
     icon: '🦑',
+    desc: 'A writhing appendage reaching from the void between dimensions. Its touch ignores all physical defenses.',
     tier: 6,
     hp: 750,
     dmg: 75,
@@ -513,6 +539,7 @@ export const MONSTER_TYPES = {
   abyssalWatcher: {
     name: 'Abyssal Watcher',
     icon: '👁️',
+    desc: 'A floating eye from the deepest void. It sees all weaknesses and strikes with perfect accuracy.',
     tier: 6,
     hp: 700,
     dmg: 85,
@@ -527,6 +554,7 @@ export const MONSTER_TYPES = {
   nullConstruct: {
     name: 'Null Construct',
     icon: '🗿',
+    desc: 'An ancient construct built from void-infused stone. Immune to elemental damage and incredibly resilient.',
     tier: 6,
     hp: 900,
     dmg: 70,
@@ -541,6 +569,7 @@ export const MONSTER_TYPES = {
   realityShard: {
     name: 'Reality Shard',
     icon: '💠',
+    desc: 'A fragment of broken reality given form. It phases in and out of existence, dealing devastating damage.',
     tier: 6,
     hp: 650,
     dmg: 95,
@@ -555,6 +584,7 @@ export const MONSTER_TYPES = {
   hollowOne: {
     name: 'The Hollow One',
     icon: '🕳️',
+    desc: 'The guardian of the Void Abyss itself. An emptiness given form that consumes all it touches. The ultimate challenge.',
     tier: 6,
     hp: 1000,
     dmg: 100,
