@@ -1536,10 +1536,12 @@ export default function HiveQueenGame() {
                   // Crit chance calculation - apply skill tree bonus
                   let critCh = 0.05 + combatBonuses.critChance + stats.slipperiness * 0.01 + (sl.pass?.includes('trickster') ? 0.08 * mutPower : 0);
                   if (sl.traits?.includes('swift')) critCh += 0.03;
+                  // Sharp mutation: auto-crit chance (10 + 0.25 * visc)%
+                  if (sl.pass?.includes('sharp')) critCh += (0.10 + stats.viscosity * 0.0025) * mutPower;
                   if (sl.pass?.includes('ambush') && !p.usedAmbush) { crit = true; p.usedAmbush = true; parts.push('AMBUSH guaranteed crit'); }
                   else if (Math.random() < critCh) { crit = true; parts.push(`CRIT (${Math.round(critCh * 100)}% chance)`); }
                   if (crit) { const critMult = 1.5 + (sl.pass?.includes('crushing') ? 0.3 * mutPower : 0); const prev = dmg; dmg = Math.floor(dmg * critMult); parts.push(`+${dmg - prev} (x${critMult.toFixed(1)} crit multiplier${sl.pass?.includes('crushing') ? ' +Crushing' : ''})`); }
-                  if (bon.spd > 0) { const prev = dmg; dmg = Math.floor(dmg * (1 + bon.spd * 0.1)); if (dmg !== prev) parts.push(`+${dmg - prev} (Swift Slimes research +${Math.round(bon.spd * 10)}%)`); }
+                  if (research.includes('swiftSlimes')) { const prev = dmg; dmg = Math.floor(dmg * (1 + bon.spd * 0.1)); if (dmg !== prev) parts.push(`+${dmg - prev} (Swift Slimes research +${Math.round((bon.spd - 1) * 100)}%)`); }
                   // Apply elemental damage modifier (slime element vs monster element) with skill bonus
                   const preDmg = Math.floor(dmg);
                   dmg = calculateElementalDamage(preDmg, sl.primaryElement, md.element);
@@ -1547,11 +1549,31 @@ export default function HiveQueenGame() {
                   if (dmg > preDmg) { dmg = Math.floor(dmg * combatBonuses.elementalDamage); parts.push(`+${dmg - preDmg} (${sl.primaryElement} strong vs ${md.element}, +25%)`); }
                   else if (dmg < preDmg) { parts.push(`${dmg - preDmg} (${sl.primaryElement} weak vs ${md.element}, -25%)`); }
                   const elementBonus = dmg !== preDmg;
-                  mon.hp -= dmg;
+                  // The Touch mutation: instant kill chance (1 + 0.15 * visc)%
+                  const touchChance = sl.pass?.includes('theTouch') ? (0.01 + stats.viscosity * 0.0015) * mutPower : 0;
+                  if (touchChance > 0 && Math.random() < touchChance) {
+                    mon.hp = 0;
+                    parts.push(`THE TOUCH instant kill! (${(touchChance * 100).toFixed(2)}% chance)`);
+                    bLog(zone, `${sl.name} uses THE TOUCH! 🐌 ${md.name} is instantly defeated!`, '#fbbf24');
+                  } else {
+                    mon.hp -= dmg;
+                  }
+                  // Lifesteal mutation: heal (10 + 0.2 * visc)% of damage dealt
+                  if (sl.pass?.includes('lifesteal') && p.hp < p.maxHp && dmg > 0) {
+                    const lifestealPct = (0.10 + stats.viscosity * 0.002) * mutPower;
+                    const healAmt = Math.max(1, Math.floor(dmg * lifestealPct));
+                    const actualHeal = Math.min(healAmt, p.maxHp - p.hp);
+                    p.hp = Math.min(p.maxHp, p.hp + healAmt);
+                    if (actualHeal > 0) bLog(zone, `🦇 ${sl.name} healed +${actualHeal} (Lifesteal ${Math.round(lifestealPct * 100)}%)`, '#dc2626');
+                  }
                   // Status effects with skill tree bonus
                   const statusMult = combatBonuses.statusChance;
-                  if (sl.pass?.includes('fireBreath') && !(mon.status || []).some(s => s.type === 'burn') && Math.random() < (0.3 + stats.viscosity * 0.02) * statusMult) { mon.status.push({ type: 'burn', dur: STATUS_EFFECTS.burn.dur }); bLog(zone, `${sl.name} burns ${md.name}! 🔥`, '#f97316'); }
-                  if (sl.pass?.includes('poison') && !(mon.status || []).some(s => s.type === 'poison') && Math.random() < (0.35 + stats.viscosity * 0.02) * statusMult) { mon.status.push({ type: 'poison', dur: STATUS_EFFECTS.poison.dur }); bLog(zone, `${sl.name} poisons ${md.name}! 🧪`, '#22c55e'); }
+                  // Pyrolyze mutation: chance to burn (15 + 0.3 * visc)%
+                  if (sl.pass?.includes('pyrolyze') && !(mon.status || []).some(s => s.type === 'burn') && Math.random() < (0.15 + stats.viscosity * 0.003) * statusMult) { mon.status.push({ type: 'burn', dur: STATUS_EFFECTS.burn.dur }); bLog(zone, `${sl.name} burns ${md.name}! 🔥 (Pyrolyze)`, '#f97316'); }
+                  // Spiny mutation: chance to cause bleed (10 + 0.4 * visc)%
+                  if (sl.pass?.includes('spiny') && !(mon.status || []).some(s => s.type === 'bleed') && Math.random() < (0.10 + stats.viscosity * 0.004) * statusMult) { mon.status.push({ type: 'bleed', dur: STATUS_EFFECTS.bleed.dur }); bLog(zone, `${sl.name} causes bleeding! 🩸 (Spiny)`, '#ef4444'); }
+                  // Earthshaker mutation: chance to stun (10 + 0.3 * visc)%
+                  if (sl.pass?.includes('earthshaker') && !(mon.status || []).some(s => s.type === 'stun') && Math.random() < (0.10 + stats.viscosity * 0.003) * statusMult) { mon.status.push({ type: 'stun', dur: STATUS_EFFECTS.stun.dur }); bLog(zone, `${sl.name} stuns ${md.name}! 💫 (Earthshaker)`, '#fbbf24'); }
                   exp.animSlime = p.id; exp.slimeAnim = 'attack'; exp.monAnim = 'hurt';
                   // Shared Vigor hive ability: heal 2 HP when attacking
                   if (isHiveAbilityActive('sharedVigor') && p.hp < p.maxHp) {
@@ -1562,6 +1584,13 @@ export default function HiveQueenGame() {
                   // Skill tree passive: regeneration (1 HP per battle tick)
                   if (hasPassive('regeneration') && p.hp < p.maxHp) {
                     p.hp = Math.min(p.maxHp, p.hp + 1);
+                  }
+                  // Regenerate mutation: heal (2 + 0.3 * visc) HP per turn
+                  if (sl.pass?.includes('regenerate') && p.hp < p.maxHp) {
+                    const regenAmt = Math.floor((2 + stats.viscosity * 0.3) * combatBonuses.mutationPower);
+                    const actualRegen = Math.min(regenAmt, p.maxHp - p.hp);
+                    p.hp = Math.min(p.maxHp, p.hp + regenAmt);
+                    if (actualRegen > 0) bLog(zone, `💚 ${sl.name} regenerates +${actualRegen} (Regenerate mutation)`, '#22c55e');
                   }
                   // Show element effectiveness in battle log
                   let dmgMsg = `${sl.name} ${crit ? '💥CRITS' : 'hits'} for ${Math.floor(dmg)}!`;
@@ -1587,6 +1616,8 @@ export default function HiveQueenGame() {
                 if (combatBonuses.biomassGain > 1) { const prev = bioG; bioG = Math.floor(bioG * combatBonuses.biomassGain); bioParts.push(`+${bioG - prev} (Biomass Gain skill +${Math.round((combatBonuses.biomassGain - 1) * 100)}%)`); }
                 if (scoutBonus > 1) { const prev = bioG; bioG = Math.floor(bioG * scoutBonus); bioParts.push(`+${bioG - prev} (Scout Post ranch +${Math.round((scoutBonus - 1) * 100)}%)`); }
                 living.forEach(p => { const sl = slimes.find(s => s.id === p.id); if (sl?.pass?.includes('manaLeech')) { const prev = bioG; bioG = Math.floor(bioG * 1.1); bioParts.push(`+${bioG - prev} (Mana Leech mutation +10%)`); } });
+                // Digest mutation: flat biomass bonus per kill (5 + 0.5 * visc)
+                living.forEach(p => { const sl = slimes.find(s => s.id === p.id); if (sl?.pass?.includes('digest')) { const slStats = getSlimeStats(sl); const digestBonus = Math.floor((5 + slStats.viscosity * 0.5) * combatBonuses.mutationPower); bioG += digestBonus; bioParts.push(`+${digestBonus} (${sl.name} Digest mutation)`); } });
                 // Personality traits affecting biomass gain
                 let bioMultiplier = 1;
                 living.forEach(p => {
@@ -1606,13 +1637,24 @@ export default function HiveQueenGame() {
                   }
                 });
 
-                // Distribute biomass evenly among living party members
-                const bioPerSlime = bioG / living.length;
+                // Distribute biomass evenly among living party members with remainder to first slimes
+                const basePerSlime = Math.floor(bioG / living.length);
+                let remainder = bioG - (basePerSlime * living.length);
                 const hasBountiful = isHiveAbilityActive('bountifulHarvest');
                 living.forEach(p => {
-                  p.biomassGained = (p.biomassGained || 0) + bioPerSlime;
+                  let share = basePerSlime;
+                  // Give remainder biomass to first slimes (1 each until gone)
+                  if (remainder > 0) { share += 1; remainder--; }
+                  // Bejeweled mutation: personal +25% biomass gain
+                  const sl = slimes.find(s => s.id === p.id);
+                  if (sl?.pass?.includes('bejeweled')) {
+                    const slStats = getSlimeStats(sl);
+                    const bejeweledBonus = Math.floor(share * (0.25 + slStats.viscosity * 0.002) * combatBonuses.mutationPower);
+                    share += bejeweledBonus;
+                  }
+                  p.biomassGained = (p.biomassGained || 0) + share;
                 });
-                if (living.length > 1) bioParts.push(`${bioG} / ${living.length} slimes = ${Math.floor(bioPerSlime)} each`);
+                if (living.length > 1) bioParts.push(`${bioG} / ${living.length} slimes = ${basePerSlime} each${bioG % living.length > 0 ? ` (+1 remainder to first ${bioG % living.length})` : ''}`);
                 const bioMsg = hasBountiful
                   ? `${md.name} defeated! +${Math.floor(bioPerSlime)}🧬 each (🌾+25%)`
                   : `${md.name} defeated! +${Math.floor(bioPerSlime)}🧬 each`;
@@ -1694,6 +1736,20 @@ export default function HiveQueenGame() {
               }
             } else {
               if (mon.hp > 0) {
+                // Ghastly Wail mutation: chance for enemy to skip turn (15 + 0.3 * visc)%
+                let skipTurn = false;
+                living.forEach(p => {
+                  const sl = slimes.find(s => s.id === p.id);
+                  if (sl?.pass?.includes('ghastlyWail')) {
+                    const slStats = getSlimeStats(sl);
+                    const wailChance = (0.15 + slStats.viscosity * 0.003) * combatBonuses.mutationPower;
+                    if (Math.random() < wailChance) {
+                      skipTurn = true;
+                      bLog(zone, `💀 ${sl.name}'s Ghastly Wail freezes ${md.name}! (${Math.round(wailChance * 100)}% chance)`, '#6b7280');
+                    }
+                  }
+                });
+                if (!skipTurn) {
                 const tgt = living[Math.floor(Math.random() * living.length)];
                 const tgtSl = slimes.find(s => s.id === tgt.id);
                 const tgtStats = tgtSl ? getSlimeStats(tgtSl, tgt.biomassGained || 0) : { slipperiness: 0 };
@@ -1791,7 +1847,13 @@ export default function HiveQueenGame() {
                   if (tgtSl?.traits?.includes('cautious') && tgt.hp < tgt.maxHp * 0.5) { dodgeCh += 0.05; dodgeParts.push('+5% Cautious trait (<50% HP)'); }
                   // Timid: +10% dodge
                   if (tgtSl?.traits?.includes('timid')) { dodgeCh += 0.10; dodgeParts.push('+10% Timid trait'); }
+                  // Ethereal mutation: chance to phase through damage (10 + 0.5 * visc)%
+                  const etherealChance = tgtSl?.pass?.includes('ethereal') ? (0.10 + tgtStats.viscosity * 0.005) * combatBonuses.mutationPower : 0;
+                  // Vinewebs mutation: chance to block attack (10 + 0.25 * visc)%
+                  const vinewebsChance = tgtSl?.pass?.includes('vinewebs') ? (0.10 + tgtStats.viscosity * 0.0025) * combatBonuses.mutationPower : 0;
                   if (Math.random() < dodgeCh) { bLog(zone, `${tgtSl?.name} dodges! 💨`, '#22d3ee', `Dodge chance: ${dodgeParts.join(', ')} = ${Math.round(dodgeCh * 100)}% total`); }
+                  else if (etherealChance > 0 && Math.random() < etherealChance) { bLog(zone, `${tgtSl?.name} phases through! 👻 (Ethereal ${Math.round(etherealChance * 100)}%)`, '#8b5cf6'); }
+                  else if (vinewebsChance > 0 && Math.random() < vinewebsChance) { bLog(zone, `${tgtSl?.name} blocks with vinewebs! 🕸️ (${Math.round(vinewebsChance * 100)}%)`, '#65a30d'); }
                   else {
                     const defParts = [`${md.dmg} base attack`];
                     if (tgtSl?.pass?.includes('armored')) { const prev = inc; inc *= 0.8; defParts.push(`${Math.floor(inc) - prev} (Armored mutation -20%)`); }
@@ -1843,6 +1905,7 @@ export default function HiveQueenGame() {
                   setSlimes(s => s.filter(sl => sl.id !== tgt.id));
                   exp.party = exp.party.filter(p => p.id !== tgt.id);
                 }
+                } // end of !skipTurn block
               }
             }
           }
