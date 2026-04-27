@@ -17,7 +17,7 @@ export const BATTLE_TICK_SPEED = 1500;   // Increased from 1000 - slower combat
 
 // Save settings
 export const AUTO_SAVE_INTERVAL = 30000; // 30 seconds
-export const SAVE_KEY = 'hive_queen_save_v2'; // New version for balance changes!
+export const SAVE_KEY = 'hive_queen_save_v3'; // v3: real-time arena combat
 
 // Tower Defense timing
 export const TOWER_DEFENSE_COOLDOWN = 24 * 60 * 60 * 1000; // 24 hours real-time
@@ -59,3 +59,22 @@ export const getQueenXpRequired = (level) => {
 
 // Biomass per Queen level (as fallback if reabsorption XP is too slow)
 export const BIOMASS_TO_QUEEN_XP_RATIO = 10; // 10 biomass = 1 queen XP
+
+// ── Arena (real-time auto-battler) ──────────────────────────────────────────
+export const ARENA_TICK_RATE = 50;          // ms between arena logic ticks (20fps)
+
+// World space is 200 × 120 units
+export const ARENA_W = 200;
+export const ARENA_H = 120;
+
+// Slimes spawn x:10-25, enemy spawns x:175
+export const ARENA_ATTACK_RANGE = 14;       // units — stop moving when this close
+
+// Slime movement/attack speed derived from slipperiness
+export const ARENA_BASE_MOVE = 18;          // world units / second at 0 slipperiness
+export const ARENA_SLIP_MOVE = 0.4;         // added per slipperiness point
+export const ARENA_BASE_ATTACK_MS = 2200;   // ms between attacks at 0 slipperiness
+export const ARENA_SLIP_ATTACK = 18;        // ms reduction per slipperiness point
+export const ARENA_MIN_ATTACK_MS = 600;     // floor for attack interval
+
+// Intermission (between kills) — reuses INTERMISSION_DURATION from zoneData
