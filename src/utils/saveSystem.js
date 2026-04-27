@@ -104,7 +104,12 @@ const migrateSaveData = (data) => {
 // Save game to localStorage
 export const saveGame = (state) => {
   try {
-    const saveData = { ...state, lastSave: Date.now() };
+    // Strip ephemeral arena floats before saving
+    const exps = {};
+    Object.entries(state.exps || {}).forEach(([zone, exp]) => {
+      exps[zone] = { ...exp, floats: [] };
+    });
+    const saveData = { ...state, exps, lastSave: Date.now() };
     localStorage.setItem(SAVE_KEY, JSON.stringify(saveData));
     return true;
   } catch (e) {
