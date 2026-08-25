@@ -12,12 +12,10 @@ export const TRAIT_JELLY_COST = 5;       // Increased from 3 - traits are valuab
 export const BASE_JELLY = 30;            // Reduced from 50 - start with fewer slimes
 export const JELLY_PER_QUEEN_LEVEL = 5;  // Reduced from 10 - slower scaling
 
-// Battle timing (in ms, divided by game speed for actual tick)
-export const BATTLE_TICK_SPEED = 1500;   // Increased from 1000 - slower combat
 
 // Save settings
 export const AUTO_SAVE_INTERVAL = 30000; // 30 seconds
-export const SAVE_KEY = 'hive_queen_save_v3'; // v3: real-time arena combat
+export const SAVE_KEY = 'hive_queen_save_v4'; // v4: turn-based rounds, combatant-shaped expeditions
 
 // Tower Defense timing
 export const TOWER_DEFENSE_COOLDOWN = 24 * 60 * 60 * 1000; // 24 hours real-time
@@ -60,21 +58,21 @@ export const getQueenXpRequired = (level) => {
 // Biomass per Queen level (as fallback if reabsorption XP is too slow)
 export const BIOMASS_TO_QUEEN_XP_RATIO = 10; // 10 biomass = 1 queen XP
 
-// ── Arena (real-time auto-battler) ──────────────────────────────────────────
-export const ARENA_TICK_RATE = 50;          // ms between arena logic ticks (20fps)
+// ── Combat timing ───────────────────────────────────────────────────────────
+// One concept, two constants: how long a round takes, and how fast the arena
+// replays it. Everything that used to be BATTLE_TICK_SPEED / TURN_MS /
+// ARENA_TICK_RATE now derives from these.
 
-// World space is 200 × 120 units
+export const ROUND_MS = 1600;        // real ms per combat round at 1x speed
+export const BEAT_MS = 320;          // max spacing between animated beats
+export const ARENA_TICK_RATE = 50;   // ms between view/driver ticks (20fps)
+
+// ── Arena presentation ──────────────────────────────────────────────────────
+// World space is 200 × 120 units. Positions are chosen by the renderer — the
+// simulation has no geometry.
+
 export const ARENA_W = 200;
 export const ARENA_H = 120;
-
-// Slimes spawn x:10-25, enemy spawns x:175
-export const ARENA_ATTACK_RANGE = 14;       // units — stop moving when this close
-
-// Slime movement/attack speed derived from slipperiness
-export const ARENA_BASE_MOVE = 18;          // world units / second at 0 slipperiness
-export const ARENA_SLIP_MOVE = 0.4;         // added per slipperiness point
-export const ARENA_BASE_ATTACK_MS = 2200;   // ms between attacks at 0 slipperiness
-export const ARENA_SLIP_ATTACK = 18;        // ms reduction per slipperiness point
-export const ARENA_MIN_ATTACK_MS = 600;     // floor for attack interval
-
-// Intermission (between kills) — reuses INTERMISSION_DURATION from zoneData
+export const ARENA_SLIME_X = 46;     // resting x for the slime line
+export const ARENA_ENEMY_X = 156;    // resting x for the enemy
+export const ARENA_LUNGE = 26;       // world units an attacker lunges forward

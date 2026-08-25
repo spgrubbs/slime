@@ -473,3 +473,14 @@ test('killing the enemy is reported', () => {
   const { enemyDead } = resolveRound(w, { rng: always(0.9) });
   assert.equal(enemyDead, true);
 });
+
+test('status proc rolls appear in the attacking hit trace, landed or not', () => {
+  // Auditing balance means seeing the rolls that failed, not only the ones
+  // that fired.
+  const w = world([makeSlimeCombatant(slime({ mutations: ['pyrolyze'] }))]);
+  const { records } = resolveRound(w, { rng: always(0.9) });
+  const hit = records.find(r => r.kind === 'attack' && r.side === 'slime' && r.damage > 0);
+  assert.ok(hit, 'no slime hit landed');
+  assert.ok(hit.log.v.includes('Pyrolyze'), hit.log.v);
+  assert.ok(hit.log.v.includes('✗'), 'a failed proc roll should still be shown');
+});

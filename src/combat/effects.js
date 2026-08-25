@@ -16,6 +16,17 @@ const trait = (id, hooks, extra = {}) => registerEffect({ id, source: 'trait', h
 
 const pct = (p) => 1 + p / 100;
 
+/**
+ * Roll a status proc and record the roll on the attack's trace, landed or not.
+ * A proc you cannot watch fail is a proc you cannot balance.
+ */
+function rollStatus(ev, self, type, label) {
+  const roll = ev.rng();
+  const hit = roll < self.chance;
+  if (hit) ev.apply.push({ type, label });
+  ev.trace?.roll(label, roll, self.chance, hit);
+}
+
 // ═════════════════════════════════════════════════════════════════════════════
 // VERDANT FOREST
 // ═════════════════════════════════════════════════════════════════════════════
@@ -60,9 +71,7 @@ mut('resurrect', {
 
 mut('spiny', {
   // "% chance to cause Bleed"
-  onStatusApply: (ev, self) => {
-    if (ev.rng() < self.chance) ev.apply.push({ type: 'bleed', label: '🐟 Spiny' });
-  },
+  onStatusApply: (ev, self) => rollStatus(ev, self, 'bleed', '🐟 Spiny'),
 });
 
 mut('whirlpool', {
@@ -156,16 +165,12 @@ mut('alloyPotential', {}, { slots: 2 });
 
 mut('pyrolyze', {
   // "% chance to Burn"
-  onStatusApply: (ev, self) => {
-    if (ev.rng() < self.chance) ev.apply.push({ type: 'burn', label: '🔥 Pyrolyze' });
-  },
+  onStatusApply: (ev, self) => rollStatus(ev, self, 'burn', '🔥 Pyrolyze'),
 });
 
 mut('ghastlyWail', {
   // "% chance enemy skips turn" — stun is now enforced by the resolver
-  onStatusApply: (ev, self) => {
-    if (ev.rng() < self.chance) ev.apply.push({ type: 'stun', label: '💀 Ghastly Wail' });
-  },
+  onStatusApply: (ev, self) => rollStatus(ev, self, 'stun', '💀 Ghastly Wail'),
 });
 
 mut('draconicPower', {
@@ -191,9 +196,7 @@ mut('chainLightning', {
 
 mut('earthshaker', {
   // "% chance to stun 1 round"
-  onStatusApply: (ev, self) => {
-    if (ev.rng() < self.chance) ev.apply.push({ type: 'stun', label: '👹 Earthshaker' });
-  },
+  onStatusApply: (ev, self) => rollStatus(ev, self, 'stun', '👹 Earthshaker'),
 });
 
 mut('charged', {
@@ -205,9 +208,7 @@ mut('charged', {
 
 mut('permafrost', {
   // "% to reduce enemy damage 25%" — applies Weakened, which the resolver honors
-  onStatusApply: (ev, self) => {
-    if (ev.rng() < self.chance) ev.apply.push({ type: 'weakened', label: '❄️ Permafrost' });
-  },
+  onStatusApply: (ev, self) => rollStatus(ev, self, 'weakened', '❄️ Permafrost'),
 });
 
 mut('stormcaller', {

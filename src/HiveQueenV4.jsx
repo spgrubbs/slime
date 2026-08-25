@@ -12,6 +12,7 @@ import {
   TD_TICK_SPEED,
   ELEMENTS,
   ARENA_TICK_RATE,
+  ROUND_MS,
 } from './data/gameConstants.js';
 
 import { STAT_INFO, SLIME_TIERS } from './data/slimeData.js';
@@ -27,37 +28,30 @@ import { SKILL_TREES, SKILL_POINTS_PER_LEVEL, getSkillEffects, isZoneUnlocked, i
 // Utility imports
 import { genName, genId, formatTime, calculateElementalDamage, createDefaultElements, canGainElement, calculateElementGain } from './utils/helpers.js';
 import { saveGame, loadGame, deleteSave } from './utils/saveSystem.js';
-import { spawnEnemy, makeArenaSlime, tickArena } from './utils/arenaCombat.js';
 
-// Weighted monster spawning - rare monsters have 5% spawn rate (modified by rareSpawnMult), common share rest
-const selectMonster = (zone, rareSpawnMult = 1) => {
-  const zd = ZONES[zone];
-  if (!zd || !zd.monsters?.length) return null;
+// Importing the combat module registers every mutation/trait effect and
+// validates the registry — a passive with no implementation fails here.
+import './combat/index.js';
+import { computeStats, computeMaxHp, mutationSlots, slotsFromSelection } from './combat/stats.js';
+import { makeExpedition, tickExpedition, hydrateExpedition } from './combat/expedition.js';
 
-  // Separate common and rare monsters
-  const common = zd.monsters.filter(m => !MONSTER_TYPES[m]?.rare);
-  const rare = zd.monsters.filter(m => MONSTER_TYPES[m]?.rare);
-
-  // Base 5% chance for rare monster, modified by skill tree bonus (e.g. 2x = 10%)
-  const rareChance = Math.min(0.25, 0.05 * rareSpawnMult); // Cap at 25%
-  if (rare.length > 0 && Math.random() < rareChance) {
-    return rare[Math.floor(Math.random() * rare.length)];
-  }
-
-  // Rest chance for common monster
-  if (common.length > 0) {
-    return common[Math.floor(Math.random() * common.length)];
-  }
-
-  // Fallback to any monster if no common (shouldn't happen)
-  return zd.monsters[Math.floor(Math.random() * zd.monsters.length)];
+/**
+ * Rebuild the live references a saved expedition dropped. Combatants are
+ * serialized without their slime/monster `ref` or their effect list — see
+ * dehydrateExpedition — so both are restored against the current roster.
+ */
+const rehydrateExps = (exps, slimes = []) => {
+  const out = {};
+  Object.entries(exps || {}).forEach(([zone, exp]) => {
+    out[zone] = hydrateExpedition(exp, slimes || []);
+  });
+  return out;
 };
 
 // Component imports
 import {
   SlimeSprite,
   MonsterSprite,
-  BattleArena,
   ArenaCanvas,
   SlimeForge,
   SlimeDetail,
@@ -70,7 +64,7 @@ import {
 import SkillTree from './components/SkillTree.jsx';
 
 // ============== OFFLINE PROGRESS ==============
-const calculateOfflineProgress = (saved, bonuses) => {
+const calculateOfflineProgress = (saved, bonuses, offlineCtx = {}) => {
   const now = Date.now();
   const offlineMs = now - (saved.lastSave || now);
   const offlineSec = Math.min(offlineMs / 1000, 24 * 3600); // Cap at 24h
@@ -88,122 +82,93 @@ const calculateOfflineProgress = (saved, bonuses) => {
   };
 
   let { bio, slimes, exps, mats, activeRes, research, builds } = JSON.parse(JSON.stringify(saved));
-  const battleTicks = Math.floor(offlineSec / 2.5);
-  const reclaimerTier = builds?.biomassReclaimer || 0;
-  const reclaimerRate = reclaimerTier * 0.25; // 25% per tier
 
-  // Helper to get slime stats (handles both old and new format)
-  const getStats = (sl) => {
-    if (sl.baseStats) {
-      const tier = SLIME_TIERS[sl.tier];
-      const biomass = sl.biomass || 0;
-      const percentBonus = biomass / tier.biomassPerPercent;
-      // BALANCE: Cap at maxBiomassBonus (default 100% = double stats)
-      const cappedBonus = Math.min(percentBonus, tier.maxBiomassBonus || 100);
-      const mult = 1 + (cappedBonus / 100);
-      return {
-        firmness: Math.floor(sl.baseStats.firmness * mult),
-        slipperiness: Math.floor(sl.baseStats.slipperiness * mult),
-        viscosity: Math.floor(sl.baseStats.viscosity * mult),
-      };
-    }
-    return sl.stats || { firmness: 4, slipperiness: 4, viscosity: 4 };
-  };
+  // Offline expeditions run the real resolver rather than a simplified copy of
+  // it — mutations, traits and status effects all apply exactly as they do
+  // while you are watching. Progress is capped so a long absence cannot lock
+  // the tab up on load.
+  const MAX_OFFLINE_ROUNDS = 1500;
 
-  // Arena expeditions (new real-time format) do not advance offline
-  Object.entries(exps || {}).forEach(([zone, exp]) => {
-    const zd = ZONES[zone];
-    // Skip new arena-format expeditions (they use exp.slimes, not exp.party)
-    if (!zd || !exp.party?.length || exp.slimes) return;
+  Object.entries(exps || {}).forEach(([zone, savedExp]) => {
+    if (!ZONES[zone]) return;
 
-    let ticks = battleTicks;
-    let monster = exp.monster;
-
-    while (ticks > 0 && exp.party.some(p => p.hp > 0)) {
-      if (!monster || monster.hp <= 0) {
-        const mt = selectMonster(zone) || zd.monsters[0];
-        const md = MONSTER_TYPES[mt];
-        monster = { type: mt, hp: md.hp, maxHp: md.hp, dmg: md.dmg };
-      }
-
-      const living = exp.party.filter(p => p.hp > 0);
-      if (!living.length) break;
-      const md = MONSTER_TYPES[monster.type];
-
-      // Slimes attack
-      living.forEach(p => {
-        const sl = slimes.find(s => s.id === p.id);
-        if (!sl || monster.hp <= 0) return;
-        const stats = getStats(sl);
-        let dmg = stats.firmness;
-        if (sl.pass?.includes('ferocity')) dmg *= 1.15;
-        if (Math.random() < 0.1 + stats.slipperiness * 0.01) dmg *= 1.5;
-        monster.hp -= Math.floor(dmg);
-      });
-
-      if (monster.hp <= 0) {
-        results.monstersKilled++;
-        exp.kills = (exp.kills || 0) + 1;
-        // Track monster kills for mutation system
-        exp.monsterKillCounts = exp.monsterKillCounts || {};
-        exp.monsterKillCounts[monster.type] = (exp.monsterKillCounts[monster.type] || 0) + 1;
-        results.monsterKillsGained[monster.type] = (results.monsterKillsGained[monster.type] || 0) + 1;
-
-        const bioG = Math.floor(md.biomass * (bonuses?.bio || 1));
-        results.biomassGained += bioG;
-        bio += bioG;
-        if (Math.random() < 0.2) {
-          const mat = md.mats[Math.floor(Math.random() * md.mats.length)];
-          results.matsGained[mat] = (results.matsGained[mat] || 0) + 1;
-          mats[mat] = (mats[mat] || 0) + 1;
-        }
-        // Mutations are now unlocked via kill counts, not drops
-        // Element accumulation during offline progress
-        if (zd.element && zd.elementGainRate > 0) {
-          living.forEach(p => {
-            const sl = slimes.find(s => s.id === p.id);
-            if (!sl || sl.primaryElement || sl.pass?.includes('void')) return;
-            if (!sl.elements) sl.elements = { fire: 0, water: 0, nature: 0, earth: 0 };
-            let gain = zd.elementGainRate;
-            if (sl.pass?.includes('adaptable')) gain *= 1.5;
-            sl.elements[zd.element] = Math.min(100, (sl.elements[zd.element] || 0) + gain);
-            if (sl.elements[zd.element] >= 100) {
-              sl.primaryElement = zd.element;
-            }
-          });
-        }
-        monster = null;
-      } else {
-        const tgt = living[Math.floor(Math.random() * living.length)];
-        const tgtSl = slimes.find(s => s.id === tgt.id);
-        const tgtStats = tgtSl ? getStats(tgtSl) : { slipperiness: 0 };
-        let inc = md.dmg;
-        if (Math.random() < 0.05 + tgtStats.slipperiness * 0.01) inc = 0;
-        if (tgtSl?.pass?.includes('armored')) inc *= 0.8;
-        tgt.hp -= Math.floor(inc);
-        if (tgt.hp <= 0) {
-          if (tgtSl?.pass?.includes('undying') && !tgt.usedUndying) { tgt.hp = 1; tgt.usedUndying = true; }
-          else if (tgtSl?.pass?.includes('rebirth') && !tgt.usedRebirth) { tgt.hp = Math.floor(tgt.maxHp * 0.3); tgt.usedRebirth = true; }
-        }
-        if (tgt.hp <= 0) {
-          results.slimesLost.push(tgtSl?.name || 'Slime');
-          // Biomass Reclaimer: recover biomass based on tier (25% per tier)
-          if (reclaimerRate > 0 && tgtSl?.biomass > 0) {
-            const recovered = Math.floor(tgtSl.biomass * reclaimerRate);
-            bio += recovered;
-            results.biomassGained += recovered;
-          }
-          slimes = slimes.filter(s => s.id !== tgt.id);
-          exp.party = exp.party.filter(p => p.id !== tgt.id);
-        }
-      }
-      ticks--;
-    }
-    exp.monster = monster;
-    if (!exp.party.some(p => p.hp > 0)) {
+    // Pre-rewrite expeditions have no combatants to advance; recall them.
+    if (!Array.isArray(savedExp.slimes) || savedExp.version !== 4) {
       results.expeditionsWiped.push(zone);
       delete exps[zone];
+      return;
     }
+
+    const exp = hydrateExpedition(savedExp, slimes);
+    const budgetMs = Math.min(offlineSec * 1000, MAX_OFFLINE_ROUNDS * ROUND_MS);
+    const step = ROUND_MS;
+
+    for (let elapsed = 0; elapsed < budgetMs; elapsed += step) {
+      if (exp.phase === 'defeat') break;
+
+      const before = exp.kills;
+      const { sideEffects } = tickExpedition(exp, step, offlineCtx, zone);
+
+      if (exp.kills > before && exp.monsterKillCounts) {
+        const justKilled = Object.entries(exp.monsterKillCounts);
+        results.monstersKilled += exp.kills - before;
+        justKilled.forEach(([type, n]) => { results.monsterKillsGained[type] = n; });
+      }
+
+      sideEffects.forEach(se => {
+        if (se.type === 'slimeDeath') {
+          const lost = slimes.find(sl => sl.id === se.id);
+          results.slimesLost.push(lost?.name || 'Slime');
+          slimes = slimes.filter(sl => sl.id !== se.id);
+        } else if (se.type === 'bioReclaim') {
+          bio += se.amount;
+          results.biomassGained += se.amount;
+        } else if (se.type === 'grantTrait') {
+          slimes = slimes.map(sl => sl.id === se.id && !(sl.traits || []).includes(se.trait)
+            ? { ...sl, traits: [...(sl.traits || []), se.trait] }
+            : sl);
+        }
+      });
+
+      if (exp.phase === 'defeat') break;
+      if (exp.kills >= exp.targetKills) break;
+    }
+
+    if (exp.phase === 'defeat' || exp.slimes.every(c => c.dead)) {
+      results.expeditionsWiped.push(zone);
+      delete exps[zone];
+      return;
+    }
+
+    // Bank what the party earned so the welcome-back summary can report it.
+    exp.slimes.filter(c => !c.dead).forEach(c => {
+      const sl = slimes.find(x => x.id === c.id);
+      if (!sl) return;
+      results.biomassGained += c.biomassGained;
+      sl.biomass = (sl.biomass || 0) + c.biomassGained;
+      c.biomassGained = 0;
+
+      if (!sl.primaryElement && c.elementGains) {
+        sl.elements = sl.elements || { fire: 0, water: 0, nature: 0, earth: 0 };
+        Object.entries(c.elementGains).forEach(([el, gain]) => {
+          sl.elements[el] = Math.min(100, (sl.elements[el] || 0) + gain);
+          if (sl.elements[el] >= 100) sl.primaryElement = el;
+        });
+        c.elementGains = {};
+      }
+    });
+
+    Object.entries(exp.materials || {}).forEach(([mat, n]) => {
+      results.matsGained[mat] = (results.matsGained[mat] || 0) + n;
+      mats[mat] = (mats[mat] || 0) + n;
+    });
+    exp.materials = {};
+
+    // Banked here, so clear them — otherwise recalling the party would count
+    // the same kills a second time toward mutation unlocks.
+    exp.monsterKillCounts = {};
+
+    exps[zone] = exp;
   });
 
   // Research progress
@@ -472,7 +437,7 @@ export default function HiveQueenGame() {
         if (targetSlimeId) {
           setSlimes(prev => prev.map(s =>
             s.id === targetSlimeId
-              ? { ...s, mutations: [], pass: [] }
+              ? { ...s, mutations: [] }
               : s
           ));
           log(`🔄 Mutations reset!`);
@@ -509,12 +474,12 @@ export default function HiveQueenGame() {
   useEffect(() => {
     const saved = loadGame();
     if (saved) {
-      const offline = calculateOfflineProgress(saved, bon);
+      const offline = calculateOfflineProgress(saved, bon, combatContext());
       if (offline.hadProgress) {
         // Apply offline progress
         setBio(offline.newState.bio);
         setSlimes(offline.newState.slimes);
-        setExps(offline.newState.exps);
+        setExps(rehydrateExps(offline.newState.exps, offline.newState.slimes));
         setMats(offline.newState.mats);
         setActiveRes(offline.newState.activeRes);
         setResearch(offline.newState.research);
@@ -561,7 +526,7 @@ export default function HiveQueenGame() {
         setBio(saved.bio || 50);
         setMats(saved.mats || {});
         setSlimes(saved.slimes || []);
-        setExps(saved.exps || {});
+        setExps(rehydrateExps(saved.exps, saved.slimes));
         setBuilds(saved.builds || {});
         setResearch(saved.research || []);
         setActiveRes(saved.activeRes);
@@ -653,9 +618,9 @@ export default function HiveQueenGame() {
     const spawnBoostMult = isHiveAbilityActive('spawnBoost') ? 1.10 : 1.0;
     const baseStat = Math.floor(5 * td.statMultiplier * spawnBoostMult);
     const baseStats = { firmness: baseStat, slipperiness: baseStat, viscosity: baseStat };
-    const pass = [];
-    // Apply mutation stat bonuses and passives
-    selMutations.forEach(id => { const m = MUTATION_LIBRARY[id]; if (m) { baseStats[m.stat] += m.bonus; pass.push(m.passive); } });
+    // Each mutation's flat `bonus` is the only stat it contributes at spawn;
+    // anything else it does is a hook, resolved in combat.
+    selMutations.forEach(id => { const m = MUTATION_LIBRARY[id]; if (m) baseStats[m.stat] += m.bonus; });
 
     // Random personality trait at spawn
     let spawnTraits = [];
@@ -681,10 +646,14 @@ export default function HiveQueenGame() {
     // Generate name with potential title from trait
     const slimeName = spawnTraits.length > 0 ? genName(spawnTraits) : name;
 
-    // Apply hardy trait HP bonus, glutton HP penalty, and skill tree bonus
-    let maxHp = Math.floor((td.baseHp + baseStats.firmness * 3) * bon.hp * combatBonuses.maxHp);
-    if (spawnTraits.includes('hardy')) maxHp = Math.floor(maxHp * 1.03);
-    if (spawnTraits.includes('glutton')) maxHp = Math.floor(maxHp * 0.97);
+    // Max HP comes from the shared helper, which reads hpMod hooks (hardy,
+    // glutton, primordial) and recomputes as the slime's firmness grows.
+    const provisional = { tier, mutations: selMutations, traits: spawnTraits, baseStats, biomass: 0 };
+    const maxHp = computeMaxHp(
+      provisional,
+      computeStats(provisional, 0, combatBonuses, combatBonuses.mutationPower),
+      bon, combatBonuses, combatBonuses.mutationPower,
+    );
 
     // Apply element bonuses from selected mutations
     const startingElements = createDefaultElements();
@@ -703,7 +672,6 @@ export default function HiveQueenGame() {
       biomass: 0,
       mutations: selMutations,  // Combat abilities from MUTATION_LIBRARY
       traits: spawnTraits,      // Personality traits from SLIME_TRAITS
-      pass,
       baseStats,
       maxHp,
       magCost,
@@ -1007,92 +975,49 @@ export default function HiveQueenGame() {
 
   // Helper function to calculate current stats based on biomass and skill bonuses
   // pendingBiomass: optional extra biomass to consider (e.g., earned during expedition but not yet applied)
-  const getSlimeStats = (slime, pendingBiomass = 0) => {
-    if (!slime) return { firmness: 0, slipperiness: 0, viscosity: 0 };
+  // Stats, max HP and mutation slots all come from src/combat/stats.js so the
+  // UI and the resolver can never disagree about what a slime is.
+  const getSlimeStats = useCallback(
+    (slime, pendingBiomass = 0) =>
+      computeStats(slime, pendingBiomass, combatBonuses, combatBonuses.mutationPower),
+    [combatBonuses],
+  );
 
-    let baseF, baseS, baseV;
+  const getMaxHp = useCallback(
+    (slime, pendingBiomass = 0) => computeMaxHp(
+      slime,
+      computeStats(slime, pendingBiomass, combatBonuses, combatBonuses.mutationPower),
+      bon,
+      combatBonuses,
+      combatBonuses.mutationPower,
+    ),
+    [combatBonuses, bon],
+  );
 
-    // Backward compatibility: if slime has old stats property, use it directly
-    if (slime.stats && !slime.baseStats) {
-      baseF = slime.stats.firmness;
-      baseS = slime.stats.slipperiness;
-      baseV = slime.stats.viscosity;
-    } else if (!slime.baseStats) {
-      // If no baseStats, return defaults based on tier
-      const tier = SLIME_TIERS[slime.tier];
-      const baseStat = 4; // Default base stat for legacy slimes
-      baseF = Math.floor(baseStat * (tier?.statMultiplier || 1));
-      baseS = Math.floor(baseStat * (tier?.statMultiplier || 1));
-      baseV = Math.floor(baseStat * (tier?.statMultiplier || 1));
-    } else {
-      const tier = SLIME_TIERS[slime.tier];
-      const biomass = (slime.biomass || 0) + pendingBiomass; // Include pending biomass
-      const percentBonus = biomass / tier.biomassPerPercent; // How many percent increases
-      // BALANCE: Cap at maxBiomassBonus (default 100% = double stats)
-      const cappedBonus = Math.min(percentBonus, tier.maxBiomassBonus || 100);
-      const multiplier = 1 + (cappedBonus / 100); // Convert to multiplier
-
-      baseF = Math.floor(slime.baseStats.firmness * multiplier);
-      baseS = Math.floor(slime.baseStats.slipperiness * multiplier);
-      baseV = Math.floor(slime.baseStats.viscosity * multiplier);
-    }
-
-    // Apply mutation passive bonuses that scale with stats
-    // e.g., stoneskin adds +5 + 0.1*viscosity to firmness
-    if (slime.mutations) {
-      slime.mutations.forEach(mutId => {
-        const mut = MUTATION_LIBRARY[mutId];
-        if (mut?.baseValue !== undefined && mut?.viscScale !== undefined) {
-          // This mutation has a scaling passive bonus
-          const scalingBonus = mut.baseValue + mut.viscScale * baseV;
-          if (mut.stat === 'firmness') baseF += Math.floor(scalingBonus);
-          else if (mut.stat === 'slipperiness') baseS += Math.floor(scalingBonus);
-          else if (mut.stat === 'viscosity') baseV += Math.floor(scalingBonus);
-        }
-      });
-    }
-
-    // Apply skill tree bonuses
-    return {
-      firmness: Math.floor(baseF * combatBonuses.firmness),
-      slipperiness: baseS, // No skill bonus for slipperiness yet
-      viscosity: Math.floor(baseV * combatBonuses.viscosity),
-    };
-  };
+  /** Everything the resolver needs to know about global game state. */
+  const combatContext = useCallback(() => ({
+    combatBonuses,
+    bon,
+    builds,
+    passives: skillEffects.passives,
+    mutationPower: combatBonuses.mutationPower || 1,
+    ranchBonus: getRanchBonuses().expeditionRewards,
+    roundMs: ROUND_MS,
+    hiveAbilities: {
+      sharedVigor:      isHiveAbilityActive('sharedVigor'),
+      bountifulHarvest: isHiveAbilityActive('bountifulHarvest'),
+      evolutionPulse:   isHiveAbilityActive('evolutionPulse'),
+    },
+  }), [combatBonuses, bon, builds, skillEffects, getRanchBonuses, activeHiveAbilities]);
 
   const startExp = (zone, duration = expDuration) => {
     if (exps[zone] || !party.length) return;
     const targetKills = duration === '10' ? 10 : duration === '100' ? 100 : Infinity;
 
-    const arenaSlimes = party.map((id, i) => {
-      const sl = slimes.find(s => s.id === id);
-      return makeArenaSlime(sl, i, party.length);
-    });
+    const roster = party.map(id => slimes.find(s => s.id === id)).filter(Boolean);
+    const exp = makeExpedition(zone, roster, targetKills, combatContext());
 
-    const firstEnemy = spawnEnemy(zone, combatBonuses.rareSpawn);
-    const md = firstEnemy ? MONSTER_TYPES[firstEnemy.type] : null;
-
-    const initialLog = [
-      { m: `Entering ${ZONES[zone].name}... (Target: ${duration === 'infinite' ? '∞' : targetKills})`, c: '#22d3ee' },
-      ...(md ? [{ m: `A ${md.name} appears!`, c: '#22d3ee' }] : []),
-    ];
-
-    setExps(pr => ({
-      ...pr,
-      [zone]: {
-        zone,
-        phase: 'battling',
-        slimes: arenaSlimes,
-        enemy: firstEnemy,
-        kills: 0,
-        targetKills,
-        materials: {},
-        monsterKillCounts: {},
-        intermission: null,
-        floats: [],
-        logs: initialLog,
-      },
-    }));
+    setExps(pr => ({ ...pr, [zone]: exp }));
     log(`Party sent to ${ZONES[zone].name}!`);
     lastArenaTickRef.current = Date.now();
     setParty([]);
@@ -1535,29 +1460,18 @@ export default function HiveQueenGame() {
     return () => clearInterval(iv);
   }, [gameLoaded, lastTick, speed, slimes, bon, activeRes, log, bLog, ranchBuildings, ranchAssignments]);
 
-  // Arena combat loop (real-time auto-battler, 50ms ticks)
+  // Expedition loop. Ticks at 20fps so travel bars and animations stay smooth,
+  // but combat itself only advances when a full round's worth of time elapses —
+  // the driver decides that, not this interval.
   useEffect(() => {
     if (!gameLoaded || Object.keys(exps).length === 0) return;
 
     const iv = setInterval(() => {
       const now = Date.now();
-      const dtReal = now - lastArenaTickRef.current;
+      const dt = (now - lastArenaTickRef.current) * speed;
       lastArenaTickRef.current = now;
-      const dt = dtReal * speed;
 
-      const ranchBonuses = getRanchBonuses();
-      const gameState = {
-        combatBonuses,
-        bon,
-        builds,
-        passives: skillEffects.passives,
-        ranchBonus: ranchBonuses.expeditionRewards,
-        hiveAbilities: {
-          sharedVigor:      isHiveAbilityActive('sharedVigor'),
-          bountifulHarvest: isHiveAbilityActive('bountifulHarvest'),
-          evolutionPulse:   isHiveAbilityActive('evolutionPulse'),
-        },
-      };
+      const ctx = combatContext();
 
       setExps(prev => {
         if (Object.keys(prev).length === 0) return prev;
@@ -1566,37 +1480,39 @@ export default function HiveQueenGame() {
 
         Object.entries(next).forEach(([zone, exp]) => {
           if (!exp || exp.phase === 'defeat') return;
-
-          // Build slime lookup for this expedition's entities
-          const slimeMap = {};
-          (exp.slimes || []).forEach(s => {
-            const sl = slimes.find(x => x.id === s.id);
-            if (sl) slimeMap[s.id] = sl;
-          });
-
-          const { exp: newExp, sideEffects } = tickArena(exp, slimeMap, gameState, dt, zone);
-
-          // Merge floats (ephemeral, not saved)
-          const existingFloats = (exp.floats || []).filter(f => Date.now() - f.born < 1200);
-          const newFloats = sideEffects.filter(se => se.type === 'float');
-          newExp.floats = [...existingFloats, ...newFloats];
-
-          // Merge battle logs (cap at 50)
-          const logEntries = sideEffects.filter(se => se.type === 'bLog').map(se => ({ m: se.m, c: se.c }));
-          newExp.logs = [...(exp.logs || []), ...logEntries].slice(-50);
-
-          next[zone] = newExp;
-          pending.push(...sideEffects.filter(se => se.type !== 'bLog' && se.type !== 'float').map(se => ({ ...se, zone })));
+          const { exp: newExp, sideEffects } = tickExpedition(exp, dt, ctx, zone);
+          next[zone] = { ...newExp };
+          pending.push(...sideEffects.map(se => ({ ...se, zone })));
         });
 
         if (pending.length > 0) {
           setTimeout(() => {
             pending.forEach(se => {
-              if (se.type === 'slimeDeath') setSlimes(s => s.filter(sl => sl.id !== se.id));
-              if (se.type === 'bioReclaim')  setBio(b => b + se.amount);
-              if (se.type === 'prism')       { setPrisms(p => p + 1); }
-              if (se.type === 'expComplete') stopExp(se.zone);
-              if (se.type === 'expWipe')     setExps(prev => { const n = { ...prev }; delete n[se.zone]; return n; });
+              switch (se.type) {
+                case 'slimeDeath':
+                  setSlimes(list => list.filter(sl => sl.id !== se.id));
+                  break;
+                case 'bioReclaim':
+                  setBio(b => b + se.amount);
+                  break;
+                case 'prism':
+                  setPrisms(p => p + 1);
+                  break;
+                case 'grantTrait':
+                  setSlimes(list => list.map(sl =>
+                    sl.id === se.id && !(sl.traits || []).includes(se.trait)
+                      ? { ...sl, traits: [...(sl.traits || []), se.trait] }
+                      : sl));
+                  break;
+                case 'expComplete':
+                  stopExp(se.zone);
+                  break;
+                case 'expWipe':
+                  setExps(cur => { const n = { ...cur }; delete n[se.zone]; return n; });
+                  break;
+                default:
+                  break;
+              }
             });
           }, 0);
         }
@@ -1605,7 +1521,7 @@ export default function HiveQueenGame() {
     }, ARENA_TICK_RATE);
 
     return () => clearInterval(iv);
-  }, [gameLoaded, exps, speed, slimes, combatBonuses, bon, builds, skillEffects, getRanchBonuses, activeHiveAbilities]);
+  }, [gameLoaded, exps, speed, combatContext]);
 
   // Tower Defense Combat Loop
   useEffect(() => {
@@ -2193,7 +2109,15 @@ export default function HiveQueenGame() {
             </div>
           ) : (
             <div>
-              <SlimeForge unlockedMutations={unlockedMutations} biomass={bio} freeJelly={freeJelly} tiers={unlockedTiers} onSpawn={spawn} extraMutationSlots={combatBonuses.mutationSlots} />
+              <SlimeForge
+                unlockedMutations={unlockedMutations}
+                biomass={bio}
+                freeJelly={freeJelly}
+                tiers={unlockedTiers}
+                onSpawn={spawn}
+                extraMutationSlots={combatBonuses.mutationSlots}
+                slotsFromSelection={slotsFromSelection}
+              />
               {slimes.length ? (
                 <div style={{ display: 'grid', gap: 10 }}>
                 {slimes.map(s => {
@@ -2279,9 +2203,10 @@ export default function HiveQueenGame() {
             </div>
             <ArenaCanvas
               exp={exps[selZone]}
-              slimeMap={Object.fromEntries(slimes.map(s => [s.id, s]))}
               zone={selZone}
               logs={exps[selZone]?.logs}
+              verboseLogs={verboseLogs}
+              setVerboseLogs={setVerboseLogs}
             />
             {exps[selZone] ? (
               <button onClick={() => stopExp(selZone)} style={{ width: '100%', marginTop: 15, padding: 12, background: 'linear-gradient(135deg, #ef4444, #f59e0b)', border: 'none', borderRadius: 8, color: '#fff', fontWeight: 'bold', cursor: 'pointer' }}>🛑 Recall</button>

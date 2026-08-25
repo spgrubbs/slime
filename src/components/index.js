@@ -1,7 +1,6 @@
 // UI Component exports
 export { default as SlimeSprite } from './SlimeSprite.jsx';
 export { default as MonsterSprite } from './MonsterSprite.jsx';
-export { default as BattleArena } from './BattleArena.jsx';
 export { default as ArenaCanvas } from './ArenaCanvas.jsx';
 export { default as SlimeForge } from './SlimeForge.jsx';
 export { default as SlimeDetail } from './SlimeDetail.jsx';

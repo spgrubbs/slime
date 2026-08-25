@@ -300,6 +300,14 @@ function resolveAttack(attacker, defender, world, ctx, records, opts = {}) {
   }
   defender.hp -= dmg;
 
+  // Status procs roll BEFORE the hit is logged so their rolls — landed or not —
+  // appear in that hit's trace. The statuses themselves are applied after, so
+  // they read below the hit in the log.
+  // The Toxicologist skill scales proc CHANCES, so it is folded into the
+  // magnitude multiplier rather than re-rolling a failed proc.
+  const statusEv = { attacker, defender, apply: [], rng, world, trace };
+  runHooks(attacker, 'onStatusApply', statusEv, ctx.mutationPower * (cb.statusChance || 1));
+
   records.push({
     kind: 'attack',
     result: dealtEv.execute ? 'execute' : crit ? 'crit' : 'hit',
@@ -315,7 +323,9 @@ function resolveAttack(attacker, defender, world, ctx, records, opts = {}) {
     },
   });
 
-  // ── 8. Post-hit: lifesteal, reflect, status procs ─────────────────────────
+  statusEv.apply.forEach(({ type, label }) => applyStatus(defender, type, ctx, records, label));
+
+  // ── 8. Post-hit: lifesteal ────────────────────────────────────────────────
   if (dealtEv.healPct > 0 && attacker.hp < attacker.maxHp) {
     const heal = Math.max(1, Math.floor(dmg * dealtEv.healPct));
     attacker.hp = Math.min(attacker.maxHp, attacker.hp + heal);
@@ -325,12 +335,6 @@ function resolveAttack(attacker, defender, world, ctx, records, opts = {}) {
              v: `lifesteal ${(dealtEv.healPct * 100).toFixed(1)}% of ${dmg}` },
     });
   }
-
-  // The Toxicologist skill scales proc CHANCES, so it is folded into the
-  // magnitude multiplier rather than re-rolling a failed proc.
-  const statusEv = { attacker, defender, apply: [], rng, world };
-  runHooks(attacker, 'onStatusApply', statusEv, ctx.mutationPower * (cb.statusChance || 1));
-  statusEv.apply.forEach(({ type, label }) => applyStatus(defender, type, ctx, records, label));
 
   return dmg;
 }
