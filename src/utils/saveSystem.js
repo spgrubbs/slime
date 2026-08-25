@@ -1,4 +1,9 @@
 import { SAVE_KEY, DEFAULT_ELEMENTS } from '../data/gameConstants.js';
+import { dehydrateExpedition } from '../combat/expedition.js';
+
+// The key the real-time arena wrote to. Its in-flight expeditions cannot be
+// converted to round-based combatants, but everything else still migrates.
+const LEGACY_SAVE_KEY = 'hive_queen_save_v3';
 
 // Default game state
 export const getDefaultState = () => ({
@@ -104,10 +109,10 @@ const migrateSaveData = (data) => {
 // Save game to localStorage
 export const saveGame = (state) => {
   try {
-    // Strip ephemeral arena floats before saving
+    // Combatants carry live references that must not be serialized.
     const exps = {};
     Object.entries(state.exps || {}).forEach(([zone, exp]) => {
-      exps[zone] = { ...exp, floats: [] };
+      exps[zone] = dehydrateExpedition(exp);
     });
     const saveData = { ...state, exps, lastSave: Date.now() };
     localStorage.setItem(SAVE_KEY, JSON.stringify(saveData));
@@ -122,10 +127,19 @@ export const saveGame = (state) => {
 export const loadGame = () => {
   try {
     const data = localStorage.getItem(SAVE_KEY);
-    if (!data) return null;
-    const parsed = JSON.parse(data);
-    // Apply migrations to ensure compatibility
-    return migrateSaveData(parsed);
+    if (data) return migrateSaveData(JSON.parse(data));
+
+    // First run after the combat rewrite: carry the player's progress over from
+    // the arena-era save, dropping only the expeditions that were mid-flight.
+    const legacy = localStorage.getItem(LEGACY_SAVE_KEY);
+    if (!legacy) return null;
+
+    const parsed = JSON.parse(legacy);
+    const dropped = Object.keys(parsed.exps || {}).length;
+    if (dropped > 0) {
+      console.info(`Migrating save: recalled ${dropped} in-flight expedition(s).`);
+    }
+    return migrateSaveData({ ...parsed, exps: {} });
   } catch (e) {
     console.error('Load failed:', e);
     return null;

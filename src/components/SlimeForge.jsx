@@ -5,13 +5,15 @@ import { BASE_SLIME_COST, TRAIT_JELLY_COST, ELEMENTS } from '../data/gameConstan
 import { genName } from '../utils/helpers.js';
 import SlimeSprite from './SlimeSprite.jsx';
 
-const SlimeForge = ({ unlockedMutations, biomass, freeJelly, tiers, onSpawn, extraMutationSlots = 0 }) => {
+const SlimeForge = ({ unlockedMutations, biomass, freeJelly, tiers, onSpawn, extraMutationSlots = 0, slotsFromSelection }) => {
   const [tier, setTier] = useState('basic');
   const [selMutations, setSelMutations] = useState([]);
   const [name, setName] = useState(genName());
 
   const td = SLIME_TIERS[tier];
-  const maxM = td.traitSlots + extraMutationSlots;
+  // Alloy Potential pays for itself: selecting it opens the slots it grants.
+  const grantedSlots = slotsFromSelection ? slotsFromSelection(selMutations) : 0;
+  const maxM = td.traitSlots + extraMutationSlots + grantedSlots;
   const bioCost = BASE_SLIME_COST + selMutations.length * 5;
   const jellyCost = td.jellyCost + selMutations.length * TRAIT_JELLY_COST;
 

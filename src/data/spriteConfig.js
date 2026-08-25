@@ -2,19 +2,26 @@
 // This file centralizes all custom sprite asset paths
 // Set paths to null to use emoji/CSS fallbacks
 
+import fireIcon from '../assets/sprites/elements/fire.png';
+import waterIcon from '../assets/sprites/elements/water.png';
+import natureIcon from '../assets/sprites/elements/nature.png';
+import earthIcon from '../assets/sprites/elements/earth.png';
+import basicIdle from '../assets/sprites/slime-basic-idle.png';
+
 // =============================================================================
 // ELEMENT ICONS (16x16 PNG sprites)
 // =============================================================================
 // Place your 16x16 element icons in: src/assets/sprites/elements/
 // File naming convention: {element}.png (e.g., fire.png, water.png)
 //
-// To enable custom element icons, uncomment the require statements below:
+// To add a new element icon, import it above and reference it below.
+
 
 export const ELEMENT_SPRITES = {
-  fire: require('../assets/sprites/elements/fire.png'),
-  water: require('../assets/sprites/elements/water.png'),
-  nature: require('../assets/sprites/elements/nature.png'),
-  earth: require('../assets/sprites/elements/earth.png'),
+  fire: fireIcon,
+  water: waterIcon,
+  nature: natureIcon,
+  earth: earthIcon,
 };
 
 // =============================================================================
@@ -24,13 +31,14 @@ export const ELEMENT_SPRITES = {
 // File naming convention: slime-{tier}-{animation}.png
 // Each sheet should be 8 frames × 32px = 256px wide, 32px tall
 //
-// To enable custom slime sprites, uncomment the require statements below:
+// To enable a custom slime sprite, import the sheet above and slot it in below.
+
 
 export const SLIME_SPRITES = {
   basic: {
-    idle: require('../assets/sprites/slime-basic-idle.png'),
-    attack: null, // require('../assets/sprites/slime-basic-attack.png'),
-    hurt: null,   // require('../assets/sprites/slime-basic-hurt.png'),
+    idle: basicIdle,
+    attack: null, // import and slot in a slime-basic-attack.png sheet
+    hurt: null,   // import and slot in a slime-basic-hurt.png sheet
   },
   enhanced: {
     idle: null,
