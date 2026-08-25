@@ -108,6 +108,8 @@ function applyStatus(target, type, ctx, records, sourceLabel = '') {
   const def = statusDef(type);
   if (!def.name) return false;
 
+  if (target.statusImmune) return false;
+
   const ev = { self: target, type, dur: def.dur, blocked: false, label: '' };
   runHooks(target, 'onStatusReceive', ev, ctx.mutationPower);
   if (ev.blocked || ev.dur <= 0) return false;
@@ -246,15 +248,20 @@ function resolveAttack(attacker, defender, world, ctx, records, opts = {}) {
   let crit = false;
   if (beforeEv.autoCrit) {
     crit = true;
-  } else if (!hitEv.noCrit) {
+  } else if (!hitEv.noCrit && !defender.critImmune) {
     const critCh = Math.min(0.95,
       0.05 + (cb.critChance || 0) + aStats.slipperiness * 0.01 +
-      beforeEv.critBonus + (isSlime ? aura.critChance : 0));
-    const roll = rng();
-    crit = roll < critCh;
-    trace.roll('crit', roll, critCh, crit);
+      beforeEv.critBonus + (attacker.critBonus || 0) + (isSlime ? aura.critChance : 0));
+    if (critCh >= 0.95 && (attacker.critBonus || 0) >= 1) {
+      crit = true;
+      trace.note('position: guaranteed crit');
+    } else {
+      const roll = rng();
+      crit = roll < critCh;
+      trace.roll('crit', roll, critCh, crit);
+    }
   } else {
-    trace.note('crit-immune');
+    trace.note(defender.critImmune ? 'target is crit-immune' : 'crit-immune');
   }
   if (crit) trace.mul('CRIT', 1.5 + (cb.critDamage || 0));
 
@@ -306,7 +313,8 @@ function resolveAttack(attacker, defender, world, ctx, records, opts = {}) {
   // The Toxicologist skill scales proc CHANCES, so it is folded into the
   // magnitude multiplier rather than re-rolling a failed proc.
   const statusEv = { attacker, defender, apply: [], rng, world, trace };
-  runHooks(attacker, 'onStatusApply', statusEv, ctx.mutationPower * (cb.statusChance || 1));
+  runHooks(attacker, 'onStatusApply', statusEv,
+    ctx.mutationPower * (cb.statusChance || 1) * (attacker.procMult || 1));
 
   records.push({
     kind: 'attack',
@@ -347,7 +355,10 @@ function resolveEnemyTurn(enemy, world, ctx, records, aura) {
 
   const md = enemy.ref;
   const ability = md.ability ? MONSTER_ABILITIES[md.ability] : null;
-  const pick = () => living[Math.floor(ctx.rng() * living.length)];
+  // Formations (tower defense lanes) override who the enemy can reach.
+  const reachable = ctx.selectTargets ? ctx.selectTargets(living, world) : living;
+  const pool = reachable.length ? reachable : living;
+  const pick = () => pool[Math.floor(ctx.rng() * pool.length)];
 
   if (ability && ctx.rng() < ability.chance) {
     switch (ability.effect) {
@@ -365,9 +376,9 @@ function resolveEnemyTurn(enemy, world, ctx, records, aura) {
         records.push({
           kind: 'ability', actorId: enemy.id, actorName: enemy.name,
           log: { m: `${enemy.name} uses ${ability.name}! ${ability.icon}`, c: C.enemy,
-                 v: `hits all ${living.length} slimes at ×${ability.multiplier}` },
+                 v: `hits all ${pool.length} reachable slimes at ×${ability.multiplier}` },
         });
-        living.forEach(t => resolveAttack(enemy, t, world, ctx, records, {
+        pool.forEach(t => resolveAttack(enemy, t, world, ctx, records, {
           abilityMultiplier: ability.multiplier, abilityName: ability.name, aura,
         }));
         return;

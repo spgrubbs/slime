@@ -84,7 +84,9 @@ party-wide crit auras (`stormcaller`), debuff cleansing (`sloughSkin`), and stat
 nullification (`nullify`). A slime should have a *silhouette of behavior*, not just bigger
 numbers.
 
-> **Implementation note:** see §9. The passive layer is currently not wired to combat.
+Every passive is implemented as a hook (§9.3), and `validateRegistry()` fails at startup if
+one is not. Mutation slots come from the tier, plus `ancient` and `alloyPotential`, plus the
+skill tree.
 
 ---
 
@@ -133,16 +135,42 @@ raw stats, traits, mana, or global buffs (War Den → tower defense damage; Heal
 expedition buff). Accumulation caps at 24h so you can't neglect them forever without loss.
 
 ### 7.3 Tower Defense (progression gate)
-24-hour cooldown. Deploy slimes to defend the hive against 3 waves of human invaders,
-final wave carrying a Champion. Victory → biomass, materials, **Champion Badge**, and a
-**guaranteed Prism**. Defeat → lose half your biomass.
+24-hour cooldown. Three approach lanes converge on the hive; you garrison each with up to
+three slimes, one per position, then commit. Three waves, the last carrying a Champion.
+
+**Lanes** differ in how long they buy you:
+
+| Lane | Crossing | Character |
+|---|---|---|
+| The Ravine 🏔️ | 5 rounds | Single file — only the front invader engages |
+| The Causeway 🛣️ | 3 rounds | Wide and fast; everything that arrives fights at once |
+| The Marsh 🌫️ | 6 rounds | Invaders arrive Slowed and advance at half rate |
+
+**Positions** each reward a different stat, which is what gives a slime the expedition meta
+has no use for a job here:
+
+| Position | Wants | Effect |
+|---|---|---|
+| Choke 🛡️ | Firmness | +50% Firmness; sole legal target while it stands |
+| Flank 🗡️ | Slipperiness | Every hit crits; untargetable until the Choke falls |
+| Rear 🧪 | Viscosity | Procs roll twice; routs the moment invaders reach it |
+
+**Invaders** each invalidate one dominant strategy, so "stack Firmness" stops being a
+universal answer: the **Shieldbearer** cannot be crit (Flanks are wasted on it), the
+**Zealot** is immune to every status (Rear procs whiff), and the **Sapper** tunnels past
+the Choke to whatever is behind it. The **Champion** does both and hits hardest.
+
+The wave manifest is visible during setup — the decision is meant to be read and made in
+advance, which suits a once-a-day event far better than reacting in real time.
+
+**Stakes.** Losing a lane costs the slimes garrisoning it, permanently. It costs nothing
+else — your stores are never touched. Clearing wave 3 pays a **Prism** however ugly the
+run was; the **Champion Badge** is reserved for a defense with no lane lost.
 
 Its role in the economy is specific and important: it is the **only reliable Prism faucet**,
 and Prisms buy the things nothing else sells (legendary traits, mutation rerolls, time
-skips). It is meant to be the once-a-day "sit down and actually play" moment against an
-otherwise hands-off game.
-
-> **Implementation note:** see §10. The current implementation does not deliver on that role.
+skips). It is the once-a-day "sit down and actually play" moment against an otherwise
+hands-off game.
 
 ### 7.4 Hive Abilities & Prism Shop
 Mana buys timed global buffs (2–8 hours). Prisms buy permanent, targeted, high-impact
@@ -173,7 +201,7 @@ each other loosely. The mutation library is the one that survives death — it's
 
 ## 9. Combat Model
 
-### 9.1 Direction
+### 9.1 Model
 Combat resolves **turn-based**: discrete rounds, deterministic order, one clear resolution
 per action. This is the model the mutation set was written for — "chance to skip a turn",
 "heal X per turn", "revive after death", "first attack bonus" are all turn-language, and
@@ -185,7 +213,13 @@ without owning the simulation. Presentation reads the log; it does not produce i
 
 Why: the arena's continuous model made every effect a special case (durations in ms, "turns"
 faked as 1500ms, no discrete point at which a stun could take hold), and the mutation layer
-silently fell off during the port. Simulation and presentation need to be separable.
+silently fell off during the port. Simulation and presentation are now separable —
+`resolveRound()` is pure and deterministic given an rng, and `ArenaCanvas` replays the beats
+it produces.
+
+Both activities run on the same resolver. An expedition is one party against one monster;
+tower defense is three lanes resolving in parallel with a targeting rule per lane. That
+reuse is the payoff of the split.
 
 ### 9.2 Resolution order (per round)
 1. Status ticks (damage over time, duration decrement)
@@ -199,38 +233,60 @@ silently fell off during the port. Simulation and presentation need to be separa
 Every mutation, trait, skill, hive ability, and monster ability must be expressible as one
 of a fixed set of hooks, so new content is data rather than code:
 
-`onRoundStart` · `onBeforeAttack` · `onHitChance` · `onDamageDealt` · `onDamageTaken` ·
-`onStatusApply` · `onKill` · `onDeath` · `onRevive` · `onRoundEnd` · `partyAura`
+`statMod` · `hpMod` · `onRoundStart` · `onBeforeAttack` · `onHitChance` · `onDamageDealt` ·
+`onDamageTaken` · `onStatusApply` · `onStatusReceive` · `onKill` · `onDeath` · `onHazard` ·
+`onRoundEnd` · `partyAura`
 
 An effect that can't be written as a hook is a signal the hook set is wrong — not a reason
 to special-case it inside the damage function.
 
----
+`validateRegistry()` runs at import time and throws if any mutation passive, trait, monster
+ability, or status effect has no implementation. That check is what makes the whole class of
+"declared but silently inert" bug impossible to ship.
 
-## 10. Open Design Debt
+### 9.4 Verbose logging
+Every number combat produces carries a trace of how it got there — base stat, each named
+modifier that applied, every roll with its threshold and whether it landed. Verbose mode
+renders those traces under each log line, in both expeditions and tower defense. Rolls that
+*failed* are shown too: a proc you cannot watch miss is a proc you cannot balance.
 
-Tracked honestly rather than quietly:
-
-1. **Mutation passives are not connected to combat.** The passive names generated at spawn
-   (`sharp`, `digest`, `stoneskin`, …) are not the names combat checks
-   (`ferocity`, `trickster`, `armored`, …). No mutation currently has a combat effect
-   beyond its flat stat bonus.
-2. **Stat calculation misreads effect fields.** `baseValue`/`viscScale` describe passive
-   magnitude, but are being added to stats — so `fracture` and `nullify` are accidental
-   stat monsters while every `baseChance` mutation contributes nothing.
-3. **`void` and `adaptable` are traits but are read from the mutation list.**
-4. **`stun` is applied but never checked**; `weakened` is never applied; monster `slow`
-   and `buff` abilities fall through to plain damage.
-5. **`curious` and `ancient` traits have no implementation.** `primordial` says
-   "+10% all stats" but only modifies damage.
-6. **Max HP is fixed at spawn** and never recomputed as biomass grows, so firmness and HP
-   drift apart over a slime's life.
-7. **`EXPLORATION_EVENTS` and `INTERMISSION_EVENTS` are written but never fired.**
-8. **Tower defense has no decisions in it** — one lane, no placement, no targeting, all
-   slimes hit the front enemy. See §7.3 for what it's supposed to be.
-9. **No test coverage on combat math.**
+```
+FIRM 36  🔪 Sharp ✗ 41.1% vs 16.5%  dodges ✗ 28.2% vs 8.0%
+         position: guaranteed crit  ×1.5 CRIT → 54  🔥 Pyrolyze ✓ 11.6% vs 22.8%
+```
 
 ---
+
+## 10. Design Debt
+
+### Cleared
+
+1. ~~Mutation passives not connected to combat.~~ All 30 are wired through the hook
+   registry, with a startup assertion preventing recurrence.
+2. ~~Stat calculation misreading effect fields.~~ `baseValue`/`viscScale` are effect
+   magnitudes only; stat bonuses come from `bonus` at spawn or an explicit `statMod` hook.
+3. ~~`void`/`adaptable` read from the wrong list.~~ Both are traits and read as traits.
+4. ~~`stun` applied but never checked.~~ Enforced by the resolver; `weakened`, `slowed` and
+   `enraged` all have appliers, and monster `slow`/`buff` do their jobs.
+5. ~~`curious` and `ancient` unimplemented; `primordial` partial.~~ `curious` raises the
+   travel-event rate, `ancient` and `alloyPotential` grant real mutation slots, `primordial`
+   is +10% to all stats and max HP.
+6. ~~Max HP frozen at spawn.~~ Derived from current firmness.
+7. ~~Exploration and intermission events never fired.~~ Both fire during travel.
+8. ~~Tower defense had no decisions in it.~~ Rebuilt as lanes and positions — see §7.3.
+9. ~~No test coverage on combat math.~~ 68 tests across the resolver, the expedition driver
+   and the defense.
+
+### Open
+
+- **Balance has not been re-tuned.** Every number in the game was set against combat where
+  mutations did nothing. Turning 30 passives back on has certainly moved the curve; the
+  intended order was always to fix the mechanics first and tune second.
+- **Ranch sprawl.** Four element ranches doing identical work is a lot of UI for one idea;
+  one ranch with a selectable element would say the same thing.
+- **Grafting.** `ancient` grants a mutation slot to an already-spawned slime, but there is
+  no way to fill it after spawn. The slot is real and counted; the action to use it is not
+  built.
 
 ## 11. Design Principles
 

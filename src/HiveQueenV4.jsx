@@ -9,7 +9,6 @@ import {
   JELLY_PER_QUEEN_LEVEL,
   AUTO_SAVE_INTERVAL,
   TOWER_DEFENSE_COOLDOWN,
-  TD_TICK_SPEED,
   ELEMENTS,
   ARENA_TICK_RATE,
   ROUND_MS,
@@ -20,7 +19,7 @@ import { MUTATION_LIBRARY, TRAIT_LIBRARY, STATUS_EFFECTS, SLIME_TRAITS } from '.
 import { MONSTER_TYPES, MONSTER_ABILITIES } from './data/monsterData.js';
 import { ZONES, EXPLORATION_EVENTS, INTERMISSION_EVENTS, INTERMISSION_DURATION } from './data/zoneData.js';
 import { BUILDINGS, RESEARCH } from './data/buildingData.js';
-import { HUMAN_TYPES, TD_WAVES, getTDScaling } from './data/towerDefenseData.js';
+import { TD_LANES, LANE_ORDER, POSITION_ORDER } from './data/towerDefenseData.js';
 import { RANCH_TYPES, RANCH_EVENTS, RANCH_UPGRADE_BONUSES, MAX_RANCH_LEVEL, RANCH_MAX_ACCUMULATION_TIME } from './data/ranchData.js';
 import { HIVE_ABILITIES, PRISM_SHOP, MANA_UPDATE_INTERVAL, MANA_PER_SLIME_PER_HOUR } from './data/hiveData.js';
 import { SKILL_TREES, SKILL_POINTS_PER_LEVEL, getSkillEffects, isZoneUnlocked, isBuildingUnlocked, isPheromoneUnlocked, isFeatureUnlocked } from './data/skillTreeData.js';
@@ -34,6 +33,7 @@ import { saveGame, loadGame, deleteSave } from './utils/saveSystem.js';
 import './combat/index.js';
 import { computeStats, computeMaxHp, mutationSlots, slotsFromSelection } from './combat/stats.js';
 import { makeExpedition, tickExpedition, hydrateExpedition } from './combat/expedition.js';
+import { makeTowerDefense, tickTowerDefense, towerDefenseRewards } from './combat/towerDefense.js';
 
 /**
  * Rebuild the live references a saved expedition dropped. Combatants are
@@ -53,6 +53,7 @@ import {
   SlimeSprite,
   MonsterSprite,
   ArenaCanvas,
+  TowerDefense,
   SlimeForge,
   SlimeDetail,
   Compendium,
@@ -239,6 +240,7 @@ export default function HiveQueenGame() {
   const [selSlime, setSelSlime] = useState(null);
   const touchX = useRef(null);
   const lastArenaTickRef = useRef(Date.now());
+  const lastTdTickRef = useRef(Date.now());
 
   // Calculate skill effects from purchased skills (must be first, before other calculations)
   const skillEffects = useMemo(() => getSkillEffects(purchasedSkills), [purchasedSkills]);
@@ -260,7 +262,7 @@ export default function HiveQueenGame() {
   const visibleTabs = tabs.filter(t => !t.skillUnlock || isFeatureUnlocked(t.skillUnlock, purchasedSkills));
 
   const maxJelly = BASE_JELLY + (queen.level - 1) * JELLY_PER_QUEEN_LEVEL + (builds.slimePit || 0) * 10 + (skillBonuses.maxJelly || 0);
-  const usedJelly = slimes.reduce((s, sl) => s + sl.magCost, 0);
+  const usedJelly = slimes.reduce((s, sl) => s + (sl.magCost || 0), 0);
   const freeJelly = maxJelly - usedJelly;
   // BALANCE: Slime tiers are unlocked by buildings, not queen level
   const unlockedTiers = Object.keys(SLIME_TIERS).filter(t => {
@@ -1156,132 +1158,53 @@ export default function HiveQueenGame() {
     log(`Built ${b.name}!`);
   };
 
-  // Tower Defense Functions
-  const tdSlots = 4 + (builds.defenseSlot || 0) + combatBonuses.defenseSlots;
-  const tdAvailable = () => Date.now() - lastTowerDefense >= TOWER_DEFENSE_COOLDOWN;
+  // ── Tower Defense ─────────────────────────────────────────────────────────
+  // Runs on the same round resolver as expeditions, with lanes and positions
+  // instead of a single arena. See src/combat/towerDefense.js.
 
-  const startTowerDefense = (deployedSlimes) => {
-    const wave = TD_WAVES[0];
-    const scaling = getTDScaling(queen.level);
-    const humans = [];
-    const humanCount = wave.humans + scaling.countMultiplier - 1; // Base + scaling bonus
-    for (let i = 0; i < humanCount; i++) {
-      const baseHp = HUMAN_TYPES.warrior.hp * wave.hpMultiplier * scaling.hpMultiplier;
-      humans.push({
-        id: genId(),
-        type: 'warrior',
-        hp: baseHp,
-        maxHp: baseHp,
-        position: -i * 8, // Stagger start positions so humans don't overlap
-        speed: HUMAN_TYPES.warrior.speed,
-      });
-    }
-
-    setTowerDefense({
-      phase: 'battle', // 'setup', 'battle', 'victory', 'defeat'
-      currentWave: 0,
-      scaling, // Store scaling for wave spawns
-      deployedSlimes: deployedSlimes.map(id => {
-        const sl = slimes.find(s => s.id === id);
-        return { id, attackTimer: 0 };
-      }),
-      humans,
-      battleLog: ['Wave 1 begins!'],
-      battleTimer: 0,
-    });
-    log('🎯 Tower Defense battle started!');
+  const tdCooldownLeft = () => {
+    const remaining = TOWER_DEFENSE_COOLDOWN - (Date.now() - lastTowerDefense);
+    return remaining > 0 ? remaining : 0;
   };
 
-  const endTowerDefense = (victory, summary) => {
-    let rewards = { biomass: 0, materials: {} };
-    let losses = { biomass: 0 };
-    const rewardMultiplier = towerDefense?.scaling?.rewardMultiplier || 1;
+  const startTowerDefense = (placements) => {
+    const anyPlaced = Object.values(placements || {})
+      .some(lane => Object.values(lane || {}).some(Boolean));
+    if (!anyPlaced || tdCooldownLeft() > 0) return;
 
-    if (victory) {
-      // Calculate rewards with queen level scaling
-      TD_WAVES.forEach(w => {
-        rewards.biomass += Math.floor(w.reward.biomass * rewardMultiplier);
-        Object.entries(w.reward.mats).forEach(([m, c]) => {
-          rewards.materials[m] = (rewards.materials[m] || 0) + Math.floor(c * rewardMultiplier);
-        });
-      });
-      // Boss drops Champion Badge (unique material)
-      rewards.materials['Champion Badge'] = (rewards.materials['Champion Badge'] || 0) + 1;
+    setTowerDefense(makeTowerDefense(placements, slimes, queen.level, combatContext()));
+    lastTdTickRef.current = Date.now();
+    log('🎯 The humans are coming. Hold the line!');
+  };
 
-      setBio(p => p + rewards.biomass);
-      setMats(p => {
-        const n = { ...p };
-        Object.entries(rewards.materials).forEach(([m, c]) => {
-          n[m] = (n[m] || 0) + c;
-        });
+  const finishTowerDefense = useCallback((td) => {
+    const summary = towerDefenseRewards(td);
+    const { rewards } = summary;
+
+    setBio(b => b + rewards.biomass);
+    if (rewards.prisms > 0) setPrisms(p => p + rewards.prisms);
+    if (Object.keys(rewards.materials).length) {
+      setMats(m => {
+        const n = { ...m };
+        Object.entries(rewards.materials).forEach(([mat, c]) => { n[mat] = (n[mat] || 0) + c; });
         return n;
       });
-      // Guaranteed Prism on TD victory
-      setPrisms(p => p + 1);
-      rewards.prisms = 1;
-      log(`🎉 Victory! +${rewards.biomass} biomass, +1💎 Prism, +1🏅 Champion Badge!`);
-    } else {
-      // Lose half biomass
-      losses.biomass = Math.floor(bio / 2);
-      setBio(p => Math.max(0, p - losses.biomass));
-
-      // Partial rewards based on humans defeated (even in defeat, you get some drops)
-      const humansDefeated = summary?.humansDefeated || 0;
-      if (humansDefeated > 0) {
-        // Small biomass reward per human
-        const partialBio = Math.floor(humansDefeated * 5 * rewardMultiplier);
-        rewards.biomass = partialBio;
-        setBio(p => p + partialBio);
-
-        // 30% chance per human defeated to drop a material
-        const dropChance = 0.3;
-        const possibleMats = ['Human Bone', 'Iron Sword'];
-        for (let i = 0; i < humansDefeated; i++) {
-          if (Math.random() < dropChance) {
-            const mat = possibleMats[Math.floor(Math.random() * possibleMats.length)];
-            rewards.materials[mat] = (rewards.materials[mat] || 0) + 1;
-          }
-        }
-
-        // Apply material rewards
-        if (Object.keys(rewards.materials).length > 0) {
-          setMats(p => {
-            const n = { ...p };
-            Object.entries(rewards.materials).forEach(([m, c]) => {
-              n[m] = (n[m] || 0) + c;
-            });
-            return n;
-          });
-        }
-
-        const matStr = Object.keys(rewards.materials).length > 0
-          ? `, salvaged: ${Object.entries(rewards.materials).map(([m, c]) => `${c}x ${m}`).join(', ')}`
-          : '';
-        log(`💀 Defeat! Lost ${losses.biomass} biomass, but salvaged +${partialBio} biomass${matStr}!`);
-      } else {
-        log(`💀 Defeat! Lost ${losses.biomass} biomass!`);
-      }
     }
 
-    // Update tower defense with summary but don't clear it yet
-    setTowerDefense(prev => ({
-      ...prev,
-      phase: victory ? 'victory' : 'defeat',
-      summary: {
-        victory,
-        totalDamage: summary?.totalDamage || 0,
-        humansDefeated: summary?.humansDefeated || 0,
-        rewards,
-        losses,
-      }
-    }));
+    if (summary.flawless) {
+      log(`🏆 Flawless defense! +${rewards.biomass}🧬, +1💎 Prism, +1🏅 Champion Badge`);
+    } else if (summary.victory) {
+      log(`🎉 Line held (${summary.breaches.length} lane lost). +${rewards.biomass}🧬, +1💎 Prism`);
+    } else {
+      log(`💀 The hive was overrun. Salvaged +${rewards.biomass}🧬 from the waves you cleared.`);
+    }
+    summary.lost.forEach(s => log(`💔 ${s.name} fell defending the ${TD_LANES[s.lane].name}.`));
 
+    setTowerDefense(prev => (prev ? { ...prev, summary } : prev));
     setLastTowerDefense(Date.now());
-  };
+  }, [log]);
 
-  const closeTowerDefense = () => {
-    setTowerDefense(null);
-  };
+  const closeTowerDefense = () => setTowerDefense(null);
 
   // Game Loop
   useEffect(() => {
@@ -1523,152 +1446,46 @@ export default function HiveQueenGame() {
     return () => clearInterval(iv);
   }, [gameLoaded, exps, speed, combatContext]);
 
-  // Tower Defense Combat Loop
+  // Tower Defense loop — same cadence as expeditions, one round at a time.
   useEffect(() => {
     if (!gameLoaded || !towerDefense || towerDefense.phase !== 'battle') return;
 
     const iv = setInterval(() => {
+      const now = Date.now();
+      const dt = (now - lastTdTickRef.current) * speed;
+      lastTdTickRef.current = now;
+
+      const ctx = combatContext();
+
       setTowerDefense(prev => {
         if (!prev || prev.phase !== 'battle') return prev;
 
-        const next = { ...prev };
-        const dt = (TD_TICK_SPEED / 1000) * speed;
-        next.battleTimer += dt;
+        const { td, sideEffects } = tickTowerDefense(prev, dt, ctx, ROUND_MS);
 
-        // Track stats for summary
-        if (!next.totalDamage) next.totalDamage = 0;
-        if (!next.humansDefeated) next.humansDefeated = 0;
-
-        // Move humans and apply damage
-        let humansToRemove = [];
-        next.humans = next.humans.map(h => {
-          const updated = {
-            ...h,
-            position: h.position + h.speed * dt * 10,
-          };
-          return updated;
-        });
-
-        // Check if any human reached the end (position >= 100)
-        const humanReachedEnd = next.humans.find(h => h.position >= 100);
-        if (humanReachedEnd) {
-          // Check if Decoy ability is active and not yet used
-          const decoyActive = activeHiveAbilities.decoy && Date.now() < activeHiveAbilities.decoy;
-          if (decoyActive && !next.decoyUsed) {
-            // Decoy saves the hive - remove the human and consume the ability
-            next.humans = next.humans.filter(h => h.id !== humanReachedEnd.id);
-            next.decoyUsed = true;
-            next.humansDefeated++;
-            next.battleLog = [...next.battleLog.slice(-20), '🎭 Slime Decoy intercepted the invader!'];
-            // Deactivate the decoy ability
-            setActiveHiveAbilities(prev => {
-              const updated = { ...prev };
-              delete updated.decoy;
-              return updated;
+        if (sideEffects.length) {
+          setTimeout(() => {
+            sideEffects.forEach(se => {
+              if (se.type === 'slimeDeath') setSlimes(list => list.filter(sl => sl.id !== se.id));
             });
-          } else {
-            next.phase = 'defeat';
-            setTimeout(() => endTowerDefense(false, { totalDamage: next.totalDamage, humansDefeated: next.humansDefeated }), 100);
-            return next;
-          }
+          }, 0);
         }
 
-        // Slimes attack - apply damage to humans
-        next.deployedSlimes.forEach(ds => {
-          const sl = slimes.find(s => s.id === ds.id);
-          if (!sl) return;
-
-          const stats = getSlimeStats(sl);
-          const attackSpeed = 1 + (stats.slipperiness || 0) * 0.1;
-          ds.attackTimer = (ds.attackTimer || 0) + dt;
-
-          if (ds.attackTimer >= 1 / attackSpeed) {
-            ds.attackTimer = 0;
-            // Attack the first human
-            if (next.humans.length > 0) {
-              const ranchBonuses = getRanchBonuses();
-              const warDenBonus = 1 + ranchBonuses.towerDefenseDamage;
-              const damage = Math.floor((stats.firmness || 5) * warDenBonus);
-              next.totalDamage += damage;
-
-              // Apply damage to first human
-              next.humans = next.humans.map((h, idx) => {
-                if (idx === 0) {
-                  const newHp = h.hp - damage;
-                  next.battleLog = [...next.battleLog.slice(-20), `${sl.name} attacks for ${Math.floor(damage)} damage!`];
-
-                  if (newHp <= 0) {
-                    const defeatMsg = h.isBoss ? '🏆 Human Champion defeated!' : 'Human warrior defeated!';
-                    next.battleLog = [...next.battleLog.slice(-20), defeatMsg];
-                    next.humansDefeated++;
-                    if (h.isBoss) next.bossDefeated = true;
-                    humansToRemove.push(h.id);
-                  }
-
-                  return { ...h, hp: newHp };
-                }
-                return h;
-              });
-            }
-          }
-        });
-
-        // Remove defeated humans
-        next.humans = next.humans.filter(h => !humansToRemove.includes(h.id));
-
-        // Check if all humans defeated
-        if (next.humans.length === 0) {
-          // Start next wave or victory
-          const nextWaveIdx = next.currentWave + 1;
-          if (nextWaveIdx < TD_WAVES.length) {
-            const wave = TD_WAVES[nextWaveIdx];
-            const scaling = next.scaling || { hpMultiplier: 1, countMultiplier: 1 };
-            const newHumans = [];
-            const humanCount = wave.humans + scaling.countMultiplier - 1;
-            for (let i = 0; i < humanCount; i++) {
-              const baseHp = HUMAN_TYPES.warrior.hp * wave.hpMultiplier * scaling.hpMultiplier;
-              newHumans.push({
-                id: genId(),
-                type: 'warrior',
-                hp: baseHp,
-                maxHp: baseHp,
-                position: -i * 8, // Stagger start positions so humans don't overlap
-                speed: HUMAN_TYPES.warrior.speed,
-              });
-            }
-            // Add boss on final wave (wave 3, index 2)
-            if (nextWaveIdx === 2) {
-              const bossHp = HUMAN_TYPES.boss.hp * wave.hpMultiplier * scaling.hpMultiplier;
-              newHumans.push({
-                id: genId(),
-                type: 'boss',
-                hp: bossHp,
-                maxHp: bossHp,
-                position: -humanCount * 8 - 15, // Boss starts further back
-                speed: HUMAN_TYPES.boss.speed,
-                isBoss: true,
-              });
-              next.battleLog = [...next.battleLog.slice(-20), `⚠️ Wave ${nextWaveIdx + 1} begins! A CHAMPION approaches!`];
-            } else {
-              next.battleLog = [...next.battleLog.slice(-20), `Wave ${nextWaveIdx + 1} begins!`];
-            }
-            next.humans = newHumans;
-            next.currentWave = nextWaveIdx;
-          } else {
-            // Victory!
-            next.phase = 'victory';
-            setTimeout(() => endTowerDefense(true, { totalDamage: next.totalDamage, humansDefeated: next.humansDefeated }), 100);
-          }
-        }
-
-        return next;
+        if (td.phase !== 'battle') setTimeout(() => finishTowerDefense(td), 0);
+        return { ...td };
       });
-    }, TD_TICK_SPEED);
+    }, ARENA_TICK_RATE);
 
     return () => clearInterval(iv);
-  }, [gameLoaded, towerDefense, speed, slimes, endTowerDefense, activeHiveAbilities]);
+  }, [gameLoaded, towerDefense, speed, combatContext, finishTowerDefense]);
 
-  const avail = slimes.filter(s => !Object.values(exps).some(e => (e.slimes || []).some(es => es.id === s.id)) && !party.includes(s.id) && !(towerDefense?.deployedSlimes || []).some(ds => ds.id === s.id));
+  const deployedToDefense = new Set(
+    LANE_ORDER.flatMap(laneId =>
+      POSITION_ORDER.map(posId => towerDefense?.lanes?.[laneId]?.slots?.[posId]?.id).filter(Boolean)),
+  );
+  const avail = slimes.filter(s =>
+    !Object.values(exps).some(e => (e.slimes || []).some(es => es.id === s.id)) &&
+    !party.includes(s.id) &&
+    !deployedToDefense.has(s.id));
   const selSl = slimes.find(s => s.id === selSlime);
   const selExp = selSlime ? Object.values(exps).find(e => (e.slimes || []).some(s => s.id === selSlime)) : null;
   const getResTime = () => { if (!activeRes) return ''; const r = RESEARCH[activeRes.id]; const tot = r.time / bon.res; const rem = Math.ceil(tot * (1 - activeRes.prog / 100)); return `${Math.floor(rem / 60)}:${(rem % 60).toString().padStart(2, '0')}`; };
@@ -2308,166 +2125,20 @@ export default function HiveQueenGame() {
 
         {tab === 4 && (
           <div>
-            {/* Tower Defense */}
-            {!towerDefense ? (
-              <div>
-                <div style={{ background: 'rgba(236,72,153,0.1)', padding: 15, borderRadius: 10, marginBottom: 15 }}>
-                  <div style={{ fontSize: 16, fontWeight: 'bold', marginBottom: 8 }}>🎯 Tower Defense Challenge</div>
-                  <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 8 }}>Defend against waves of human invaders!</div>
-                  {tdAvailable() ? (
-                    <div style={{ color: '#4ade80', fontSize: 12 }}>✅ Available Now!</div>
-                  ) : (
-                    <div style={{ color: '#f59e0b', fontSize: 12 }}>⏱️ Next attempt: {formatTime(Math.ceil((TOWER_DEFENSE_COOLDOWN - (Date.now() - lastTowerDefense)) / 1000))}</div>
-                  )}
-                </div>
-
-                <div style={{ background: 'rgba(0,0,0,0.3)', padding: 15, borderRadius: 10, marginBottom: 15 }}>
-                  <div style={{ fontSize: 14, fontWeight: 'bold', marginBottom: 8 }}>📋 Rules</div>
-                  <div style={{ fontSize: 12, opacity: 0.8 }}>
-                    <p>• Deploy slimes to defend against 3 waves</p>
-                    <p>• Slimes attack based on Firmness (damage) & Slipperiness (speed)</p>
-                    <p>• Victory: Unique materials & biomass</p>
-                    <p>• Defeat: Lose half your current biomass</p>
-                    <p>• Available slots: {tdSlots} (Build Defense Slots for more)</p>
-                  </div>
-                </div>
-
-                {tdAvailable() && (
-                  <div>
-                    <div style={{ fontSize: 12, marginBottom: 8, opacity: 0.7 }}>Deploy Slimes (max {tdSlots})</div>
-                    <div style={{ display: 'flex', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
-                      {Array.from({ length: tdSlots }).map((_, i) => {
-                        const sid = party[i];
-                        const sl = slimes.find(s => s.id === sid);
-                        return <div key={i} onClick={() => sid && setParty(p => p.filter(id => id !== sid))} style={{ width: 60, height: 70, background: 'rgba(0,0,0,0.3)', border: '2px dashed rgba(255,255,255,0.2)', borderRadius: 8, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', cursor: sl ? 'pointer' : 'default' }}>
-                          {sl ? <><SlimeSprite tier={sl.tier} size={30} mutations={sl.mutations} primaryElement={sl.primaryElement} /><div style={{ fontSize: 9, marginTop: 2 }}>🧬{Math.floor(sl.biomass || 0)}</div></> : <span style={{ fontSize: 24, opacity: 0.3 }}>+</span>}
-                        </div>;
-                      })}
-                    </div>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 15, maxHeight: 150, overflowY: 'auto' }}>
-                      {avail.map(s => <div key={s.id} onClick={() => party.length < tdSlots && setParty(p => [...p, s.id])} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: 6, background: 'rgba(0,0,0,0.3)', borderRadius: 6, cursor: 'pointer', fontSize: 9 }}><SlimeSprite tier={s.tier} size={24} mutations={s.mutations} primaryElement={s.primaryElement} /><span style={{ marginTop: 2 }}>{s.name.split(' ')[0]}</span></div>)}
-                      {!avail.length && slimes.length > 0 && <div style={{ opacity: 0.5, fontSize: 11 }}>All busy</div>}
-                    </div>
-                    <button onClick={() => { startTowerDefense(party); setParty([]); }} disabled={!party.length} style={{ width: '100%', padding: 12, background: party.length ? 'linear-gradient(135deg, #ec4899, #a855f7)' : 'rgba(100,100,100,0.5)', border: 'none', borderRadius: 8, color: '#fff', fontWeight: 'bold', cursor: party.length ? 'pointer' : 'not-allowed' }}>🎯 Start Defense</button>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div>
-                {/* Battle UI */}
-                <div style={{ background: 'rgba(0,0,0,0.3)', padding: 15, borderRadius: 10, marginBottom: 15 }}>
-                  <div style={{ fontSize: 14, fontWeight: 'bold', marginBottom: 8 }}>Wave {towerDefense.currentWave + 1} / 3</div>
-                  <div style={{ fontSize: 12, color: '#22d3ee' }}>Enemies: {towerDefense.humans.length}</div>
-                </div>
-
-                {/* Battle Lane */}
-                <div style={{ background: 'linear-gradient(90deg, #4ade80 0%, #1a1a2e 20%, #1a1a2e 100%)', height: 100, borderRadius: 10, position: 'relative', marginBottom: 15, overflow: 'hidden' }}>
-                  {/* Endzone indicator */}
-                  <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 10, background: 'rgba(74,222,128,0.3)' }} />
-
-                  {/* Humans - sorted by position so closest to end renders on top */}
-                  {[...towerDefense.humans].sort((a, b) => a.position - b.position).map((h, idx) => {
-                    const hpPercent = Math.max(0, Math.min(100, (h.hp / h.maxHp) * 100));
-                    const isBoss = h.isBoss;
-                    return (
-                      <div key={h.id} style={{ position: 'absolute', right: `${Math.max(0, h.position)}%`, top: '50%', transform: 'translateY(-50%)', display: 'flex', flexDirection: 'column', alignItems: 'center', transition: 'right 0.1s linear', zIndex: idx + 1 }}>
-                        <div style={{ fontSize: isBoss ? 36 : 28, filter: isBoss ? 'drop-shadow(0 0 8px #f59e0b)' : 'none' }}>{isBoss ? '🛡️' : '⚔️'}</div>
-                        {isBoss && <div style={{ fontSize: 8, color: '#f59e0b', fontWeight: 'bold', marginBottom: 2 }}>CHAMPION</div>}
-                        {/* Health bar */}
-                        <div style={{ width: isBoss ? 50 : 40, height: 6, background: 'rgba(0,0,0,0.7)', borderRadius: 3, overflow: 'hidden' }}>
-                          <div style={{ width: `${hpPercent}%`, height: '100%', background: isBoss ? 'linear-gradient(90deg, #f59e0b, #fbbf24)' : (hpPercent > 50 ? '#4ade80' : hpPercent > 25 ? '#f59e0b' : '#ef4444'), transition: 'width 0.15s ease' }} />
-                        </div>
-                        <div style={{ fontSize: 9, color: isBoss ? '#f59e0b' : '#fff', marginTop: 2 }}>{Math.ceil(h.hp)}/{Math.ceil(h.maxHp)}</div>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                {/* Deployed Slimes */}
-                <div style={{ background: 'rgba(0,0,0,0.3)', padding: 15, borderRadius: 10, marginBottom: 15 }}>
-                  <div style={{ fontSize: 12, fontWeight: 'bold', marginBottom: 8 }}>Defenders</div>
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                    {towerDefense.deployedSlimes.map(ds => {
-                      const sl = slimes.find(s => s.id === ds.id);
-                      if (!sl) return null;
-                      const stats = getSlimeStats(sl);
-                      const biomass = sl.biomass || 0;
-                      return <div key={ds.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: 6, background: 'rgba(74,222,128,0.1)', borderRadius: 6, fontSize: 9 }}>
-                        <SlimeSprite tier={sl.tier} size={32} mutations={sl.mutations} primaryElement={sl.primaryElement} />
-                        <span style={{ marginTop: 2 }}>{sl.name.split(' ')[0]}</span>
-                        <span style={{ fontSize: 8, opacity: 0.7 }}>DPS: {Math.floor((stats.firmness + biomass * 0.01) * (1 + stats.slipperiness * 0.1))}</span>
-                      </div>;
-                    })}
-                  </div>
-                </div>
-
-                {/* Battle Log */}
-                <div style={{ background: 'rgba(0,0,0,0.3)', padding: 15, borderRadius: 10, maxHeight: 150, overflowY: 'auto' }}>
-                  <div style={{ fontSize: 12, fontWeight: 'bold', marginBottom: 8 }}>📜 Battle Log</div>
-                  {towerDefense.battleLog.slice(-10).reverse().map((log, i) => (
-                    <div key={i} style={{ fontSize: 11, opacity: i === 0 ? 1 : 0.6, padding: '2px 0' }}>{log}</div>
-                  ))}
-                </div>
-
-                {(towerDefense.phase === 'victory' || towerDefense.phase === 'defeat') && towerDefense.summary && (
-                  <div style={{ marginTop: 15, padding: 20, background: towerDefense.phase === 'victory' ? 'rgba(74,222,128,0.2)' : 'rgba(239,68,68,0.2)', borderRadius: 10 }}>
-                    <div style={{ fontSize: 20, fontWeight: 'bold', marginBottom: 15, textAlign: 'center' }}>
-                      {towerDefense.phase === 'victory' ? '🎉 Victory!' : '💀 Defeat!'}
-                    </div>
-
-                    {/* Battle Statistics */}
-                    <div style={{ background: 'rgba(0,0,0,0.3)', padding: 15, borderRadius: 8, marginBottom: 15 }}>
-                      <div style={{ fontSize: 14, fontWeight: 'bold', marginBottom: 10 }}>📊 Battle Statistics</div>
-                      <div style={{ display: 'grid', gap: 8, fontSize: 12 }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                          <span>Total Damage Dealt:</span>
-                          <strong style={{ color: '#f59e0b' }}>{Math.floor(towerDefense.summary.totalDamage)}</strong>
-                        </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                          <span>Humans Defeated:</span>
-                          <strong style={{ color: '#ef4444' }}>{towerDefense.summary.humansDefeated}</strong>
-                        </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                          <span>Waves Completed:</span>
-                          <strong style={{ color: '#22d3ee' }}>{towerDefense.phase === 'victory' ? '3/3' : `${towerDefense.currentWave}/3`}</strong>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Rewards/Losses */}
-                    {towerDefense.summary.victory ? (
-                      <div style={{ background: 'rgba(74,222,128,0.2)', padding: 15, borderRadius: 8, marginBottom: 15 }}>
-                        <div style={{ fontSize: 14, fontWeight: 'bold', marginBottom: 10, color: '#4ade80' }}>🎁 Rewards Gained</div>
-                        <div style={{ display: 'grid', gap: 8, fontSize: 12 }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                            <span>Biomass:</span>
-                            <strong style={{ color: '#4ade80' }}>+{towerDefense.summary.rewards.biomass}</strong>
-                          </div>
-                          {Object.entries(towerDefense.summary.rewards.materials).map(([mat, count]) => (
-                            <div key={mat} style={{ display: 'flex', justifyContent: 'space-between' }}>
-                              <span>{mat}:</span>
-                              <strong style={{ color: '#4ade80' }}>+{count}</strong>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    ) : (
-                      <div style={{ background: 'rgba(239,68,68,0.2)', padding: 15, borderRadius: 8, marginBottom: 15 }}>
-                        <div style={{ fontSize: 14, fontWeight: 'bold', marginBottom: 10, color: '#ef4444' }}>💔 Resources Lost</div>
-                        <div style={{ display: 'grid', gap: 8, fontSize: 12 }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                            <span>Biomass Lost:</span>
-                            <strong style={{ color: '#ef4444' }}>-{towerDefense.summary.losses.biomass}</strong>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    <button onClick={closeTowerDefense} style={{ width: '100%', padding: 12, background: 'linear-gradient(135deg, #ec4899, #a855f7)', border: 'none', borderRadius: 8, color: '#fff', fontWeight: 'bold', cursor: 'pointer' }}>Continue</button>
-                  </div>
-                )}
-              </div>
-            )}
+            <p style={{ margin: '-8px 0 14px', fontSize: 11, opacity: 0.7 }}>
+              The humans come once a day. Where you put each slime is the whole fight.
+            </p>
+            <TowerDefense
+              towerDefense={towerDefense}
+              slimes={avail}
+              getSlimeStats={getSlimeStats}
+              queenLevel={queen.level}
+              cooldownLeft={tdCooldownLeft() > 0 ? formatTime(Math.ceil(tdCooldownLeft() / 1000)) : 0}
+              onStart={startTowerDefense}
+              onClose={closeTowerDefense}
+              verboseLogs={verboseLogs}
+              setVerboseLogs={setVerboseLogs}
+            />
           </div>
         )}
 
