@@ -269,8 +269,9 @@ FIRM 36  🔪 Sharp ✗ 41.1% vs 16.5%  dodges ✗ 28.2% vs 8.0%
 4. ~~`stun` applied but never checked.~~ Enforced by the resolver; `weakened`, `slowed` and
    `enraged` all have appliers, and monster `slow`/`buff` do their jobs.
 5. ~~`curious` and `ancient` unimplemented; `primordial` partial.~~ `curious` raises the
-   travel-event rate, `ancient` and `alloyPotential` grant real mutation slots, `primordial`
-   is +10% to all stats and max HP.
+   travel-event rate, `primordial` is +10% to all stats and max HP, and `ancient` /
+   `alloyPotential` grant mutation slots that **grafting** can actually fill: a slime with an
+   open slot can take another unlocked mutation for biomass, priced by tier.
 6. ~~Max HP frozen at spawn.~~ Derived from current firmness.
 7. ~~Exploration and intermission events never fired.~~ Both fire during travel.
 8. ~~Tower defense had no decisions in it.~~ Rebuilt as lanes and positions — see §7.3.
@@ -284,9 +285,8 @@ FIRM 36  🔪 Sharp ✗ 41.1% vs 16.5%  dodges ✗ 28.2% vs 8.0%
   intended order was always to fix the mechanics first and tune second.
 - **Ranch sprawl.** Four element ranches doing identical work is a lot of UI for one idea;
   one ranch with a selectable element would say the same thing.
-- **Grafting.** `ancient` grants a mutation slot to an already-spawned slime, but there is
-  no way to fill it after spawn. The slot is real and counted; the action to use it is not
-  built.
+- **Sprites.** Only the basic-tier idle sheet exists; every other tier and animation falls
+  back to CSS. Not a bug, just unfinished art.
 
 ## 11. Design Principles
 

@@ -15,7 +15,7 @@ import {
 } from './data/gameConstants.js';
 
 import { STAT_INFO, SLIME_TIERS } from './data/slimeData.js';
-import { MUTATION_LIBRARY, TRAIT_LIBRARY, STATUS_EFFECTS, SLIME_TRAITS } from './data/traitData.js';
+import { MUTATION_LIBRARY, TRAIT_LIBRARY, STATUS_EFFECTS, SLIME_TRAITS, getMutationDesc } from './data/traitData.js';
 import { MONSTER_TYPES, MONSTER_ABILITIES } from './data/monsterData.js';
 import { ZONES, EXPLORATION_EVENTS, INTERMISSION_EVENTS, INTERMISSION_DURATION } from './data/zoneData.js';
 import { BUILDINGS, RESEARCH } from './data/buildingData.js';
@@ -1121,6 +1121,47 @@ export default function HiveQueenGame() {
     setBLogs(p => { const n = { ...p }; delete n[zone]; return n; });
   };
 
+  /**
+   * Cost to graft one more mutation onto an existing slime. Scaled by tier, so
+   * adding to a mature Royal is a real investment rather than a formality.
+   */
+  const graftCost = (slime) => (SLIME_TIERS[slime?.tier]?.jellyCost || 5) * 10;
+
+  const graftMutation = (slimeId, mutationId) => {
+    const slime = slimes.find(s => s.id === slimeId);
+    const mut = MUTATION_LIBRARY[mutationId];
+    if (!slime || !mut || !unlockedMutations.includes(mutationId)) return;
+    if ((slime.mutations || []).includes(mutationId)) return;
+
+    // Slots come from tier + ancient + alloyPotential + skill tree.
+    const slots = mutationSlots(slime, combatBonuses.mutationSlots);
+    if ((slime.mutations || []).length >= slots) return;
+
+    const cost = graftCost(slime);
+    if (bio < cost) return;
+
+    setBio(b => b - cost);
+    setSlimes(list => list.map(sl => {
+      if (sl.id !== slimeId) return sl;
+      const next = {
+        ...sl,
+        mutations: [...(sl.mutations || []), mutationId],
+        baseStats: { ...sl.baseStats, [mut.stat]: sl.baseStats[mut.stat] + mut.bonus },
+      };
+      // Grafting can carry elemental affinity with it, same as at spawn.
+      if (mut.elementBonus && !next.primaryElement) {
+        const elements = { ...(next.elements || createDefaultElements()) };
+        Object.entries(mut.elementBonus).forEach(([el, bonus]) => {
+          elements[el] = Math.min(100, (elements[el] || 0) + bonus);
+        });
+        next.elements = elements;
+      }
+      next.maxHp = getMaxHp(next);
+      return next;
+    }));
+    log(`🧬 Grafted ${mut.icon} ${mut.name} onto ${slime.name} for ${cost}🧬.`);
+  };
+
   const startRes = (id) => {
     const r = RESEARCH[id];
     if (!r || bio < r.cost || activeRes) return;
@@ -1600,7 +1641,17 @@ export default function HiveQueenGame() {
                 )}
               </div>
 
-              <SlimeDetail slime={sl} expState={expS} />
+              <SlimeDetail
+                slime={sl}
+                expState={expS}
+                getSlimeStats={getSlimeStats}
+                getMaxHp={getMaxHp}
+                mutationSlots={(x) => mutationSlots(x, combatBonuses.mutationSlots)}
+                unlockedMutations={unlockedMutations}
+                biomass={bio}
+                graftCost={graftCost}
+                onGraft={graftMutation}
+              />
               {!onExp && (
                 <button
                   onClick={() => { reabsorb(sl.id); setQueenSlimeModal(null); }}
@@ -1921,7 +1972,17 @@ export default function HiveQueenGame() {
           selSl ? (
             <div>
               <button onClick={() => setSelSlime(null)} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 6, padding: '8px 16px', color: '#fff', cursor: 'pointer', marginBottom: 15 }}>← Back</button>
-              <SlimeDetail slime={selSl} expState={(selExp?.slimes || []).find(s => s.id === selSlime)} />
+              <SlimeDetail
+                slime={selSl}
+                expState={(selExp?.slimes || []).find(s => s.id === selSlime)}
+                getSlimeStats={getSlimeStats}
+                getMaxHp={getMaxHp}
+                mutationSlots={(x) => mutationSlots(x, combatBonuses.mutationSlots)}
+                unlockedMutations={unlockedMutations}
+                biomass={bio}
+                graftCost={graftCost}
+                onGraft={graftMutation}
+              />
               {!selExp && <button onClick={() => { reabsorb(selSl.id); setSelSlime(null); }} style={{ width: '100%', marginTop: 15, padding: 12, background: 'linear-gradient(135deg, #f59e0b, #ef4444)', border: 'none', borderRadius: 8, color: '#fff', fontWeight: 'bold', cursor: 'pointer' }}>🔄 Reabsorb</button>}
             </div>
           ) : (
@@ -2166,7 +2227,7 @@ export default function HiveQueenGame() {
                 return <div key={id} style={{ padding: 12, background: `${m.color}22`, borderRadius: 8, border: `1px solid ${m.color}44` }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}><span style={{ fontSize: 20 }}>{m.icon}</span><span style={{ fontSize: 14, fontWeight: 'bold' }}>{m.name}</span></div>
                   <div style={{ fontSize: 11, opacity: 0.7 }}>+{m.bonus} {STAT_INFO[m.stat]?.name}</div>
-                  <div style={{ fontSize: 11, color: m.color }}>{m.passiveDesc}</div>
+                  <div style={{ fontSize: 11, color: m.color }}>{getMutationDesc(id, 10)}</div>
                   {m.elementBonus && (
                     <div style={{ fontSize: 10, marginTop: 4 }}>
                       {Object.entries(m.elementBonus).map(([elem, bonus]) => (
