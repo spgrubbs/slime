@@ -97,7 +97,7 @@ export const MUTATION_LIBRARY = {
     stat: 'viscosity',
     bonus: 3,
     passive: 'whirlpool',
-    passiveDesc: (visc) => `+${(5 + 0.3 * visc).toFixed(1)}% damage to fleeing enemies`,
+    passiveDesc: (visc) => `+${(5 + 0.3 * visc).toFixed(1)}% damage to fleeing (<30% HP) enemies`,
     baseValue: 5,
     viscScale: 0.3,
     color: '#3b82f6',
@@ -227,7 +227,7 @@ export const MUTATION_LIBRARY = {
     stat: 'viscosity',
     bonus: 3,
     passive: 'regenerate',
-    passiveDesc: (visc) => `Heal ${(2 + 0.3 * visc).toFixed(1)} HP per turn`,
+    passiveDesc: (visc) => `Heal ${(2 + 0.3 * visc).toFixed(1)} HP per round`,
     baseValue: 2,
     viscScale: 0.3,
     color: '#22c55e',
@@ -269,7 +269,7 @@ export const MUTATION_LIBRARY = {
     stat: 'viscosity',
     bonus: 3,
     passive: 'ghastlyWail',
-    passiveDesc: (visc) => `${(15 + 0.3 * visc).toFixed(1)}% chance enemy skips turn`,
+    passiveDesc: (visc) => `${(15 + 0.3 * visc).toFixed(1)}% chance to stun (enemy skips round)`,
     baseChance: 15,
     viscScale: 0.3,
     color: '#6b7280',
@@ -313,7 +313,7 @@ export const MUTATION_LIBRARY = {
     stat: 'firmness',
     bonus: 4,
     passive: 'earthshaker',
-    passiveDesc: (visc) => `${(10 + 0.3 * visc).toFixed(1)}% chance to stun 1 turn`,
+    passiveDesc: (visc) => `${(10 + 0.3 * visc).toFixed(1)}% chance to stun 1 round`,
     baseChance: 10,
     viscScale: 0.3,
     color: '#a16207',
@@ -341,7 +341,7 @@ export const MUTATION_LIBRARY = {
     stat: 'viscosity',
     bonus: 3,
     passive: 'permafrost',
-    passiveDesc: (visc) => `${(12 + 0.3 * visc).toFixed(1)}% to reduce enemy dmg 25%`,
+    passiveDesc: (visc) => `${(12 + 0.3 * visc).toFixed(1)}% chance to Weaken (enemy -25% dmg)`,
     baseChance: 12,
     viscScale: 0.3,
     color: '#06b6d4',
@@ -441,12 +441,20 @@ export const MUTATION_LIBRARY = {
 export const TRAIT_LIBRARY = MUTATION_LIBRARY;
 
 // Status effects that can be applied in combat
+// dur is measured in ROUNDS.
+//   dmg        damage per round
+//   skipsTurn  the carrier loses their action
+//   dmgMult    multiplier on the carrier's OUTGOING damage
+//   speedMult  multiplier on the carrier's effective slipperiness
+//   harmful    eligible for cleansing (Slough Skin); false for buffs
 export const STATUS_EFFECTS = {
-  poison: { name: 'Poison', icon: '🧪', color: '#22c55e', dmg: 2, dur: 5 },
-  burn: { name: 'Burn', icon: '🔥', color: '#f97316', dmg: 3, dur: 4 },
-  bleed: { name: 'Bleed', icon: '🩸', color: '#ef4444', dmg: 4, dur: 3 },
-  stun: { name: 'Stun', icon: '💫', color: '#fbbf24', dmg: 0, dur: 1 },
-  weakened: { name: 'Weakened', icon: '⬇️', color: '#6b7280', dmg: 0, dur: 2 },
+  poison:   { name: 'Poison',   icon: '🧪', color: '#22c55e', dmg: 2, dur: 5, harmful: true },
+  burn:     { name: 'Burn',     icon: '🔥', color: '#f97316', dmg: 3, dur: 4, harmful: true },
+  bleed:    { name: 'Bleed',    icon: '🩸', color: '#ef4444', dmg: 4, dur: 3, harmful: true },
+  stun:     { name: 'Stun',     icon: '💫', color: '#fbbf24', dmg: 0, dur: 1, harmful: true, skipsTurn: true },
+  weakened: { name: 'Weakened', icon: '⬇️', color: '#6b7280', dmg: 0, dur: 2, harmful: true, dmgMult: 0.75 },
+  slowed:   { name: 'Slowed',   icon: '🕸️', color: '#94a3b8', dmg: 0, dur: 2, harmful: true, speedMult: 0.5 },
+  enraged:  { name: 'Enraged',  icon: '😤', color: '#f97316', dmg: 0, dur: 2, harmful: false, dmgMult: 1.5 },
 };
 
 // Personality traits - behavioral modifiers that slimes can acquire
