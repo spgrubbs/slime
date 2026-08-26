@@ -43,13 +43,22 @@ export const BUILDINGS = {
     max: 5,                             // Can build multiple
     category: 'capacity',
   },
-  defenseSlot: {
-    name: 'Defense Slot',
+  ambushSlot: {
+    name: 'Ambush Post',
     icon: '🎯',
-    desc: '+1 Tower Defense party slot',
+    desc: '+1 slime in the caravan ambush squad',
     cost: { biomass: 500, mats: { 'Ash Remnant': 5, 'Ancient Stone': 3 } },
-    max: 4,                             // Reduced from 6
+    max: 4,
     category: 'capacity',
+  },
+
+  scoutCamp: {
+    name: 'Scout Camp',
+    icon: '🔭',
+    desc: 'Scouts read the road: see tomorrow\'s caravan before you commit to it',
+    cost: { biomass: 900, mats: { 'Human Bone': 4, 'Spider Silk': 6 } },
+    max: 1,
+    category: 'utility',
   },
 
   // === UTILITY BUILDINGS ===

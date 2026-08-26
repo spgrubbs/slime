@@ -24,13 +24,13 @@ not continuous play.
 |---|---|---|---|
 | **Biomass** | 🧬 | Monster kills, ranches, reabsorbing slimes | Spawning, buildings, research |
 | **Royal Jelly** | 🍯 | Capacity stat (`BASE_JELLY` + `JELLY_PER_QUEEN_LEVEL` × level) | Held by living slimes — it's population cap, not a spendable |
-| **Materials** | 📦 | Monster drops, tower defense | Buildings |
+| **Materials** | 📦 | Monster drops, caravan ambushes | Buildings |
 | **Mana** | ✨ | 1/hour per living slime + Mana Well ranch | Hive Abilities (timed global buffs) |
-| **Prisms** | 💎 | 0.1% expedition drop, **guaranteed on tower-defense victory**, IAP | Prism Shop (trait grants, time skips, mutation resets) |
+| **Prisms** | 💎 | 0.1% expedition drop, **guaranteed on routing a caravan**, IAP | Prism Shop (trait grants, time skips, mutation resets) |
 | **Queen XP** | 👑 | Reabsorbing slimes, biomass conversion | Queen levels 1–50 → skill points, zone unlocks |
 
 Biomass is the throughput resource; **Prisms are the gate resource** and the reason
-tower defense exists at all.
+caravan ambushes exist at all.
 
 ---
 
@@ -131,46 +131,48 @@ This is where 90% of the game happens. It runs while you're away.
 ### 7.2 Ranches (idle side-channel)
 11 ranch types on real-time cycles (30 min – 6 hr). Assigned slimes are **out of the
 expedition pool** — a genuine opportunity cost. Ranches grant biomass, element affinity,
-raw stats, traits, mana, or global buffs (War Den → tower defense damage; Healing Spring →
+raw stats, traits, mana, or global buffs (War Den → ambush damage; Healing Spring →
 expedition buff). Accumulation caps at 24h so you can't neglect them forever without loss.
 
-### 7.3 Tower Defense (progression gate)
-24-hour cooldown. Three approach lanes converge on the hive; you garrison each with up to
-three slimes, one per position, then commit. Three waves, the last carrying a Champion.
+### 7.3 Caravan Ambush (progression gate)
+Once a real-world day, a human supply caravan passes near the hive. You may ambush it.
 
-**Lanes** differ in how long they buy you:
+**The only decision is who goes.** Deploy up to `squadSize` slimes (3, plus Ambush Posts and
+the Raiding Party skill). Everything after that is a damage race against a column that is
+trying to get clear.
 
-| Lane | Crossing | Character |
-|---|---|---|
-| The Ravine 🏔️ | 5 rounds | Single file — only the front invader engages |
-| The Causeway 🛣️ | 3 rounds | Wide and fast; everything that arrives fights at once |
-| The Marsh 🌫️ | 6 rounds | Invaders arrive Slowed and advance at half rate |
+- **Rewards bank per kill, immediately.** Every unit that falls pays its biomass and
+  materials on the spot. Nothing is contingent on finishing the job.
+- **You can break off at any time**, keeping the whole haul and bringing every surviving
+  slime home. Withdrawing is a real option, not a forfeit.
+- **The column escapes after `ESCAPE_ROUNDS`.** That, not a puzzle, is what makes squad
+  damage matter.
+- **Routing the entire column** pays a Prism and permanently raises the caravan tier: bigger
+  columns, tougher escorts, better cargo, forever. Difficulty is something you opt into by
+  succeeding.
 
-**Positions** each reward a different stat, which is what gives a slime the expedition meta
-has no use for a job here:
+**Composition is randomized per day** and stable until the next one, so it can be scouted
+rather than memorized. Without a **Scout Camp** you know only how many are in the column;
+with one you get the full manifest — types, HP, immunities, and the total haul — before
+committing.
 
-| Position | Wants | Effect |
-|---|---|---|
-| Choke 🛡️ | Firmness | +50% Firmness; sole legal target while it stands |
-| Flank 🗡️ | Slipperiness | Every hit crits; untargetable until the Choke falls |
-| Rear 🧪 | Viscosity | Procs roll twice; routs the moment invaders reach it |
+The units are mostly a spread of HP and damage, with two immunities that punish a squad
+built around a single trick:
 
-**Invaders** each invalidate one dominant strategy, so "stack Firmness" stops being a
-universal answer: the **Shieldbearer** cannot be crit (Flanks are wasted on it), the
-**Zealot** is immune to every status (Rear procs whiff), and the **Sapper** tunnels past
-the Choke to whatever is behind it. The **Champion** does both and hits hardest.
+| Unit | Character |
+|---|---|
+| Porter 🎒 | Weak, carries the goods. Kill first. |
+| Outrider 🐎 | Slippery — a slow squad flails at it |
+| Caravan Guard 🛡️ | A wall of HP that punishes a squad with no damage |
+| Zealot 🕯️ | Status-immune, so proc-heavy squads must hit it honestly |
+| Quartermaster 📜 | The good steel and the ledger |
+| Caravan Captain 👑 | Crit-immune boss from tier 3 up; drops the Champion Badge |
 
-The wave manifest is visible during setup — the decision is meant to be read and made in
-advance, which suits a once-a-day event far better than reacting in real time.
-
-**Stakes.** Losing a lane costs the slimes garrisoning it, permanently. It costs nothing
-else — your stores are never touched. Clearing wave 3 pays a **Prism** however ugly the
-run was; the **Champion Badge** is reserved for a defense with no lane lost.
-
-Its role in the economy is specific and important: it is the **only reliable Prism faucet**,
-and Prisms buy the things nothing else sells (legendary traits, mutation rerolls, time
-skips). It is the once-a-day "sit down and actually play" moment against an otherwise
-hands-off game.
+**Why this shape.** Human materials gate several buildings, so this is the progression
+faucet and the only reliable Prism source. But slimes are meant to be *moderately* precious —
+losing an entire garrison to one bad read taught avoidance rather than mastery. Here you
+risk a squad of three, you can pull them out, and the worst realistic outcome is a partial
+haul.
 
 ### 7.4 Hive Abilities & Prism Shop
 Mana buys timed global buffs (2–8 hours). Prisms buy permanent, targeted, high-impact
@@ -190,7 +192,7 @@ Monster kills ──── mutation unlocks (100 per type)
 Buildings ──────── tier unlocks, defense slots, biomass recovery
 Research ───────── multipliers on the above
 
-Tower defense ──── Prisms → legendary traits, resets, time skips
+Caravan tier ───── Prisms + human materials → buildings, legendary traits, resets
 ```
 
 Three parallel currencies of progress (queen level, mutation library, buildings) that gate
@@ -218,8 +220,8 @@ silently fell off during the port. Simulation and presentation are now separable
 it produces.
 
 Both activities run on the same resolver. An expedition is one party against one monster;
-tower defense is three lanes resolving in parallel with a targeting rule per lane. That
-reuse is the payoff of the split.
+a caravan ambush is that same squad working down a column one unit at a time. That reuse is
+the payoff of the split.
 
 ### 9.2 Resolution order (per round)
 1. Status ticks (damage over time, duration decrement)
@@ -247,13 +249,44 @@ ability, or status effect has no implementation. That check is what makes the wh
 ### 9.4 Verbose logging
 Every number combat produces carries a trace of how it got there — base stat, each named
 modifier that applied, every roll with its threshold and whether it landed. Verbose mode
-renders those traces under each log line, in both expeditions and tower defense. Rolls that
+renders those traces under each log line, in both expeditions and ambushes. Rolls that
 *failed* are shown too: a proc you cannot watch miss is a proc you cannot balance.
 
 ```
 FIRM 36  🔪 Sharp ✗ 41.1% vs 16.5%  dodges ✗ 28.2% vs 8.0%
          position: guaranteed crit  ×1.5 CRIT → 54  🔥 Pyrolyze ✓ 11.6% vs 22.8%
 ```
+
+---
+
+### 9.5 The arena
+Combat is resolved as rounds; the arena is one view of those rounds and owns every piece of
+geometry in the game.
+
+The field is a **2.5D ground plane** seen from a low angle. Every entity has a position
+`(x, depth)`; depth sets both where it sits vertically and how large it draws, and its
+shadow is pinned to its own ground point — which is what keeps a squad reading as standing
+on a field rather than floating in a column.
+
+Slimes steer rather than teleport. Each holds an arc of a ring around the current target and
+rotates through a handful of behaviors — **press** (in its face), **flank** (swing to a
+different side), **circle** (orbit at range), **dart** (lunge and back off) — plus **recoil**
+when something lands a hit on them. A separation force keeps them out of each other and out
+of the target's body, so four slimes converging read as a pack surrounding something instead
+of a single blob.
+
+**Stats are legible without opening a sheet:**
+
+| Stat | How you can see it |
+|---|---|
+| Firmness 💪 | Body size, and how far out the slime stands from its target |
+| Slipperiness 💨 | How fast it crosses the ground, and how quickly it bounces |
+| Viscosity 🌀 | Dripping particles trailing onto the ground |
+
+Slimes draw from the sprite sheet in `src/assets/sprites`, tinted per tier, with the element
+icons from `src/assets/sprites/elements` as an affinity badge. The same renderer draws
+expeditions and caravan ambushes; the only difference is that a caravan column marches in
+procession along a road rather than one monster holding ground.
 
 ---
 
@@ -296,6 +329,87 @@ FIRM 36  🔪 Sharp ✗ 41.1% vs 16.5%  dodges ✗ 28.2% vs 8.0%
   silhouettes make a specific slime's death land, even though slimes are fungible.
 - **Effects should be loud.** Prefer a 10% chance of something absurd over a permanent 3%.
 - **Idle by default, active when it pays.** Expeditions and ranches run away from the
-  keyboard; tower defense is the one place that rewards attention.
+  keyboard; the daily caravan is the one place that rewards attention.
 - **Simulation and presentation are separate.** Combat resolves as data; the arena is one
   possible view of that data.
+
+---
+
+## 12. Proposal — Expeditions as delves
+
+_Not built. This is the pitch for replacing the 10 / 100 / infinite kill-count picker._
+
+### The problem
+
+The current duration picker is a decision in shape only. "10 enemies" and "100 enemies" differ
+by how long you wait, not by anything you weigh, and once **infinite** unlocks the other two
+are dead options. Nothing in the system generates tension: a party either survives
+indefinitely or dies to a monster it was never equipped for, and the player has no way to
+express how much risk they are willing to take. Offline it is worse — you come back to an
+outcome you had no input into.
+
+### The reframe: the decision is *when to turn back*
+
+Depth replaces kill count. A party pushes into a zone stage by stage; every stage pays, and
+every stage is harder than the last. The interesting question is never "how many" — it is
+**how far do we push before we come home**, and that question can be answered *in advance*,
+which is exactly what makes it work while the player is asleep.
+
+### The four pieces
+
+**1. Depth.** An expedition runs in stages. Stage N is a handful of encounters against the
+zone's monsters at a depth multiplier. Clearing it banks its haul and advances to N+1.
+Rewards, material rarity and mutation kill-credit all scale with depth; so does monster
+power. Pushing deeper is strictly better *and* strictly more dangerous, with no dominant
+choice anywhere on the curve.
+
+**2. Reserves.** The party carries a finite supply — call it Reserves — that drains per stage
+and cannot be replenished in the field. As it runs low, healing effects weaken and incoming
+damage climbs. Reserves guarantee every run ends without an arbitrary cooldown saying so, and
+they give buildings, ranches and traits something meaningful to extend.
+
+**3. Standing orders.** Set before departure. The party obeys them without the player
+present:
+
+| Order | Reads as |
+|---|---|
+| Return at depth **N** | "Get me to my target and come home" |
+| Return if any slime drops below **X%** | Cautious — protects the investment |
+| Return when a slime goes **Down** | The default; loses nobody to a bad streak |
+| Return on empty Reserves | Squeeze the run for everything it has |
+| Press on regardless | Greedy. Records are set here, and parties are lost here |
+
+This is the actual decision, and it is a *risk posture* rather than a duration. It is also
+what makes offline progression honest: the party comes home on its own terms, so you return
+to a finished run report rather than an ongoing emergency you cannot influence.
+
+**4. Downed, not dead.** A slime reduced to 0 HP is **Downed** — out of the fight, alive, and
+carried. If the party gets home, it survives, hurt and having shed some biomass. If the party
+wipes, everyone including the Downed is lost. So each Downed slime is a live argument to turn
+back, and pushing on with two of them is a genuine gamble instead of a dice roll you never
+saw. Slimes stay moderately precious, which is the same principle the caravan rework is built
+on.
+
+### What this buys
+
+- **Continuous and productive.** One expedition runs until an order fires. Every stage pays,
+  so even a timid posture earns.
+- **Tension you chose.** Losing a slime is the consequence of an order you set, not of
+  variance you never had a say in.
+- **Honest offline.** The resolver is already headless; offline just runs stages until an
+  order triggers or the elapsed time runs out.
+- **A months-long axis.** Track **deepest cleared** per zone as a permanent record. It is a
+  better zone gate than queen level, and it only moves with real investment — matured slimes,
+  which cost biomass, which costs time.
+- **Real-time pacing without a cooldown.** A stage takes a few minutes, rising with depth. A
+  lunch-break check-in is a shallow run; an overnight is a deep one with a careful order. The
+  clock throttles progress instead of a timer gate.
+
+### Open questions
+
+- **Recovering the dead.** A wiped party's biomass could be reclaimable by a later expedition
+  that reaches the same depth — a revenge hook rather than a flat deletion. Good flavor,
+  more bookkeeping; worth deciding before building.
+- **How much Reserves upkeep is enough** that "press on regardless" is a gamble rather than a
+  strictly correct play at high power.
+- **Whether depth records should gate zones outright**, or just recommend them.

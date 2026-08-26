@@ -17,9 +17,8 @@ export const JELLY_PER_QUEEN_LEVEL = 5;  // Reduced from 10 - slower scaling
 export const AUTO_SAVE_INTERVAL = 30000; // 30 seconds
 export const SAVE_KEY = 'hive_queen_save_v4'; // v4: turn-based rounds, combatant-shaped expeditions
 
-// Tower Defense timing
-export const TOWER_DEFENSE_COOLDOWN = 24 * 60 * 60 * 1000; // 24 hours real-time
-export const TD_TICK_SPEED = 100;        // Fast for active gameplay
+// Caravan ambush — one opportunity per real-world day
+export const CARAVAN_COOLDOWN = 24 * 60 * 60 * 1000;
 
 // Research timing uses real seconds (not game ticks)
 // This ensures research takes actual real-world time

@@ -1,5 +1,6 @@
 import { SAVE_KEY, DEFAULT_ELEMENTS } from '../data/gameConstants.js';
 import { dehydrateExpedition } from '../combat/expedition.js';
+import { dehydrateAmbush } from '../combat/caravan.js';
 
 // The key the real-time arena wrote to. Its in-flight expeditions cannot be
 // converted to round-based combatants, but everything else still migrates.
@@ -15,7 +16,8 @@ export const getDefaultState = () => ({
   builds: {},
   research: [],
   activeRes: null,
-  lastTowerDefense: 0,
+  lastCaravan: 0,
+  caravanTier: 1,
   monsterKills: {},
   unlockedMutations: [],
   purchasedSkills: ['expeditionBasics', 'hiveFoundation', 'combatTraining'], // Root skills free
@@ -114,7 +116,7 @@ export const saveGame = (state) => {
     Object.entries(state.exps || {}).forEach(([zone, exp]) => {
       exps[zone] = dehydrateExpedition(exp);
     });
-    const saveData = { ...state, exps, lastSave: Date.now() };
+    const saveData = { ...state, exps, ambush: dehydrateAmbush(state.ambush), lastSave: Date.now() };
     localStorage.setItem(SAVE_KEY, JSON.stringify(saveData));
     return true;
   } catch (e) {

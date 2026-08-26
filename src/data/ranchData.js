@@ -100,10 +100,10 @@ export const RANCH_TYPES = {
     id: 'warDen',
     name: 'War Den',
     icon: '⚔️',
-    desc: 'A training barracks. Slimes here boost Tower Defense damage based on total Firmness.',
+    desc: 'A training barracks. Slimes here boost caravan ambush damage based on total Firmness.',
     effect: 'defenseBonus',
     buffType: 'damage',
-    effectValue: 0.02,                   // +2% tower defense damage per Firmness point per slime
+    effectValue: 0.02,                   // +2% ambush damage per Firmness point per slime
     cycleTime: 45 * 60,                 // 45 minutes
     capacity: 3,
     unlock: { type: 'materials' },

@@ -592,9 +592,9 @@ export const SKILL_TREES = {
       // Fifth tier
       towerDefenseSlots: {
         id: 'towerDefenseSlots',
-        name: 'Defensive Formation',
+        name: 'Raiding Party',
         icon: '🎯',
-        desc: '+2 Tower Defense party slots',
+        desc: '+2 slimes in the caravan ambush squad',
         cost: 4,
         requires: ['berserkMode', 'lastStand'],
         effect: { type: 'bonus', stat: 'defenseSlots', value: 2 },

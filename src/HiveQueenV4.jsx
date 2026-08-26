@@ -8,7 +8,7 @@ import {
   BASE_JELLY,
   JELLY_PER_QUEEN_LEVEL,
   AUTO_SAVE_INTERVAL,
-  TOWER_DEFENSE_COOLDOWN,
+  CARAVAN_COOLDOWN,
   ELEMENTS,
   ARENA_TICK_RATE,
   ROUND_MS,
@@ -19,7 +19,7 @@ import { MUTATION_LIBRARY, TRAIT_LIBRARY, STATUS_EFFECTS, SLIME_TRAITS, getMutat
 import { MONSTER_TYPES, MONSTER_ABILITIES } from './data/monsterData.js';
 import { ZONES, EXPLORATION_EVENTS, INTERMISSION_EVENTS, INTERMISSION_DURATION } from './data/zoneData.js';
 import { BUILDINGS, RESEARCH } from './data/buildingData.js';
-import { TD_LANES, LANE_ORDER, POSITION_ORDER } from './data/towerDefenseData.js';
+import { caravanDay, MAX_CARAVAN_TIER } from './data/caravanData.js';
 import { RANCH_TYPES, RANCH_EVENTS, RANCH_UPGRADE_BONUSES, MAX_RANCH_LEVEL, RANCH_MAX_ACCUMULATION_TIME } from './data/ranchData.js';
 import { HIVE_ABILITIES, PRISM_SHOP, MANA_UPDATE_INTERVAL, MANA_PER_SLIME_PER_HOUR } from './data/hiveData.js';
 import { SKILL_TREES, SKILL_POINTS_PER_LEVEL, getSkillEffects, isZoneUnlocked, isBuildingUnlocked, isPheromoneUnlocked, isFeatureUnlocked } from './data/skillTreeData.js';
@@ -31,9 +31,9 @@ import { saveGame, loadGame, deleteSave } from './utils/saveSystem.js';
 // Importing the combat module registers every mutation/trait effect and
 // validates the registry — a passive with no implementation fails here.
 import './combat/index.js';
-import { computeStats, computeMaxHp, mutationSlots, slotsFromSelection } from './combat/stats.js';
+import { computeStats, computeMaxHp, mutationSlots, slotsFromSelection, buildEffectList } from './combat/stats.js';
 import { makeExpedition, tickExpedition, hydrateExpedition } from './combat/expedition.js';
-import { makeTowerDefense, tickTowerDefense, towerDefenseRewards } from './combat/towerDefense.js';
+import { makeAmbush, tickAmbush, retreatAmbush, hydrateAmbush, dehydrateAmbush } from './combat/caravan.js';
 
 /**
  * Rebuild the live references a saved expedition dropped. Combatants are
@@ -52,8 +52,8 @@ const rehydrateExps = (exps, slimes = []) => {
 import {
   SlimeSprite,
   MonsterSprite,
-  ArenaCanvas,
-  TowerDefense,
+  CombatView,
+  Caravan,
   SlimeForge,
   SlimeDetail,
   Compendium,
@@ -213,8 +213,9 @@ export default function HiveQueenGame() {
   const [speed, setSpeed] = useState(1);
   const [lastTick, setLastTick] = useState(Date.now());
   const [lastSave, setLastSave] = useState(null);
-  const [lastTowerDefense, setLastTowerDefense] = useState(0);
-  const [towerDefense, setTowerDefense] = useState(null);
+  const [lastCaravan, setLastCaravan] = useState(0);
+  const [caravanTier, setCaravanTier] = useState(1);
+  const [ambush, setAmbush] = useState(null);
   const [monsterKills, setMonsterKills] = useState({});
   const [unlockedMutations, setUnlockedMutations] = useState([]);
   const [purchasedSkills, setPurchasedSkills] = useState(['expeditionBasics', 'hiveFoundation', 'combatTraining']);
@@ -240,7 +241,7 @@ export default function HiveQueenGame() {
   const [selSlime, setSelSlime] = useState(null);
   const touchX = useRef(null);
   const lastArenaTickRef = useRef(Date.now());
-  const lastTdTickRef = useRef(Date.now());
+  const lastAmbushTickRef = useRef(Date.now());
 
   // Calculate skill effects from purchased skills (must be first, before other calculations)
   const skillEffects = useMemo(() => getSkillEffects(purchasedSkills), [purchasedSkills]);
@@ -251,7 +252,7 @@ export default function HiveQueenGame() {
     { id: 1, icon: '🟢', label: 'Slimes', badge: slimes.length },
     { id: 2, icon: '🗺️', label: 'Explore' },
     { id: 3, icon: '🏠', label: 'Ranch', skillUnlock: 'ranch' },
-    { id: 4, icon: '🎯', label: 'Defense' },
+    { id: 4, icon: '🎯', label: 'Ambush' },
     { id: 5, icon: '🌳', label: 'Skills' },
     { id: 6, icon: '📦', label: 'Inventory' },
     { id: 7, icon: '📖', label: 'Compendium' },
@@ -298,7 +299,7 @@ export default function HiveQueenGame() {
     rareSpawn: 1 + (skillBonuses.rareSpawn || 0) / 100,
     expeditionRewards: 1 + (skillBonuses.expeditionRewards || 0) / 100,
     biomassGain: 1 + ((skillBonuses.biomassGain || 0) + (skillBonuses.allResources || 0)) / 100,
-    defenseSlots: skillBonuses.defenseSlots || 0, // Extra tower defense slots
+    squadSlots: skillBonuses.defenseSlots || 0, // Extra caravan ambush slots
     mutationSlots: skillBonuses.mutationSlots || 0, // Extra mutation slots for slimes
   };
 
@@ -308,7 +309,7 @@ export default function HiveQueenGame() {
   // Calculate ranch bonuses from active ranch buildings
   const getRanchBonuses = useCallback(() => {
     const bonuses = {
-      towerDefenseDamage: 0, // % bonus to TD damage from warDen
+      ambushDamage: 0,       // % bonus to caravan ambush damage from warDen
       bonusManaPerHour: 0,   // Extra mana per hour from manaWell
       expeditionRewards: 0,  // % bonus to expedition rewards from scoutPost
     };
@@ -329,7 +330,7 @@ export default function HiveQueenGame() {
 
         if (ranch.effect === 'defenseBonus' && ranch.buffType === 'damage') {
           // warDen: +damage% based on firmness
-          bonuses.towerDefenseDamage += stats.firmness * ranch.effectValue * effectMult;
+          bonuses.ambushDamage += stats.firmness * ranch.effectValue * effectMult;
         } else if (ranch.effect === 'manaBonus') {
           // manaWell: +mana/hour based on viscosity
           bonuses.bonusManaPerHour += stats.viscosity * ranch.effectValue * effectMult;
@@ -487,7 +488,9 @@ export default function HiveQueenGame() {
         setResearch(offline.newState.research);
         setQueen(saved.queen);
         setBuilds(saved.builds || {});
-        setLastTowerDefense(saved.lastTowerDefense || 0);
+        setLastCaravan(saved.lastCaravan || 0);
+        setCaravanTier(saved.caravanTier || 1);
+        setAmbush(saved.ambush ? hydrateAmbush(saved.ambush, saved.slimes || [], buildEffectList) : null);
 
         // Apply monster kills gained from offline progress
         const newMonsterKills = { ...(saved.monsterKills || {}) };
@@ -532,7 +535,9 @@ export default function HiveQueenGame() {
         setBuilds(saved.builds || {});
         setResearch(saved.research || []);
         setActiveRes(saved.activeRes);
-        setLastTowerDefense(saved.lastTowerDefense || 0);
+        setLastCaravan(saved.lastCaravan || 0);
+        setCaravanTier(saved.caravanTier || 1);
+        setAmbush(saved.ambush ? hydrateAmbush(saved.ambush, saved.slimes || [], buildEffectList) : null);
         setMonsterKills(saved.monsterKills || {});
         setUnlockedMutations(saved.unlockedMutations || []);
         setPurchasedSkills(saved.purchasedSkills || ['expeditionBasics', 'hiveFoundation', 'combatTraining']);
@@ -554,16 +559,16 @@ export default function HiveQueenGame() {
   useEffect(() => {
     if (!gameLoaded) return;
     const interval = setInterval(() => {
-      const state = { queen, bio, mats, slimes, exps, builds, research, activeRes, lastTowerDefense, monsterKills, unlockedMutations, purchasedSkills, prisms, ranchBuildings, ranchAssignments, ranchProgress, mana, lastManaUpdate, activeHiveAbilities, lastSave: Date.now() };
+      const state = { queen, bio, mats, slimes, exps, builds, research, activeRes, lastCaravan, caravanTier, ambush, monsterKills, unlockedMutations, purchasedSkills, prisms, ranchBuildings, ranchAssignments, ranchProgress, mana, lastManaUpdate, activeHiveAbilities, lastSave: Date.now() };
       if (saveGame(state)) {
         setLastSave(Date.now());
       }
     }, AUTO_SAVE_INTERVAL);
     return () => clearInterval(interval);
-  }, [gameLoaded, queen, bio, mats, slimes, exps, builds, research, activeRes, lastTowerDefense, monsterKills, unlockedMutations, purchasedSkills, prisms, ranchBuildings, ranchAssignments, ranchProgress, mana, lastManaUpdate, activeHiveAbilities]);
+  }, [gameLoaded, queen, bio, mats, slimes, exps, builds, research, activeRes, lastCaravan, caravanTier, ambush, monsterKills, unlockedMutations, purchasedSkills, prisms, ranchBuildings, ranchAssignments, ranchProgress, mana, lastManaUpdate, activeHiveAbilities]);
 
   const manualSave = () => {
-    const state = { queen, bio, mats, slimes, exps, builds, research, activeRes, lastTowerDefense, monsterKills, unlockedMutations, purchasedSkills, prisms, ranchBuildings, ranchAssignments, ranchProgress, mana, lastManaUpdate, activeHiveAbilities, lastSave: Date.now() };
+    const state = { queen, bio, mats, slimes, exps, builds, research, activeRes, lastCaravan, caravanTier, ambush, monsterKills, unlockedMutations, purchasedSkills, prisms, ranchBuildings, ranchAssignments, ranchProgress, mana, lastManaUpdate, activeHiveAbilities, lastSave: Date.now() };
     if (saveGame(state)) {
       setLastSave(Date.now());
       log('💾 Game saved!');
@@ -582,8 +587,9 @@ export default function HiveQueenGame() {
     setResearch([]);
     setActiveRes(null);
     setLastSave(null);
-    setLastTowerDefense(0);
-    setTowerDefense(null);
+    setLastCaravan(0);
+    setCaravanTier(1);
+    setAmbush(null);
     setMonsterKills({});
     setUnlockedMutations([]);
     setPurchasedSkills(['expeditionBasics', 'hiveFoundation', 'combatTraining']);
@@ -1199,53 +1205,70 @@ export default function HiveQueenGame() {
     log(`Built ${b.name}!`);
   };
 
-  // ── Tower Defense ─────────────────────────────────────────────────────────
-  // Runs on the same round resolver as expeditions, with lanes and positions
-  // instead of a single arena. See src/combat/towerDefense.js.
+  // ── Caravan ambush ────────────────────────────────────────────────────────
+  // A daily damage race on the same round resolver. The only decision is who
+  // goes; everything after that you can walk away from. See combat/caravan.js.
 
-  const tdCooldownLeft = () => {
-    const remaining = TOWER_DEFENSE_COOLDOWN - (Date.now() - lastTowerDefense);
-    return remaining > 0 ? remaining : 0;
+  const caravanCooldownLeft = () => Math.max(0, CARAVAN_COOLDOWN - (Date.now() - lastCaravan));
+  const squadSize = 3 + (builds.ambushSlot || 0) + (combatBonuses.squadSlots || 0);
+  const hasScouts = (builds.scoutCamp || 0) > 0;
+
+  const startAmbush = (squadIds) => {
+    if (!squadIds?.length || caravanCooldownLeft() > 0) return;
+    const roster = squadIds.map(id => slimes.find(s => s.id === id)).filter(Boolean);
+    if (!roster.length) return;
+
+    // The War Den ranch trains the raiding party specifically, so its bonus
+    // rides on the ambush context rather than the global one.
+    const base = combatContext();
+    const warDen = getRanchBonuses().ambushDamage || 0;
+    const ctx = warDen > 0
+      ? { ...base, combatBonuses: { ...base.combatBonuses, firmness: (base.combatBonuses.firmness || 1) * (1 + warDen) } }
+      : base;
+
+    setAmbush(makeAmbush(roster, caravanTier, ctx, caravanDay()));
+    lastAmbushTickRef.current = Date.now();
+    log(`🎯 Ambush sprung on a tier ${caravanTier} caravan!`);
   };
 
-  const startTowerDefense = (placements) => {
-    const anyPlaced = Object.values(placements || {})
-      .some(lane => Object.values(lane || {}).some(Boolean));
-    if (!anyPlaced || tdCooldownLeft() > 0) return;
+  const finishAmbush = useCallback((finished) => {
+    const { summary } = finished;
+    const { banked } = summary;
 
-    setTowerDefense(makeTowerDefense(placements, slimes, queen.level, combatContext()));
-    lastTdTickRef.current = Date.now();
-    log('🎯 The humans are coming. Hold the line!');
-  };
-
-  const finishTowerDefense = useCallback((td) => {
-    const summary = towerDefenseRewards(td);
-    const { rewards } = summary;
-
-    setBio(b => b + rewards.biomass);
-    if (rewards.prisms > 0) setPrisms(p => p + rewards.prisms);
-    if (Object.keys(rewards.materials).length) {
+    if (banked.biomass > 0) setBio(b => b + banked.biomass);
+    if (banked.prisms > 0)  setPrisms(p => p + banked.prisms);
+    if (Object.keys(banked.mats).length) {
       setMats(m => {
         const n = { ...m };
-        Object.entries(rewards.materials).forEach(([mat, c]) => { n[mat] = (n[mat] || 0) + c; });
+        Object.entries(banked.mats).forEach(([mat, c]) => { n[mat] = (n[mat] || 0) + c; });
         return n;
       });
     }
 
-    if (summary.flawless) {
-      log(`🏆 Flawless defense! +${rewards.biomass}🧬, +1💎 Prism, +1🏅 Champion Badge`);
-    } else if (summary.victory) {
-      log(`🎉 Line held (${summary.breaches.length} lane lost). +${rewards.biomass}🧬, +1💎 Prism`);
+    const matStr = Object.entries(banked.mats).map(([m, c]) => `${c}× ${m}`).join(', ');
+    if (summary.routed) {
+      setCaravanTier(t => Math.min(MAX_CARAVAN_TIER, t + 1));
+      log(`💎 Caravan routed! +${banked.biomass}🧬, +1💎${matStr ? `, ${matStr}` : ''}. Caravans rise to tier ${summary.nextTier}.`);
+    } else if (banked.biomass > 0) {
+      log(`🎯 Ambush over — ${summary.killed.length} killed. +${banked.biomass}🧬${matStr ? `, ${matStr}` : ''}`);
     } else {
-      log(`💀 The hive was overrun. Salvaged +${rewards.biomass}🧬 from the waves you cleared.`);
+      log('🌫️ The caravan got clear before anything fell.');
     }
-    summary.lost.forEach(s => log(`💔 ${s.name} fell defending the ${TD_LANES[s.lane].name}.`));
+    summary.lost.forEach(sl => log(`💔 ${sl.name} was lost in the ambush.`));
 
-    setTowerDefense(prev => (prev ? { ...prev, summary } : prev));
-    setLastTowerDefense(Date.now());
+    setLastCaravan(Date.now());
   }, [log]);
 
-  const closeTowerDefense = () => setTowerDefense(null);
+  const doRetreat = () => {
+    setAmbush(prev => {
+      if (!prev || prev.phase !== 'battle') return prev;
+      const next = retreatAmbush({ ...prev });
+      setTimeout(() => finishAmbush(next), 0);
+      return { ...next };
+    });
+  };
+
+  const closeAmbush = () => setAmbush(null);
 
   // Game Loop
   useEffect(() => {
@@ -1487,46 +1510,64 @@ export default function HiveQueenGame() {
     return () => clearInterval(iv);
   }, [gameLoaded, exps, speed, combatContext]);
 
-  // Tower Defense loop — same cadence as expeditions, one round at a time.
+  // Caravan loop — same cadence as expeditions, one round at a time.
   useEffect(() => {
-    if (!gameLoaded || !towerDefense || towerDefense.phase !== 'battle') return;
+    if (!gameLoaded || !ambush || ambush.phase !== 'battle') return;
 
     const iv = setInterval(() => {
       const now = Date.now();
-      const dt = (now - lastTdTickRef.current) * speed;
-      lastTdTickRef.current = now;
+      const dt = (now - lastAmbushTickRef.current) * speed;
+      lastAmbushTickRef.current = now;
 
       const ctx = combatContext();
 
-      setTowerDefense(prev => {
+      setAmbush(prev => {
         if (!prev || prev.phase !== 'battle') return prev;
 
-        const { td, sideEffects } = tickTowerDefense(prev, dt, ctx, ROUND_MS);
+        const { ambush: next, sideEffects } = tickAmbush(prev, dt, ctx, ROUND_MS);
 
         if (sideEffects.length) {
           setTimeout(() => {
             sideEffects.forEach(se => {
               if (se.type === 'slimeDeath') setSlimes(list => list.filter(sl => sl.id !== se.id));
+              if (se.type === 'bioReclaim') setBio(b => b + se.amount);
             });
           }, 0);
         }
 
-        if (td.phase !== 'battle') setTimeout(() => finishTowerDefense(td), 0);
-        return { ...td };
+        if (next.phase !== 'battle') setTimeout(() => finishAmbush(next), 0);
+        return { ...next };
       });
     }, ARENA_TICK_RATE);
 
     return () => clearInterval(iv);
-  }, [gameLoaded, towerDefense, speed, combatContext, finishTowerDefense]);
+  }, [gameLoaded, ambush, speed, combatContext, finishAmbush]);
 
-  const deployedToDefense = new Set(
-    LANE_ORDER.flatMap(laneId =>
-      POSITION_ORDER.map(posId => towerDefense?.lanes?.[laneId]?.slots?.[posId]?.id).filter(Boolean)),
-  );
+    // The combat view is a projection of the expedition, not part of it — the
+  // renderer invents all geometry from this.
+  const selExpedition = exps[selZone];
+  const expView = selExpedition ? {
+    zone: selZone,
+    slimes: selExpedition.slimes || [],
+    enemies: selExpedition.enemy ? [selExpedition.enemy] : [],
+    focusId: selExpedition.enemy?.id,
+    marching: false,
+  } : null;
+  const expHud = selExpedition ? [
+    { text: `💀 ${selExpedition.kills}${selExpedition.targetKills !== Infinity ? `/${selExpedition.targetKills}` : ''}`, color: '#f59e0b' },
+    { text: `Round ${selExpedition.round}`, color: '#94a3b8' },
+    selExpedition.phase === 'intermission'
+      ? { text: '🚶 Traveling', color: '#22d3ee' }
+      : selExpedition.enemy
+        ? { text: `${selExpedition.enemy.name} ${Math.ceil(selExpedition.enemy.hp)}/${selExpedition.enemy.maxHp}`, color: '#ef4444' }
+        : null,
+  ].filter(Boolean) : null;
+
+  const onAmbush = new Set((ambush?.slimes || []).map(c => c.id));
   const avail = slimes.filter(s =>
     !Object.values(exps).some(e => (e.slimes || []).some(es => es.id === s.id)) &&
     !party.includes(s.id) &&
-    !deployedToDefense.has(s.id));
+    !onAmbush.has(s.id));
   const selSl = slimes.find(s => s.id === selSlime);
   const selExp = selSlime ? Object.values(exps).find(e => (e.slimes || []).some(s => s.id === selSlime)) : null;
   const getResTime = () => { if (!activeRes) return ''; const r = RESEARCH[activeRes.id]; const tot = r.time / bon.res; const rem = Math.ceil(tot * (1 - activeRes.prog / 100)); return `${Math.floor(rem / 60)}:${(rem % 60).toString().padStart(2, '0')}`; };
@@ -2079,10 +2120,12 @@ export default function HiveQueenGame() {
                 </button>;
               })}
             </div>
-            <ArenaCanvas
-              exp={exps[selZone]}
-              zone={selZone}
+            <CombatView
+              view={expView}
+              anim={exps[selZone]?.anim}
               logs={exps[selZone]?.logs}
+              hud={expHud}
+              emptyLabel={`${ZONES[selZone].icon} ${ZONES[selZone].name}`}
               verboseLogs={verboseLogs}
               setVerboseLogs={setVerboseLogs}
             />
@@ -2187,16 +2230,20 @@ export default function HiveQueenGame() {
         {tab === 4 && (
           <div>
             <p style={{ margin: '-8px 0 14px', fontSize: 11, opacity: 0.7 }}>
-              The humans come once a day. Where you put each slime is the whole fight.
+              A supply caravan passes once a day. Take what you can and get out —
+              you keep everything you kill.
             </p>
-            <TowerDefense
-              towerDefense={towerDefense}
+            <Caravan
+              ambush={ambush}
               slimes={avail}
               getSlimeStats={getSlimeStats}
-              queenLevel={queen.level}
-              cooldownLeft={tdCooldownLeft() > 0 ? formatTime(Math.ceil(tdCooldownLeft() / 1000)) : 0}
-              onStart={startTowerDefense}
-              onClose={closeTowerDefense}
+              tier={caravanTier}
+              scouted={hasScouts}
+              squadSize={squadSize}
+              cooldownLeft={caravanCooldownLeft() > 0 ? formatTime(Math.ceil(caravanCooldownLeft() / 1000)) : 0}
+              onStart={startAmbush}
+              onRetreat={doRetreat}
+              onClose={closeAmbush}
               verboseLogs={verboseLogs}
               setVerboseLogs={setVerboseLogs}
             />
@@ -2264,7 +2311,7 @@ export default function HiveQueenGame() {
             <button onClick={() => setUnlockedMutations(['sharp', 'digest', 'stoneskin', 'vinewebs', 'resurrect', 'spiny', 'whirlpool', 'ethereal', 'lifesteal', 'pyrolyze', 'draconicPower', 'voidTouched'])} style={{ padding: 8, background: '#a855f7', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 12 }}>Unlock Mutations</button>
             <button onClick={() => setMonsterKills(k => ({ ...k, youngWolf: (k.youngWolf || 0) + 50, venusSlimetrap: (k.venusSlimetrap || 0) + 50, serratedCarp: (k.serratedCarp || 0) + 50, crystalBat: (k.crystalBat || 0) + 50, emberWyrm: (k.emberWyrm || 0) + 50, voidHollow: (k.voidHollow || 0) + 50 }))} style={{ padding: 8, background: '#22c55e', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 12 }}>+50 Kills</button>
             <button onClick={() => setQueen(q => ({ ...q, level: q.level + 5 }))} style={{ padding: 8, background: '#ec4899', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 12 }}>+5 Queen Lv</button>
-            <button onClick={() => { setLastTowerDefense(0); setTowerDefense(null); log('🎯 Tower Defense reset!'); }} style={{ padding: 8, background: '#22d3ee', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 12 }}>Reset TD Timer</button>
+            <button onClick={() => { setLastCaravan(0); setAmbush(null); log('🎯 Caravan timer reset!'); }} style={{ padding: 8, background: '#22d3ee', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 12 }}>Reset Caravan</button>
             <button onClick={() => setPrisms(p => p + 100)} style={{ padding: 8, background: '#8b5cf6', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 12 }}>+100 Prisms</button>
             <button onClick={() => setMana(p => p + 100)} style={{ padding: 8, background: '#10b981', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 12 }}>+100 Mana</button>
           </div>
