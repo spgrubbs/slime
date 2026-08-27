@@ -1226,7 +1226,7 @@ export default function HiveQueenGame() {
       ? { ...base, combatBonuses: { ...base.combatBonuses, firmness: (base.combatBonuses.firmness || 1) * (1 + warDen) } }
       : base;
 
-    setAmbush(makeAmbush(roster, caravanTier, ctx, caravanDay()));
+    setAmbush(makeAmbush(roster, caravanTier, { ...ctx, catapults: builds.slimeCatapult || 0 }, caravanDay()));
     lastAmbushTickRef.current = Date.now();
     log(`🎯 Ambush sprung on a tier ${caravanTier} caravan!`);
   };
@@ -2240,6 +2240,7 @@ export default function HiveQueenGame() {
               tier={caravanTier}
               scouted={hasScouts}
               squadSize={squadSize}
+              catapults={builds.slimeCatapult || 0}
               cooldownLeft={caravanCooldownLeft() > 0 ? formatTime(Math.ceil(caravanCooldownLeft() / 1000)) : 0}
               onStart={startAmbush}
               onRetreat={doRetreat}

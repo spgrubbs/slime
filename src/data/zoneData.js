@@ -1,4 +1,8 @@
 // Zone definitions - exploration areas
+//
+// recommendedStats is the stat level at which a party of four with no mutations
+// clears the zone's common monsters roughly three times in four. Calibrated by
+// simulation against the real resolver, not estimated — see docs/GAME_DESIGN.md §11.
 // BALANCE: Each zone has 5 monsters (including 1 rare)
 // Zones unlock progressively via queen level
 // element: The dominant element of the zone (affects slime element gain)
@@ -40,7 +44,7 @@ export const ZONES = {
     desc: 'Glittering caverns with crystalline foes. Earth magic runs strong.',
     element: 'earth',
     elementGainRate: 0.5,
-    recommendedStats: 8,
+    recommendedStats: 9,
   },
   ruins: {
     name: 'Cinderspire',
@@ -52,7 +56,7 @@ export const ZONES = {
     desc: 'Volcanic fortress of flame. Fire elementals rule these scorched halls.',
     element: 'fire',
     elementGainRate: 0.6,
-    recommendedStats: 10,
+    recommendedStats: 14,
   },
   peaks: {
     name: 'Stormspire Summit',
@@ -64,7 +68,7 @@ export const ZONES = {
     desc: 'Lightning-scarred peaks where storms never cease. Only the strongest survive.',
     element: 'water',
     elementGainRate: 0.7,
-    recommendedStats: 14,
+    recommendedStats: 28,
   },
   volcano: {
     name: 'Void Abyss',
@@ -76,7 +80,7 @@ export const ZONES = {
     desc: 'A tear in reality where ancient horrors lurk. Elements mean nothing here.',
     element: null,
     elementGainRate: 0,
-    recommendedStats: 18,
+    recommendedStats: 45,
   },
 };
 

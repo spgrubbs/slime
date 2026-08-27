@@ -5,6 +5,7 @@ import './index.js';
 import { makeAmbush, tickAmbush, retreatAmbush, makeCaravanUnit } from './caravan.js';
 import {
   rollCaravan, caravanValue, caravanManifest, getCaravanScaling, CARAVAN_UNITS,
+  ESCAPE_ROUNDS, catapultDamage,
 } from '../data/caravanData.js';
 
 const seeded = (seed) => () => {
@@ -187,4 +188,53 @@ test('every ambush log entry carries a verbose derivation', () => {
   const a = makeAmbush(squad(3), 2, { rng: seeded(9) }, DAY);
   run(a, { rng: seeded(9) });
   assert.deepEqual(a.logs.filter(l => !l.v).map(l => l.m), []);
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Catapults and the escape clock
+// ═════════════════════════════════════════════════════════════════════════════
+
+test('the column gets 30 rounds to break away', () => {
+  assert.equal(ESCAPE_ROUNDS, 30);
+  assert.equal(makeAmbush(squad(3), 1, { rng: seeded(20) }, DAY).escapeRounds, 30);
+});
+
+test('catapult damage scales with count and caravan tier', () => {
+  assert.equal(catapultDamage(0, 1), 0);
+  assert.ok(catapultDamage(2, 1) === catapultDamage(1, 1) * 2);
+  assert.ok(catapultDamage(1, 5) > catapultDamage(1, 1));
+});
+
+test('catapults fire every round without the squad', () => {
+  // One near-useless slime, so essentially all damage comes from emplacements.
+  const chip = squad(1, (id) => slime(id, {
+    tier: 'royal', biomass: 0, mutations: [], traits: [],
+    baseStats: { firmness: 1, slipperiness: 1, viscosity: 1 },
+  }));
+
+  const without = makeAmbush(chip, 1, { rng: seeded(21) }, DAY);
+  run(without, { rng: seeded(21) }, 40);
+
+  const withGuns = makeAmbush(chip, 1, { rng: seeded(21), catapults: 4 }, DAY);
+  run(withGuns, { rng: seeded(21) }, 40);
+
+  assert.ok(withGuns.killed.length > without.killed.length,
+    `${withGuns.killed.length} vs ${without.killed.length} killed`);
+  assert.ok(withGuns.logs.some(l => l.m.includes('Catapults pound')));
+});
+
+test('an ambush with no catapults never mentions them', () => {
+  const a = makeAmbush(squad(3), 1, { rng: seeded(22) }, DAY);
+  run(a, { rng: seeded(22) });
+  assert.equal(a.logs.some(l => l.m.includes('Catapult')), false);
+});
+
+test('catapults can finish a unit the squad did not, and it still banks', () => {
+  const chip = squad(1, (id) => slime(id, {
+    tier: 'royal', biomass: 0, mutations: [], traits: [],
+    baseStats: { firmness: 1, slipperiness: 1, viscosity: 1 },
+  }));
+  const a = makeAmbush(chip, 1, { rng: seeded(23), catapults: 4 }, DAY);
+  run(a, { rng: seeded(23) }, 40);
+  assert.ok(a.banked.biomass > 0, 'catapult kills should pay like any other');
 });

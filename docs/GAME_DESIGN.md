@@ -321,7 +321,81 @@ procession along a road rather than one monster holding ground.
 - **Sprites.** Only the basic-tier idle sheet exists; every other tier and animation falls
   back to CSS. Not a bug, just unfinished art.
 
-## 11. Design Principles
+## 11. Balance
+
+### The one rule that matters
+
+**Combat power is roughly `DPS × EHP`.** Both scale with stats, so power scales with the
+*square* of stats. Every balance intuition has to be translated through that:
+
+| If stats differ by | Power differs by |
+|---|---|
+| 3× | ~9× |
+| 10× | ~100× |
+| 100× | ~10,000× |
+
+So "two orders of magnitude between a tier 1 and a tier 4 slime" is the right *feel* and the
+wrong *number*: it should be 100× in **power**, which is about **10× in stats**. The current
+spread — 5 base at Basic to 62 fully-matured Royal, ~12× — is already correct. Raw stats were
+never the problem.
+
+### Action economy squares too
+
+Four slimes each acting once per round against one monster acting once is a 4:1 economy. It
+is also a squared term: the party has four attackers *and* the monster's damage is split four
+ways. That dwarfs everything else. Measured against the real resolver, at fixed stats:
+
+| Party size vs a Crystal Grotto monster | Win rate |
+|---|---|
+| 1 slime | 0% |
+| 2 slimes | 0% |
+| 3 slimes | 13% |
+| 4 slimes | **91%** |
+
+A cliff, not a curve — which is why four unmodified Basic slimes could clear a zone meant for
+Elites. **Monster actions per round is therefore the primary difficulty dial**, not HP and not
+damage: tier 1–2 monsters act once, 3–4 twice, 5–6 three times, and rares get an extra.
+
+### Percentage stats need diminishing returns
+
+Dodge and crit were flat multiples of slipperiness. At 62 slipperiness that is a **93% dodge**
+— a matured slime simply stopped being hittable, and the top two tiers cleared every zone
+without effort. Both now use `k · s / (s + c)` curves and all evasion is capped at 70%
+combined. Anything that converts a stat into a probability needs this treatment; anything
+that converts a stat into a magnitude does not.
+
+### The intended ladder
+
+Calibrated by simulation against the real resolver, party of four, no mutations:
+
+| Tier | Fresh clears | Fully matured clears |
+|---|---|---|
+| Basic | Forest, Swamp | + Crystal Grotto |
+| Enhanced | + Crystal Grotto | + Cinderspire |
+| Elite | + Cinderspire | + Stormspire, most of the Void |
+| Royal | + Stormspire | everything |
+
+Two rules fall out of it, and both are legible to a player without a spreadsheet:
+
+1. **A tier covers two zones.**
+2. **Maturing a slime to its biomass cap advances it one zone.**
+
+Mutations, elements and the skill tree are the *margin* on top — they should turn a coin-flip
+zone into a comfortable one, never skip a rung.
+
+`recommendedStats` on each zone is the stat level at which that party clears ~3 fights in 4.
+Those numbers are simulated, not estimated, and are re-derived whenever the curves move.
+
+### How to re-check after a change
+
+`node --input-type=module` against `src/combat/resolveRound.js` — build parties, run
+`resolveRound` to completion, count wins. The resolver is pure and headless, so the whole
+balance table is a script rather than an afternoon of playtesting. Verbose traces explain any
+single number the table disagrees with.
+
+---
+
+## 12. Design Principles
 
 - **The Queen never fights.** All player power is expressed through what she builds and
   who she sends.
@@ -335,7 +409,7 @@ procession along a road rather than one monster holding ground.
 
 ---
 
-## 12. Proposal — Expeditions as delves
+## 13. Proposal — Expeditions as delves
 
 _Not built. This is the pitch for replacing the 10 / 100 / infinite kill-count picker._
 
@@ -383,12 +457,10 @@ This is the actual decision, and it is a *risk posture* rather than a duration. 
 what makes offline progression honest: the party comes home on its own terms, so you return
 to a finished run report rather than an ongoing emergency you cannot influence.
 
-**4. Downed, not dead.** A slime reduced to 0 HP is **Downed** — out of the fight, alive, and
-carried. If the party gets home, it survives, hurt and having shed some biomass. If the party
-wipes, everyone including the Downed is lost. So each Downed slime is a live argument to turn
-back, and pushing on with two of them is a genuine gamble instead of a dice roll you never
-saw. Slimes stay moderately precious, which is the same principle the caravan rework is built
-on.
+**4. A loss mechanic — still open.** The first draft proposed *Downed, not dead*: a slime at
+0 HP is carried, and survives if the party gets home. That fails its own test. With three of
+four Downed there is no reason on earth to press on, so the "decision" resolves itself and the
+risk evaporates. Options are laid out in §14 instead; the delve works with any of them.
 
 ### What this buys
 
@@ -407,9 +479,91 @@ on.
 
 ### Open questions
 
-- **Recovering the dead.** A wiped party's biomass could be reclaimable by a later expedition
-  that reaches the same depth — a revenge hook rather than a flat deletion. Good flavor,
-  more bookkeeping; worth deciding before building.
+- **Which loss mechanic** (§14).
 - **How much Reserves upkeep is enough** that "press on regardless" is a gamble rather than a
   strictly correct play at high power.
 - **Whether depth records should gate zones outright**, or just recommend them.
+
+
+---
+
+## 14. Proposal — five ways to make loss hurt
+
+_Not built. Alternatives to permadeath-on-wipe, after the Downed idea was rejected for
+removing the decision it was supposed to create._
+
+The bar every option has to clear: **a player who is losing must face a real choice, and both
+answers must be defensible.** "Everyone is nearly dead, do I press on" is not a choice if the
+answer is always no.
+
+### A. Wounds — you lose time, not the slime
+
+Death stays death. But surviving a fight below some HP threshold leaves a **Wound**: a
+persistent stat penalty that only heals by resting the slime in a ranch for real hours.
+
+- **The choice it creates:** push on and come home with three wounded veterans who are out of
+  rotation for a day, or bank now and keep them working.
+- **Why it works:** cost is denominated in *time*, which is the resource an idle game is
+  actually made of, and it gives ranches a second job.
+- **Risk:** bookkeeping, and a wounded-slime backlog that feels like chores.
+
+### B. Nerve — the party decides for itself
+
+A shared party pool that drains on bad events (a death, a crit taken, a status landing). At
+zero the party **breaks and flees on its own**, losing unbanked progress but not slimes.
+
+- **The choice it creates:** none directly — and that is the point. It is a *floor*, so the
+  other mechanics can be sharper without the game feeling unfair.
+- **Why it works:** the catastrophic outcome is bounded, so pushing deep is exciting rather
+  than reckless.
+- **Risk:** if Nerve is generous it becomes invisible; if it is tight it overrides the player.
+
+### C. Extraction — the loot is not yours until it is home
+
+Everything a delve earns rides **unbanked** with the party. It is only secured on return.
+Death loses the slime *and* its carried share.
+
+- **The choice it creates:** the clean greed curve. Every stage asks "bank it or double it",
+  and both answers are right at different times.
+- **Why it works:** the tension is continuous rather than a single cliff at the end, and it
+  makes the caravan and the delve feel like opposite propositions — the caravan banks
+  instantly by design, the delve does not.
+- **Risk:** losing an hour of accumulated haul in one bad round is the harshest option here,
+  and needs pairing with something that caps the blast radius.
+
+### D. The one-death rule — losses are real but bounded
+
+The moment **any** slime dies, the expedition auto-recalls. You never lose more than one per
+run, and losing one ends the run.
+
+- **The choice it creates:** it moves the decision *earlier*, which is where it belongs — the
+  choice is "how deep do I set my order", made while you still have information, not "do I
+  keep going" while watching a disaster.
+- **Why it works:** permadeath keeps its sting, but one bad streak cannot delete a squad you
+  spent a week building. It is the most surgical answer to the objection that killed Downed.
+- **Risk:** at high power a death becomes a mild annoyance rather than a loss.
+
+### E. Personality decides — traits set the risk posture
+
+Drop the standing-order menu. The party's behavior comes from **who you sent**: a `reckless`
+or `brave` slime refuses to withdraw, a `timid` or `cautious` one pulls out early and drags
+the party with it. `lazy` slimes bank sooner; `greedy` ones push for one more stage.
+
+- **The choice it creates:** the decision moves entirely into squad composition, which is the
+  part of the game you already enjoy building.
+- **Why it works:** personality traits go from flavor text to the most consequential thing on
+  a slime's sheet, and every squad has a temperament you can feel.
+- **Risk:** less direct control, and it needs traits to be common enough to compose around.
+
+### Recommendation
+
+**D + C**, with A as flavor later.
+
+The one-death rule is the floor: you can never lose more than one slime to a run, so slimes
+stay precious without a bad night wiping the roster. Unbanked loot is the ceiling: every stage
+you push is a real bet on the haul you are already carrying. Together the question at each
+stage is *"is this haul worth risking one of them?"* — which has a genuinely different answer
+depending on whose share is in the bag and how replaceable they are.
+
+Standing orders still set the depth target, and Reserves still guarantee the run ends. Wounds
+can layer on afterwards if losses still feel too cheap once it is playable.

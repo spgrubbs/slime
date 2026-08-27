@@ -6,7 +6,9 @@
 // early is always a real option rather than a forfeit.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { CARAVAN_UNITS, rollCaravan, caravanDay, getCaravanScaling } from '../data/caravanData.js';
+import {
+  CARAVAN_UNITS, rollCaravan, caravanDay, getCaravanScaling, catapultDamage,
+} from '../data/caravanData.js';
 import { makeSlimeCombatant, resolveRound } from './resolveRound.js';
 
 const C = {
@@ -50,6 +52,7 @@ export function makeCaravanUnit(typeId, index, scaling) {
 export function makeAmbush(squadSlimes, tier, ctx = {}, day = caravanDay()) {
   const caravan = rollCaravan(tier, day);
   const scaling = getCaravanScaling(tier);
+  const catapults = ctx.catapults || 0;
 
   return {
     version: 1,
@@ -59,15 +62,23 @@ export function makeAmbush(squadSlimes, tier, ctx = {}, day = caravanDay()) {
     round: 0,
     roundTimer: 0,
     escapeRounds: caravan.escapeRounds,
+    catapults,
     units: caravan.units.map((t, i) => makeCaravanUnit(t, i, scaling)),
     slimes: squadSlimes.map(sl => makeSlimeCombatant(sl, ctx)),
     banked: { biomass: 0, mats: {} },
     killed: [],
-    logs: [{
-      m: `A tier ${tier} caravan is on the road — ${caravan.units.length} in the column.`,
-      c: C.road,
-      v: `unit HP ×${scaling.hpMultiplier.toFixed(2)}, damage ×${scaling.damageMultiplier.toFixed(2)}, loot ×${scaling.lootMultiplier.toFixed(2)} · ${caravan.escapeRounds} rounds before they are clear`,
-    }],
+    logs: [
+      {
+        m: `A tier ${tier} caravan is on the road — ${caravan.units.length} in the column.`,
+        c: C.road,
+        v: `unit HP ×${scaling.hpMultiplier.toFixed(2)}, damage ×${scaling.damageMultiplier.toFixed(2)}, loot ×${scaling.lootMultiplier.toFixed(2)} · ${caravan.escapeRounds} rounds before they are clear`,
+      },
+      ...(catapults > 0 ? [{
+        m: `🪃 ${catapults} catapult${catapults === 1 ? '' : 's'} ranged in on the road.`,
+        c: C.hit,
+        v: `${catapultDamage(catapults, tier)} damage per round to the lead unit, regardless of how the squad is doing`,
+      }] : []),
+    ],
     anim: null,
     summary: null,
   };
@@ -104,6 +115,9 @@ function buildAnim(records, roundMs) {
 // ── Rewards ──────────────────────────────────────────────────────────────────
 
 function bankUnit(ambush, unit) {
+  if (unit.banked) return;
+  unit.banked = true;
+  unit.dead = true;
   const def = CARAVAN_UNITS[unit.type];
   const mult = getCaravanScaling(ambush.tier).lootMultiplier;
   const biomass = Math.floor(def.biomass * mult);
@@ -144,7 +158,28 @@ export function tickAmbush(ambush, dt, ctx = {}, roundMs = 1600) {
     return { ambush, sideEffects };
   }
 
-  const world = { round: ambush.round, slimes: ambush.slimes, enemy: target, zone: 'road' };
+  // Emplacements open the round, before the squad swings. Firing afterwards
+  // meant a strong squad killed the target first and the volley was wasted —
+  // catapults are meant to be throughput you always get, not a mop-up.
+  const volley = catapultDamage(ambush.catapults || 0, ambush.tier);
+  if (volley > 0) {
+    target.hp -= volley;
+    ambush.logs.push({
+      m: `🪃 Catapults pound the ${target.name} for ${volley}!`,
+      c: C.hit,
+      v: `${ambush.catapults} emplacement(s), tier ${ambush.tier} scaling — fires every round`,
+    });
+    if (target.hp <= 0) bankUnit(ambush, target);
+  }
+
+  // The volley may have cleared the lane; pick up whoever is next.
+  const engaged = target.dead ? ambush.units.find(u => !u.dead) : target;
+  if (!engaged) {
+    finish(ambush, 'rout');
+    return { ambush, sideEffects };
+  }
+
+  const world = { round: ambush.round, slimes: ambush.slimes, enemy: engaged, zone: 'road' };
   const { records, sideEffects: roundEffects, wiped, enemyDead } = resolveRound(world, ctx);
 
   ambush.round = world.round;
@@ -153,10 +188,7 @@ export function tickAmbush(ambush, dt, ctx = {}, roundMs = 1600) {
   ambush.logs = ambush.logs.slice(-120);
   ambush.anim = buildAnim(records, roundMs);
 
-  if (enemyDead) {
-    target.dead = true;
-    bankUnit(ambush, target);
-  }
+  if (enemyDead || engaged.hp <= 0) bankUnit(ambush, engaged);
 
   if (wiped) {
     finish(ambush, 'wiped');

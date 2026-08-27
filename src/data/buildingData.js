@@ -52,6 +52,16 @@ export const BUILDINGS = {
     category: 'capacity',
   },
 
+  slimeCatapult: {
+    name: 'Slime Catapult',
+    icon: '🪃',
+    desc: 'A road emplacement that lobs slimes at passing caravans every round',
+    cost: { biomass: 1200, mats: { 'Ancient Stone': 6, 'Iron Ore': 4, 'Human Bone': 3 } },
+    max: 4,
+    category: 'utility',
+    skillUnlock: 'siegeEngineering',
+  },
+
   scoutCamp: {
     name: 'Scout Camp',
     icon: '🔭',

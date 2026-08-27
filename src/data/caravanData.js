@@ -82,7 +82,19 @@ export const getCaravanScaling = (tier = 1) => ({
 });
 
 /** Rounds before the survivors are clear of the ambush and gone. */
-export const ESCAPE_ROUNDS = 22;
+export const ESCAPE_ROUNDS = 30;
+
+// ── Slime catapults ──────────────────────────────────────────────────────────
+//
+// Emplacements built along the road. They fire on the column every round
+// whether or not the squad is winning, so they are the answer to "my slimes
+// are strong but the column is long" — throughput, not survivability.
+
+export const CATAPULT_DAMAGE = 8;       // per emplacement, per round
+export const CATAPULT_SCALING = 0.25;   // + this much per caravan tier
+
+export const catapultDamage = (count = 0, tier = 1) =>
+  Math.floor(count * CATAPULT_DAMAGE * (1 + (tier - 1) * CATAPULT_SCALING));
 
 // ── Rolling a caravan ────────────────────────────────────────────────────────
 

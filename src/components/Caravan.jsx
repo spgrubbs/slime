@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   CARAVAN_UNITS, rollCaravan, caravanManifest, caravanValue,
-  getCaravanScaling, caravanDay,
+  getCaravanScaling, caravanDay, ESCAPE_ROUNDS, catapultDamage,
 } from '../data/caravanData.js';
 import { STAT_INFO } from '../data/slimeData.js';
 import SlimeSprite from './SlimeSprite.jsx';
@@ -83,7 +83,7 @@ function ScoutReport({ tier, day, scouted }) {
   );
 }
 
-function Setup({ slimes, getSlimeStats, tier, scouted, squadSize, cooldownLeft, onStart }) {
+function Setup({ slimes, getSlimeStats, tier, scouted, squadSize, catapults, cooldownLeft, onStart }) {
   const [squad, setSquad] = useState([]);
   const toggle = (id) => setSquad(s =>
     s.includes(id) ? s.filter(x => x !== id) : s.length < squadSize ? [...s, id] : s);
@@ -99,7 +99,8 @@ function Setup({ slimes, getSlimeStats, tier, scouted, squadSize, cooldownLeft, 
         <div style={{ fontSize: 10, opacity: 0.7, marginBottom: 8 }}>
           You are paid for every unit you drop, banked the moment it falls. You can
           call the ambush off at any point and keep what you have — only slimes that
-          actually die are lost.
+          actually die are lost. You have <strong>{ESCAPE_ROUNDS} rounds</strong> before
+          the survivors are clear of the ambush.
         </div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, maxHeight: 210, overflowY: 'auto' }}>
           {slimes.map(s => {
@@ -130,6 +131,18 @@ function Setup({ slimes, getSlimeStats, tier, scouted, squadSize, cooldownLeft, 
         </div>
       </div>
 
+      {catapults > 0 && (
+        <div style={{ ...panel, marginBottom: 12, borderLeft: '3px solid #4ade80' }}>
+          <div style={{ fontSize: 11, color: '#4ade80' }}>
+            🪃 {catapults} Slime Catapult{catapults === 1 ? '' : 's'} on the road
+          </div>
+          <div style={{ fontSize: 10, opacity: 0.75, marginTop: 4 }}>
+            They lob {catapultDamage(catapults, tier)} damage into the lead unit every round,
+            whether or not the squad is winning. Throughput, not safety.
+          </div>
+        </div>
+      )}
+
       <button
         onClick={() => onStart(squad)}
         disabled={!ready}
@@ -151,6 +164,35 @@ function Setup({ slimes, getSlimeStats, tier, scouted, squadSize, cooldownLeft, 
 
 // ── Battle ───────────────────────────────────────────────────────────────────
 
+function EscapeClock({ round, escapeRounds }) {
+  const left = Math.max(0, escapeRounds - round);
+  const pct = Math.max(0, Math.min(1, left / escapeRounds));
+  const urgent = left <= 6;
+  const color = urgent ? '#ef4444' : left <= 12 ? '#f59e0b' : '#22d3ee';
+
+  return (
+    <div style={{ ...panel, marginBottom: 10, borderLeft: `3px solid ${color}` }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
+        <span style={{ fontSize: 12, fontWeight: 'bold' }}>
+          {urgent ? '⚠️ They are almost clear' : '⏳ Time to work'}
+        </span>
+        <span style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 15, fontWeight: 'bold', color }}>
+          {left} <span style={{ fontSize: 10, opacity: 0.7 }}>rounds left</span>
+        </span>
+      </div>
+      <div style={{ height: 8, background: 'rgba(0,0,0,0.55)', borderRadius: 4, overflow: 'hidden' }}>
+        <div style={{
+          width: `${pct * 100}%`, height: '100%', background: color,
+          transition: 'width 0.3s linear',
+        }} />
+      </div>
+      <div style={{ fontSize: 9, opacity: 0.6, marginTop: 4 }}>
+        Round {round} of {escapeRounds} — whatever is still standing when this runs out gets away.
+      </div>
+    </div>
+  );
+}
+
 function Battle({ ambush, verboseLogs, setVerboseLogs, onRetreat }) {
   const remaining = ambush.units.filter(u => !u.dead).length;
   const roundsLeft = Math.max(0, ambush.escapeRounds - ambush.round);
@@ -168,6 +210,7 @@ function Battle({ ambush, verboseLogs, setVerboseLogs, onRetreat }) {
 
   return (
     <div>
+      <EscapeClock round={ambush.round} escapeRounds={ambush.escapeRounds} />
       <CombatView
         view={view}
         anim={ambush.anim}
@@ -176,8 +219,8 @@ function Battle({ ambush, verboseLogs, setVerboseLogs, onRetreat }) {
         setVerboseLogs={setVerboseLogs}
         hud={[
           { text: `🎯 ${ambush.killed.length} down · ${remaining} left`, color: '#f59e0b' },
-          { text: `Round ${ambush.round}`, color: '#94a3b8' },
-          { text: roundsLeft <= 5 ? `⚠️ ${roundsLeft} rounds to escape` : `${roundsLeft} rounds`, color: roundsLeft <= 5 ? '#ef4444' : '#22d3ee' },
+          ...(ambush.catapults > 0 ? [{ text: `🪃 ×${ambush.catapults}`, color: '#4ade80' }] : []),
+          { text: `⏳ ${roundsLeft}`, color: roundsLeft <= 6 ? '#ef4444' : '#22d3ee' },
         ]}
       />
 
@@ -278,7 +321,7 @@ function Result({ summary, onClose }) {
 // ── Entry point ──────────────────────────────────────────────────────────────
 
 export default function Caravan({
-  ambush, slimes, getSlimeStats, tier, scouted, squadSize, cooldownLeft,
+  ambush, slimes, getSlimeStats, tier, scouted, squadSize, catapults = 0, cooldownLeft,
   onStart, onRetreat, onClose, verboseLogs, setVerboseLogs,
 }) {
   if (!ambush) {
@@ -289,6 +332,7 @@ export default function Caravan({
         tier={tier}
         scouted={scouted}
         squadSize={squadSize}
+        catapults={catapults}
         cooldownLeft={cooldownLeft}
         onStart={onStart}
       />

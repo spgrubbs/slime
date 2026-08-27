@@ -612,6 +612,17 @@ export const SKILL_TREES = {
         position: { x: 65, y: 70 },
       },
 
+      siegeEngineering: {
+        id: 'siegeEngineering',
+        name: 'Siege Engineering',
+        icon: '🪃',
+        desc: 'Unlocks the Slime Catapult — a road emplacement that fires on caravans every round',
+        cost: 4,
+        requires: ['towerDefenseSlots'],
+        effect: { type: 'unlock', building: 'slimeCatapult' },
+        position: { x: 20, y: 82 },
+      },
+
       // Capstone
       combatMastery: {
         id: 'combatMastery',
@@ -703,7 +714,7 @@ export const isZoneUnlocked = (zoneId, purchasedSkills) => {
 // Helper to check if a building is unlocked
 export const isBuildingUnlocked = (buildingId, purchasedSkills) => {
   // Some buildings don't need skill unlocks (research items)
-  const skillGatedBuildings = ['spawningVat', 'royalHatchery', 'primordialChamber', 'slimePit', 'researchLab'];
+  const skillGatedBuildings = ['spawningVat', 'royalHatchery', 'primordialChamber', 'slimePit', 'researchLab', 'slimeCatapult'];
   if (!skillGatedBuildings.includes(buildingId)) return true;
 
   const effects = getSkillEffects(purchasedSkills);
