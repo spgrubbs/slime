@@ -34,6 +34,7 @@ import './combat/index.js';
 import { computeStats, computeMaxHp, mutationSlots, slotsFromSelection, buildEffectList } from './combat/stats.js';
 import { makeExpedition, tickExpedition, hydrateExpedition } from './combat/expedition.js';
 import { makeAmbush, tickAmbush, retreatAmbush, hydrateAmbush, dehydrateAmbush } from './combat/caravan.js';
+import { nextTutorial, TUTORIALS, TUTORIAL_ORDER } from './data/tutorialData.js';
 
 /**
  * Rebuild the live references a saved expedition dropped. Combatants are
@@ -54,6 +55,7 @@ import {
   MonsterSprite,
   CombatView,
   Caravan,
+  TutorialModal,
   SlimeForge,
   SlimeDetail,
   Compendium,
@@ -238,6 +240,8 @@ export default function HiveQueenGame() {
   const [tab, setTab] = useState(0);
   const [menu, setMenu] = useState(false);
   const [dev, setDev] = useState(false);
+  const [seenTutorials, setSeenTutorials] = useState([]);
+  const [tutorialsOn, setTutorialsOn] = useState(true);
   const [selZone, setSelZone] = useState('forest');
   const [party, setParty] = useState([]);
   const [selSlime, setSelSlime] = useState(null);
@@ -265,6 +269,21 @@ export default function HiveQueenGame() {
   const visibleTabs = tabs.filter(t => !t.skillUnlock || isFeatureUnlocked(t.skillUnlock, purchasedSkills));
 
   const woundedCount = slimes.filter(s => s.wounded).length;
+
+  // Everything the tutorial triggers need, and nothing else.
+  const tutorialState = {
+    tab,
+    woundedCount,
+    unlockedMutations: unlockedMutations.length,
+    maxHeldBiomass: slimes.reduce((n, sl) => Math.max(n, sl.biomass || 0), 0),
+    maxElementAffinity: slimes.reduce(
+      (n, sl) => Math.max(n, ...Object.values(sl.elements || { a: 0 })), 0),
+    totalKills: Object.values(monsterKills).reduce((n, c) => n + c, 0),
+  };
+  const activeTutorial = tutorialsOn ? nextTutorial(tutorialState, seenTutorials) : null;
+  const dismissTutorial = () => {
+    if (activeTutorial) setSeenTutorials(prev => [...prev, activeTutorial.id]);
+  };
   const maxJelly = BASE_JELLY + (queen.level - 1) * JELLY_PER_QUEEN_LEVEL + (builds.slimePit || 0) * 10 + (skillBonuses.maxJelly || 0);
   const usedJelly = slimes.reduce((s, sl) => s + (sl.magCost || 0), 0);
   const freeJelly = maxJelly - usedJelly;
@@ -279,6 +298,8 @@ export default function HiveQueenGame() {
     bio: 1 + (research.includes('efficientDigestion') ? 0.2 : 0),
     xp: 1 + (research.includes('enhancedAbsorption') ? 0.25 : 0),
     spd: 1 + (research.includes('swiftSlimes') ? 0.2 : 0),
+    travel: research.includes('extendedExpedition') ? 0.6 : 1,   // Expedition Depot
+    mats: 1 + (research.includes('infiniteExpedition') ? 0.25 : 0), // Deep Exploration Hub
     hp: 1 + (research.includes('slimeVitality') ? 0.15 : 0),
     res: (1 + (builds.researchLab || 0) * 0.25) * (1 + (skillBonuses.researchSpeed || 0) / 100),
   };
@@ -494,6 +515,8 @@ export default function HiveQueenGame() {
         setLastCaravan(saved.lastCaravan || 0);
         setCaravanTier(saved.caravanTier || 1);
         setAmbush(saved.ambush ? hydrateAmbush(saved.ambush, saved.slimes || [], buildEffectList) : null);
+        setSeenTutorials(saved.seenTutorials || []);
+        setTutorialsOn(saved.tutorialsOn !== false);
 
         // Apply monster kills gained from offline progress
         const newMonsterKills = { ...(saved.monsterKills || {}) };
@@ -541,6 +564,8 @@ export default function HiveQueenGame() {
         setLastCaravan(saved.lastCaravan || 0);
         setCaravanTier(saved.caravanTier || 1);
         setAmbush(saved.ambush ? hydrateAmbush(saved.ambush, saved.slimes || [], buildEffectList) : null);
+        setSeenTutorials(saved.seenTutorials || []);
+        setTutorialsOn(saved.tutorialsOn !== false);
         setMonsterKills(saved.monsterKills || {});
         setUnlockedMutations(saved.unlockedMutations || []);
         setPurchasedSkills(saved.purchasedSkills || ['expeditionBasics', 'hiveFoundation', 'combatTraining']);
@@ -562,16 +587,16 @@ export default function HiveQueenGame() {
   useEffect(() => {
     if (!gameLoaded) return;
     const interval = setInterval(() => {
-      const state = { queen, bio, mats, slimes, exps, builds, research, activeRes, lastCaravan, caravanTier, ambush, monsterKills, unlockedMutations, purchasedSkills, prisms, ranchBuildings, ranchAssignments, ranchProgress, mana, lastManaUpdate, activeHiveAbilities, lastSave: Date.now() };
+      const state = { queen, bio, mats, slimes, exps, builds, research, activeRes, lastCaravan, caravanTier, ambush, seenTutorials, tutorialsOn, monsterKills, unlockedMutations, purchasedSkills, prisms, ranchBuildings, ranchAssignments, ranchProgress, mana, lastManaUpdate, activeHiveAbilities, lastSave: Date.now() };
       if (saveGame(state)) {
         setLastSave(Date.now());
       }
     }, AUTO_SAVE_INTERVAL);
     return () => clearInterval(interval);
-  }, [gameLoaded, queen, bio, mats, slimes, exps, builds, research, activeRes, lastCaravan, caravanTier, ambush, monsterKills, unlockedMutations, purchasedSkills, prisms, ranchBuildings, ranchAssignments, ranchProgress, mana, lastManaUpdate, activeHiveAbilities]);
+  }, [gameLoaded, queen, bio, mats, slimes, exps, builds, research, activeRes, lastCaravan, caravanTier, ambush, seenTutorials, tutorialsOn, monsterKills, unlockedMutations, purchasedSkills, prisms, ranchBuildings, ranchAssignments, ranchProgress, mana, lastManaUpdate, activeHiveAbilities]);
 
   const manualSave = () => {
-    const state = { queen, bio, mats, slimes, exps, builds, research, activeRes, lastCaravan, caravanTier, ambush, monsterKills, unlockedMutations, purchasedSkills, prisms, ranchBuildings, ranchAssignments, ranchProgress, mana, lastManaUpdate, activeHiveAbilities, lastSave: Date.now() };
+    const state = { queen, bio, mats, slimes, exps, builds, research, activeRes, lastCaravan, caravanTier, ambush, seenTutorials, tutorialsOn, monsterKills, unlockedMutations, purchasedSkills, prisms, ranchBuildings, ranchAssignments, ranchProgress, mana, lastManaUpdate, activeHiveAbilities, lastSave: Date.now() };
     if (saveGame(state)) {
       setLastSave(Date.now());
       log('💾 Game saved!');
@@ -593,6 +618,8 @@ export default function HiveQueenGame() {
     setLastCaravan(0);
     setCaravanTier(1);
     setAmbush(null);
+    setSeenTutorials([]);
+    setTutorialsOn(true);
     setMonsterKills({});
     setUnlockedMutations([]);
     setPurchasedSkills(['expeditionBasics', 'hiveFoundation', 'combatTraining']);
@@ -1007,7 +1034,6 @@ export default function HiveQueenGame() {
     return Date.now();
   };
 
-  const [expDuration, setExpDuration] = useState('10'); // '10', '100', 'infinite'
   const [expSummaries, setExpSummaries] = useState([]); // Array of expedition summaries
   const [expandedSections, setExpandedSections] = useState({ research: false, buildings: false, queenUnlocks: false, mana: false }); // Collapsible sections
   const [verboseLogs, setVerboseLogs] = useState(false); // Toggle for detailed combat calculations in logs
@@ -1052,12 +1078,13 @@ export default function HiveQueenGame() {
 
   /** Everything the resolver needs to know about global game state. */
   const combatContext = useCallback(() => ({
-    combatBonuses,
+    combatBonuses: { ...combatBonuses, materialDrop: combatBonuses.materialDrop * bon.mats },
     bon,
     builds,
     passives: skillEffects.passives,
     mutationPower: combatBonuses.mutationPower || 1,
     ranchBonus: getRanchBonuses().expeditionRewards,
+    travelMult: bon.travel,
     roundMs: ROUND_MS,
     hiveAbilities: {
       sharedVigor:      isHiveAbilityActive('sharedVigor'),
@@ -1066,9 +1093,10 @@ export default function HiveQueenGame() {
     },
   }), [combatBonuses, bon, builds, skillEffects, getRanchBonuses, activeHiveAbilities]);
 
-  const startExp = (zone, duration = expDuration) => {
+  const startExp = (zone) => {
     if (exps[zone] || !party.length) return;
-    const targetKills = duration === '10' ? 10 : duration === '100' ? 100 : Infinity;
+    // Expeditions run until you recall them or the party goes down.
+    const targetKills = Infinity;
 
     const roster = party.map(id => slimes.find(s => s.id === id)).filter(Boolean);
     const exp = makeExpedition(zone, roster, targetKills, combatContext());
@@ -2235,39 +2263,7 @@ export default function HiveQueenGame() {
               <button onClick={() => stopExp(selZone)} style={{ width: '100%', marginTop: 15, padding: 12, background: 'linear-gradient(135deg, #ef4444, #f59e0b)', border: 'none', borderRadius: 8, color: '#fff', fontWeight: 'bold', cursor: 'pointer' }}>🛑 Recall</button>
             ) : (
               <div style={{ marginTop: 15 }}>
-                <div style={{ fontSize: 12, marginBottom: 8, opacity: 0.7 }}>Expedition Duration</div>
-                <div style={{ display: 'flex', gap: 8, marginBottom: 15 }}>
-                  {[
-                    { value: '10', label: '10 Enemies', icon: '⚡', unlock: null, skillUnlock: null },
-                    { value: '100', label: '100 Enemies', icon: '⚔️', unlock: 'extendedExpedition', skillUnlock: null },
-                    { value: 'infinite', label: 'Infinite', icon: '♾️', unlock: null, skillUnlock: 'infiniteExpedition' }
-                  ].map(opt => {
-                    const unlocked = (!opt.unlock || research.includes(opt.unlock)) && (!opt.skillUnlock || isFeatureUnlocked(opt.skillUnlock, purchasedSkills));
-                    return (
-                      <button
-                        key={opt.value}
-                        onClick={() => unlocked && setExpDuration(opt.value)}
-                        disabled={!unlocked}
-                        style={{
-                          flex: 1,
-                          padding: 10,
-                          background: !unlocked ? 'rgba(100,100,100,0.3)' : expDuration === opt.value ? 'rgba(34,211,238,0.3)' : 'rgba(0,0,0,0.3)',
-                          border: `2px solid ${expDuration === opt.value ? '#22d3ee' : 'transparent'}`,
-                          borderRadius: 8,
-                          color: '#fff',
-                          cursor: unlocked ? 'pointer' : 'not-allowed',
-                          fontSize: 10,
-                          fontWeight: expDuration === opt.value ? 'bold' : 'normal',
-                          opacity: unlocked ? 1 : 0.5
-                        }}
-                      >
-                        <div style={{ fontSize: 16 }}>{unlocked ? opt.icon : '🔒'}</div>
-                        <div>{opt.label}</div>
-                      </button>
-                    );
-                  })}
-                </div>
-                <div style={{ fontSize: 12, marginBottom: 8, opacity: 0.7 }}>Party (max 4)</div>
+                <div style={{ fontSize: 12, marginBottom: 8, opacity: 0.7 }}>Party</div>
                 <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
                   {[0, 1, 2, 3].map(i => {
                     const sid = party[i];
@@ -2331,10 +2327,6 @@ export default function HiveQueenGame() {
 
         {tab === 4 && (
           <div>
-            <p style={{ margin: '-8px 0 14px', fontSize: 11, opacity: 0.7 }}>
-              A supply caravan passes once a day. Take what you can and get out —
-              you keep everything you kill.
-            </p>
             <Caravan
               ambush={ambush}
               slimes={avail}
@@ -2394,15 +2386,35 @@ export default function HiveQueenGame() {
           </div>
         )}
 
-        {tab === 7 && <Compendium queen={queen} monsterKills={monsterKills} unlockedMutations={unlockedMutations} />}
+        {tab === 7 && <Compendium queen={queen} monsterKills={monsterKills} unlockedMutations={unlockedMutations} seenTutorials={seenTutorials} />}
 
-        {tab === 8 && <SettingsTab onSave={manualSave} onDelete={handleDelete} lastSave={lastSave} prisms={prisms} slimes={slimes} purchasePrismItem={purchasePrismItem} />}
+        {tab === 8 && (
+          <SettingsTab
+            onSave={manualSave}
+            onDelete={handleDelete}
+            lastSave={lastSave}
+            prisms={prisms}
+            slimes={slimes}
+            purchasePrismItem={purchasePrismItem}
+            tutorialsOn={tutorialsOn}
+            setTutorialsOn={setTutorialsOn}
+            seenTutorials={seenTutorials}
+            resetTutorials={() => { setSeenTutorials([]); setTutorialsOn(true); }}
+            totalTutorials={TUTORIAL_ORDER.length}
+          />
+        )}
       </main>
 
       <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: 'rgba(0,0,0,0.95)', borderTop: '1px solid rgba(255,255,255,0.1)', maxHeight: 70, overflowY: 'auto', padding: 8 }}>
         <div style={{ fontSize: 10, opacity: 0.5, marginBottom: 4 }}>📜 Log</div>
         {logs.slice(-4).reverse().map((l, i) => <div key={i} style={{ fontSize: 10, padding: '2px 0', opacity: i === 0 ? 1 : 0.6 }}><span style={{ opacity: 0.4, marginRight: 6 }}>{l.t}</span>{l.m}</div>)}
       </div>
+
+      <TutorialModal
+        tutorial={activeTutorial}
+        onDismiss={dismissTutorial}
+        onDisableAll={() => { dismissTutorial(); setTutorialsOn(false); }}
+      />
 
       {dev && (
         <div style={{ position: 'fixed', top: 60, right: 10, width: 220, background: 'rgba(0,0,0,0.95)', borderRadius: 10, padding: 15, zIndex: 200, border: '1px solid rgba(255,255,255,0.2)' }}>
@@ -2417,6 +2429,9 @@ export default function HiveQueenGame() {
             <button onClick={() => { setLastCaravan(0); setAmbush(null); log('🎯 Caravan timer reset!'); }} style={{ padding: 8, background: '#22d3ee', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 12 }}>Reset Caravan</button>
             <button onClick={() => setPrisms(p => p + 100)} style={{ padding: 8, background: '#8b5cf6', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 12 }}>+100 Prisms</button>
             <button onClick={() => setMana(p => p + 100)} style={{ padding: 8, background: '#10b981', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 12 }}>+100 Mana</button>
+            <button onClick={() => { setSeenTutorials([]); setTutorialsOn(true); }} style={{ padding: 8, background: '#a855f7', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 12 }}>Replay Tutorials</button>
+            <button onClick={() => { setSeenTutorials(TUTORIAL_ORDER); }} style={{ padding: 8, background: 'rgba(255,255,255,0.15)', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 12, color: '#fff' }}>Skip Tutorials</button>
+            <button onClick={() => setSlimes(list => list.map((sl, i) => (i === 0 ? { ...sl, wounded: true, woundedAt: Date.now(), biomass: 0 } : sl)))} style={{ padding: 8, background: '#ef4444', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 12 }}>Wound First Slime</button>
           </div>
         </div>
       )}

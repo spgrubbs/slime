@@ -180,9 +180,10 @@ layer switches off.
 ## 7. Activities
 
 ### 7.1 Expeditions (primary)
-Send up to 4 slimes to a zone for 10 kills / 100 kills / infinite. Slimes fight
-automatically, gain biomass and element affinity, and drop materials. A slime that goes down
-is **wounded**, not killed (§3) — the loss is its held biomass and a day in the pool.
+Send up to 4 slimes to a zone. They fight **until you recall them** — there is no duration to
+pick, because picking one was never a decision. Slimes gain biomass and element affinity and
+drop materials the whole time, including while the game is closed. A slime that goes down is
+**wounded**, not killed (§3) — the loss is its held biomass and a day in the pool.
 Zones unlock at Queen level 1 / 5 / 10 / 18 / 28 / 40.
 
 This is where 90% of the game happens. It runs while you're away.
@@ -480,6 +481,33 @@ single number the table disagrees with.
 
 ---
 
+## 11b. Teaching the game
+
+The UI does not explain itself in place. Panels state **terms**, not tutorials — "⏳ 30 rounds ·
+💰 paid per kill · 🏃 leave any time" rather than a paragraph saying the same thing to someone
+who has read it forty times.
+
+Explanation happens once, as a **popup the first time a system is met**, and then retires to
+the Compendium's Guide. Triggers are declarative: each entry in `tutorialData.js` carries a
+`when(state)` predicate checked against a small snapshot (current tab, wounded count, biggest
+held biomass, kills so far), and the first due, unseen entry fires. Adding a tutorial is
+adding a data entry.
+
+The Compendium has three faces:
+
+- **Zones & Monsters** — what lives where, and mutation unlock progress.
+- **Guide** — every tutorial you have seen, kept verbatim. Unseen ones show as locked, so it
+  doubles as a map of what you have not met yet.
+- **Reference** — tier tables, stat curves, status effects, elements, traits and drop rates,
+  **derived from the data files** rather than written out. The old hand-written version had
+  drifted badly enough to be actively misleading (it still advertised the pre-rework biomass
+  caps), which is the argument for deriving it.
+
+Tutorials can be turned off in Settings or from the popup itself ("Skip all"), and reset from
+either Settings or dev mode.
+
+---
+
 ## 12. Design Principles
 
 - **The Queen never fights.** All player power is expressed through what she builds and
@@ -489,6 +517,8 @@ single number the table disagrees with.
 - **Effects should be loud.** Prefer a 10% chance of something absurd over a permanent 3%.
 - **Idle by default, active when it pays.** Expeditions and ranches run away from the
   keyboard; the daily caravan is the one place that rewards attention.
+- **The interface states, the tutorial explains.** Anything that reads like a paragraph in a
+  panel you visit daily belongs in a first-encounter popup and the Compendium instead.
 - **Simulation and presentation are separate.** Combat resolves as data; the arena is one
   possible view of that data.
 

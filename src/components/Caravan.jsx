@@ -36,11 +36,10 @@ function ScoutReport({ tier, day, scouted }) {
           <span style={{ fontSize: 10, opacity: 0.6 }}>Tier {tier}</span>
         </div>
         <div style={{ fontSize: 11, opacity: 0.75, marginTop: 6 }}>
-          Dust on the road, and nothing more. You know roughly how big it is —
-          <strong> {caravan.units.length} in the column</strong> — but not what they are.
+          <strong>{caravan.units.length}</strong> in the column. Nothing else visible.
         </div>
-        <div style={{ fontSize: 10, opacity: 0.6, marginTop: 8 }}>
-          🔭 Build a <strong>Scout Camp</strong> to read the composition before you commit.
+        <div style={{ fontSize: 10, opacity: 0.55, marginTop: 8 }}>
+          🔭 Scout Camp reveals the manifest
         </div>
       </div>
     );
@@ -96,11 +95,10 @@ function Setup({ slimes, getSlimeStats, tier, scouted, squadSize, catapults, coo
 
       <div style={{ ...panel, marginBottom: 12 }}>
         <div style={label}>Ambush squad ({squad.length}/{squadSize})</div>
-        <div style={{ fontSize: 10, opacity: 0.7, marginBottom: 8 }}>
-          You are paid for every unit you drop, banked the moment it falls. You can
-          call the ambush off at any point and keep what you have — only slimes that
-          actually die are lost. You have <strong>{ESCAPE_ROUNDS} rounds</strong> before
-          the survivors are clear of the ambush.
+        <div style={{ display: 'flex', gap: 12, fontSize: 10, opacity: 0.7, marginBottom: 10, flexWrap: 'wrap' }}>
+          <span>⏳ {ESCAPE_ROUNDS} rounds</span>
+          <span>💰 paid per kill</span>
+          <span>🏃 leave any time</span>
         </div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, maxHeight: 210, overflowY: 'auto' }}>
           {slimes.map(s => {
@@ -137,8 +135,7 @@ function Setup({ slimes, getSlimeStats, tier, scouted, squadSize, catapults, coo
             🪃 {catapults} Slime Catapult{catapults === 1 ? '' : 's'} on the road
           </div>
           <div style={{ fontSize: 10, opacity: 0.75, marginTop: 4 }}>
-            They lob {catapultDamage(catapults, tier)} damage into the lead unit every round,
-            whether or not the squad is winning. Throughput, not safety.
+            {catapultDamage(catapults, tier)} damage to the lead unit, every round.
           </div>
         </div>
       )}
@@ -186,8 +183,8 @@ function EscapeClock({ round, escapeRounds }) {
           transition: 'width 0.3s linear',
         }} />
       </div>
-      <div style={{ fontSize: 9, opacity: 0.6, marginTop: 4 }}>
-        Round {round} of {escapeRounds} — whatever is still standing when this runs out gets away.
+      <div style={{ fontSize: 9, opacity: 0.55, marginTop: 4 }}>
+        Round {round} of {escapeRounds}
       </div>
     </div>
   );
@@ -225,7 +222,7 @@ function Battle({ ambush, verboseLogs, setVerboseLogs, onRetreat }) {
       />
 
       <div style={{ ...panel, marginTop: 10, borderLeft: '3px solid #4ade80' }}>
-        <div style={label}>Banked so far — yours whatever happens next</div>
+        <div style={label}>Banked — yours either way</div>
         <div style={{ fontSize: 12, color: '#4ade80' }}>🧬 {ambush.banked.biomass} biomass</div>
         {matLine && <div style={{ fontSize: 11, opacity: 0.85 }}>📦 {matLine}</div>}
       </div>
@@ -238,7 +235,7 @@ function Battle({ ambush, verboseLogs, setVerboseLogs, onRetreat }) {
           color: '#e0e0e0', fontWeight: 'bold', cursor: 'pointer',
         }}
       >
-        🏃 Break off the ambush — keep the haul, bring everyone home
+        🏃 Break off — keep the haul
       </button>
     </div>
   );

@@ -158,10 +158,8 @@ const SlimeDetail = ({
           <div style={{ fontSize: 12, fontWeight: 'bold', color: '#f87171', marginBottom: 4 }}>
             🩹 Wounded
           </div>
-          <div style={{ fontSize: 10, opacity: 0.85 }}>
-            Went down in the field and lost everything it was carrying. It cannot be
-            deployed until it has mended in a Convalescence Pool — and it holds its
-            royal jelly the whole time.
+          <div style={{ fontSize: 10, opacity: 0.8 }}>
+            Cannot be deployed. Mends in a Convalescence Pool.
           </div>
         </div>
       )}
@@ -173,9 +171,8 @@ const SlimeDetail = ({
           background: 'rgba(74,222,128,0.10)', border: '1px solid rgba(74,222,128,0.3)',
         }}>
           <div style={{ fontSize: 10, opacity: 0.8, marginBottom: 8 }}>
-            {slime.name.split(' ')[0]} is carrying <strong style={{ color: '#4ade80' }}>{Math.floor(biomass)}🧬</strong>,
-            worth <strong>+{cappedPercent.toFixed(1)}%</strong> stats — and forfeit if it goes down.
-            Draw it out and the slime keeps working at its intrinsic power.
+            Carrying <strong style={{ color: '#4ade80' }}>{Math.floor(biomass)}🧬</strong>
+            {' '}(+{cappedPercent.toFixed(1)}% stats) — forfeit if it goes down.
           </div>
           <button
             onClick={() => onWithdraw(slime.id)}
@@ -229,8 +226,7 @@ const SlimeDetail = ({
               🧬 {freeSlots} open slot{freeSlots === 1 ? '' : 's'}
             </div>
             <div style={{ fontSize: 10, opacity: 0.75, marginBottom: 8 }}>
-              Graft another mutation onto {slime.name.split(' ')[0]} for 🧬{cost}.
-              {inTheField && ' Recall them first.'}
+              Graft a mutation for 🧬{cost}.{inTheField && ' Recall them first.'}
             </div>
 
             {!grafting ? (

@@ -190,10 +190,10 @@ export const SKILL_TREES = {
         id: 'infiniteEndurance',
         name: 'Endless Ooze',
         icon: '♾️',
-        desc: 'Unlock infinite expeditions',
+        desc: 'Slimes knit themselves back together in the field, healing each round',
         cost: 5,
         requires: ['peaksAccess', 'evolutionPulseSkill'],
-        effect: { type: 'unlock', feature: 'infiniteExpedition' },
+        effect: { type: 'passive', passive: 'regeneration' },
         position: { x: 25, y: 70 },
       },
 
@@ -732,9 +732,6 @@ export const isFeatureUnlocked = (featureId, purchasedSkills) => {
   // Ranch requires ranchBasics skill
   if (featureId === 'ranch') {
     return purchasedSkills.includes('ranchBasics');
-  }
-  if (featureId === 'infiniteExpedition') {
-    return purchasedSkills.includes('infiniteEndurance');
   }
   const effects = getSkillEffects(purchasedSkills);
   return effects.unlockedFeatures.includes(featureId);

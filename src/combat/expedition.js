@@ -66,7 +66,9 @@ export function makeExpedition(zone, slimes, targetKills, ctx = {}) {
     materials: {},
     monsterKillCounts: {},
     logs,
-    intermission: enemy ? null : { timer: 0, duration: INTERMISSION_DURATION, event: null },
+    intermission: enemy ? null : {
+      timer: 0, duration: INTERMISSION_DURATION * (ctx.travelMult ?? 1), event: null,
+    },
     anim: null,
   };
 }
@@ -304,7 +306,11 @@ export function tickExpedition(exp, dt, ctx = {}, zone) {
       sideEffects.push({ type: 'expComplete' });
     } else {
       exp.phase = 'intermission';
-      exp.intermission = { timer: 0, duration: INTERMISSION_DURATION, event: null };
+      exp.intermission = {
+        timer: 0,
+        duration: INTERMISSION_DURATION * (ctx.travelMult ?? 1),
+        event: null,
+      };
     }
     return { exp, sideEffects };
   }

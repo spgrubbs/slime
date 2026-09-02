@@ -135,8 +135,8 @@ export const BUILDINGS = {
   extendedExpedition: {
     name: 'Expedition Depot',
     icon: '🗺️',
-    desc: 'Unlock 100-enemy expeditions',
-    cost: 1000,                         // Increased from 250
+    desc: 'Parties travel between encounters 40% faster',
+    cost: 1000,
     time: 3600,                         // 1 hour
     max: 1,
     category: 'research',
@@ -144,8 +144,8 @@ export const BUILDINGS = {
   infiniteExpedition: {
     name: 'Deep Exploration Hub',
     icon: '🌌',
-    desc: 'Unlock infinite expeditions',
-    cost: 2500,                         // Increased from 500
+    desc: '+25% material drops on expeditions',
+    cost: 2500,
     time: 7200,                         // 2 hours
     max: 1,
     category: 'research',
