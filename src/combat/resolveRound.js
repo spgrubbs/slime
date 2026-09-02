@@ -9,7 +9,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { STATUS_EFFECTS } from '../data/traitData.js';
-import { MONSTER_TYPES, MONSTER_ABILITIES } from '../data/monsterData.js';
+import { MONSTER_TYPES, MONSTER_ABILITIES, materialDropChance } from '../data/monsterData.js';
 import { calculateElementalDamage } from '../utils/helpers.js';
 import { runHooks } from './hooks.js';
 import { computeStats, computeMaxHp, buildEffectList } from './stats.js';
@@ -520,7 +520,7 @@ function checkDeaths(world, ctx, records, sideEffects) {
       kind: 'death', actorId: s.id, actorName: s.name,
       log: { m: `${s.name} fell! 💔`, c: C.death, v: `${s.name} removed from the party` },
     });
-    sideEffects.push({ type: 'slimeDeath', id: s.id });
+    sideEffects.push({ type: 'slimeDown', id: s.id });
 
     const reclaimer = ctx.builds?.biomassReclaimer || 0;
     if (reclaimer > 0 && s.ref?.biomass > 0) {
@@ -548,7 +548,9 @@ export function resolveKill(world, ctx, records, sideEffects, zoneDef) {
   const ev = {
     enemy, world,
     biomassMult: 1, biomassFlat: 0,
-    matChance: 0.5 * (cb.materialDrop || 1) * (1 + (ctx.ranchBonus || 0)),
+    // A multiplier on every material's own rate, not a flat chance for one.
+    matChance: 0,
+    matMult: (cb.materialDrop || 1) * (1 + (ctx.ranchBonus || 0)),
     elementMult: 1, blockElement: false,
     heal: 0, healLabel: '',
     log: [],
@@ -619,16 +621,19 @@ export function resolveKill(world, ctx, records, sideEffects, zoneDef) {
     sideEffects.push({ type: 'prism' });
     records.push({ kind: 'reward', log: { m: '💎 Found a Prism!', c: C.crit, v: '0.1% drop' } });
   }
-  const matRoll = ctx.rng();
-  if (matRoll < ev.matChance) {
-    const mat = md.mats[Math.floor(ctx.rng() * md.mats.length)];
+  // Each material rolls on its own, at a rate set by what it gates. Lucky
+  // slimes and drop skills raise every rate together.
+  (md.mats || []).forEach(mat => {
+    const chance = Math.min(0.95, (materialDropChance(mat, md) + ev.matChance) * ev.matMult);
+    const roll = ctx.rng();
+    if (roll >= chance) return;
     sideEffects.push({ type: 'material', mat });
     records.push({
       kind: 'reward',
       log: { m: `Found ${mat}! 📦`, c: C.crit,
-             v: `roll ${(matRoll * 100).toFixed(1)}% vs ${(ev.matChance * 100).toFixed(1)}%` },
+             v: `roll ${(roll * 100).toFixed(1)}% vs ${(chance * 100).toFixed(1)}%` },
     });
-  }
+  });
   return total;
 }
 

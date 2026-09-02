@@ -7,11 +7,13 @@ _Status: living document. Reconstructed from the implemented systems in `src/`._
 ## 1. Pitch
 
 You are a slime Hive Queen. You don't fight — you **breed, mutate, and dispatch**.
-Slimes are consumable: you spawn them, invest biomass into them, send them out to die
-somewhere useful, and reabsorb what comes back. The fun is in **building a slime**, not
-in piloting one.
 
-Loop: `spawn → equip mutations → send on expedition → absorb rewards → unlock more mutations → spawn better slimes`
+Slimes are **assets, not ammunition**. You build one deliberately, send it out, and it comes
+back changed — fatter with biomass, or wounded and empty-handed. Nothing you build is ever
+deleted by bad luck; what you lose is the biomass it was carrying and the days it spends
+mending. The fun is in **building a slime**, not in piloting one.
+
+Loop: `spawn → graft mutations → send on expedition → draw off the biomass → build → repeat`
 
 Genre: idle/incremental with a creature-builder core. Designed for **3–4 check-ins per day**,
 not continuous play.
@@ -22,15 +24,17 @@ not continuous play.
 
 | Resource | Symbol | Source | Sink |
 |---|---|---|---|
-| **Biomass** | 🧬 | Monster kills, ranches, reabsorbing slimes | Spawning, buildings, research |
-| **Royal Jelly** | 🍯 | Capacity stat (`BASE_JELLY` + `JELLY_PER_QUEEN_LEVEL` × level) | Held by living slimes — it's population cap, not a spendable |
+| **Biomass** | 🧬 | Monster kills, ranches, withdrawing from or reabsorbing slimes | Spawning, buildings, research |
+| **Royal Jelly** | 🍯 | `BASE_JELLY` + `JELLY_PER_QUEEN_LEVEL` × level, + Slime Pit, + skills | **The population cap.** Held by every living slime, wounded ones included |
 | **Materials** | 📦 | Monster drops, caravan ambushes | Buildings |
 | **Mana** | ✨ | 1/hour per living slime + Mana Well ranch | Hive Abilities (timed global buffs) |
 | **Prisms** | 💎 | 0.1% expedition drop, **guaranteed on routing a caravan**, IAP | Prism Shop (trait grants, time skips, mutation resets) |
 | **Queen XP** | 👑 | Reabsorbing slimes, biomass conversion | Queen levels 1–50 → skill points, zone unlocks |
 
-Biomass is the throughput resource; **Prisms are the gate resource** and the reason
-caravan ambushes exist at all.
+Biomass is the throughput resource; **Prisms are the gate resource** and the reason caravan
+ambushes exist at all. Royal Jelly is the population cap — and because a wounded slime keeps
+its jelly for the whole time it is mending, a bad expedition squeezes how much else you can
+have in the field.
 
 ---
 
@@ -58,11 +62,42 @@ Viscosity is the linchpin of the build game. Almost every mutation's power is
 `baseValue + viscScale × viscosity`. A high-VISC slime isn't a bruiser — it's a slime
 whose *weird effects actually land*.
 
-### Growth
-Slimes gain biomass on kills; biomass converts to a percentage stat multiplier, capped
-per tier. A slime is therefore an **investment that matures** and then plateaus — at which
-point reabsorbing it for Queen XP is the correct play. This is the intended
-"slimes are consumable" pressure.
+### Two kinds of power
+
+This split is the spine of the whole economy:
+
+| | **Intrinsic** | **Held** |
+|---|---|---|
+| Comes from | Tier, traits, mutations | Biomass carried on the slime |
+| Magnitude | ×1 → ×5 across tiers | up to **+35%**, every tier |
+| Permanent? | Yes | No — forfeited entirely when the slime goes down |
+| Can you bank it? | No | Yes, any time, for free |
+
+Held power is capped well below the smallest tier step (Elite → Royal is ×1.43), so **maturing
+a slime never promotes it a rung** — it sharpens the rung it is on and gives you something to
+lose. A loaded Royal is a fat target; a drained one is merely a Royal.
+
+### Wounds
+
+A slime reduced to 0 HP is **Wounded**, not killed:
+
+- it forfeits **every point of held biomass**,
+- it cannot be deployed until it has mended,
+- it keeps its royal jelly slot the entire time.
+
+Recovery happens in a **Convalescence Pool** — 2 slots and 24 hours at base, improving to 6
+slots and ~14 hours by level 5. Slots and time are both upgradeable, and both are the real
+cost of a bad run: not a dead slime, but a body clogging your population cap for a day.
+
+### Getting biomass back out
+
+Two actions, deliberately distinct:
+
+- **Draw out** — take everything a slime is carrying. It survives, unhurt, and drops back to
+  its intrinsic power. This is how held biomass becomes spendable, and it is free and
+  repeatable. Drawing down before a risky expedition is a legitimate hedge.
+- **Reabsorb** — dissolve the slime for good: its held biomass *plus* its body (10× its jelly
+  cost), and the jelly slot back. This is retirement, not harvesting.
 
 ---
 
@@ -87,6 +122,25 @@ numbers.
 Every passive is implemented as a hook (§9.3), and `validateRegistry()` fails at startup if
 one is not. Mutation slots come from the tier, plus `ancient` and `alloyPotential`, plus the
 skill tree.
+
+### Do mutations still fit, now that slimes persist?
+
+**Yes — more than before.** They sit squarely in the intrinsic half: permanent, safe from
+wounds, and the only part of a slime you author deliberately. And now that held biomass is
+capped at +35%, the intrinsic layer carries the power curve, so mutations are most of what
+distinguishes two slimes of the same tier.
+
+The unlock — 100 kills of the associated monster, 200–600 for rares — is also exactly the
+kind of mild grind an incremental wants, and it already exists. Because a slime now lives
+through its mistakes, **grafting** is the natural expression of a long-term investment: an
+old veteran with an open slot is worth feeding.
+
+One tension to watch. Mutations are unlimited once unlocked, so the binding constraint is
+*slots*, not supply — which makes tier and slot upgrades the scarcity, and that is fine. The
+risk is the opposite one: with slimes persistent, the optimal play drifts toward a small
+stable of perfected Royals that never changes. The population cap and the Convalescence Pool
+are what push back — you need bodies in rotation while others mend — but if the roster ever
+stops turning over, that is the first place to look.
 
 ---
 
@@ -123,16 +177,21 @@ layer switches off.
 
 ### 7.1 Expeditions (primary)
 Send up to 4 slimes to a zone for 10 kills / 100 kills / infinite. Slimes fight
-automatically, gain biomass and element affinity, drop materials, and can die permanently.
+automatically, gain biomass and element affinity, and drop materials. A slime that goes down
+is **wounded**, not killed (§3) — the loss is its held biomass and a day in the pool.
 Zones unlock at Queen level 1 / 5 / 10 / 18 / 28 / 40.
 
 This is where 90% of the game happens. It runs while you're away.
 
 ### 7.2 Ranches (idle side-channel)
-11 ranch types on real-time cycles (30 min – 6 hr). Assigned slimes are **out of the
+12 ranch types on real-time cycles (30 min – 24 hr). Assigned slimes are **out of the
 expedition pool** — a genuine opportunity cost. Ranches grant biomass, element affinity,
 raw stats, traits, mana, or global buffs (War Den → ambush damage; Healing Spring →
 expedition buff). Accumulation caps at 24h so you can't neglect them forever without loss.
+
+The **Convalescence Pool** is the exception: it is the only ranch that takes wounded slimes,
+and the only one that refuses healthy ones. Its slots are the throttle on how fast the hive
+recovers from a bad week.
 
 ### 7.3 Caravan Ambush (progression gate)
 Once a real-world day, a human supply caravan passes near the hive. You may ambush it.
@@ -368,20 +427,42 @@ that converts a stat into a magnitude does not.
 
 Calibrated by simulation against the real resolver, party of four, no mutations:
 
-| Tier | Fresh clears | Fully matured clears |
+| Tier | Fresh | Fully loaded with biomass |
 |---|---|---|
-| Basic | Forest, Swamp | + Crystal Grotto |
-| Enhanced | + Crystal Grotto | + Cinderspire |
-| Elite | + Cinderspire | + Stormspire, most of the Void |
-| Royal | + Stormspire | everything |
+| Basic | Forest, Swamp | Forest, Swamp (Grotto still out of reach) |
+| Enhanced | + Crystal Grotto, Cinderspire at ~60% | Cinderspire comfortably |
+| Elite | + Cinderspire, Stormspire at ~15% | Stormspire at ~50% |
+| Royal | + Stormspire, the Void at ~40% | the Void comfortably |
 
-Two rules fall out of it, and both are legible to a player without a spreadsheet:
+Two rules fall out of it, and both are legible without a spreadsheet:
 
-1. **A tier covers two zones.**
-2. **Maturing a slime to its biomass cap advances it one zone.**
+1. **A tier covers two zones** — one comfortably, one as a stretch.
+2. **Held biomass turns the stretch zone into the comfortable one.** It never opens a third.
 
-Mutations, elements and the skill tree are the *margin* on top — they should turn a coin-flip
-zone into a comfortable one, never skip a rung.
+That second rule is the whole point of capping held power below a tier step (§3). Mutations,
+elements and the skill tree are the *margin* on top — they should turn a coin-flip zone into
+a comfortable one, never skip a rung.
+
+### The material economy
+
+Materials gate buildings, and the wait is the progression — this is an incremental, so a
+gate you can walk through immediately is not a gate. Each material rolls **independently**
+when a monster dies, at a rate set by what it gates rather than by which monster dropped it:
+
+| Class | Rate | Role |
+|---|---|---|
+| Common | 38% | Keeps buildings and ranches ticking over |
+| Uncommon | 16% | Mid-tier costs |
+| **Gating** | **8%** | Wanted in bulk by one specific building |
+| From a rare monster | 45% | The ~5% spawn *was* the grind; pay out once found |
+
+That puts the heaviest gates around 130–270 kills — roughly a couple of check-ins with
+expeditions running, since they progress offline. The capstone (Void Essence ×5 for the
+Primordial Chamber, from a rare in the endgame zone) lands near 220 kills of content that
+already requires matured Elites.
+
+A test asserts that **every material any building or ranch asks for is actually obtainable**.
+Eight of them once had no source at all, which quietly made several ranches unbuildable.
 
 `recommendedStats` on each zone is the stat level at which that party clears ~3 fights in 4.
 Those numbers are simulated, not estimated, and are re-derived whenever the curves move.
@@ -555,15 +636,26 @@ the party with it. `lazy` slimes bank sooner; `greedy` ones push for one more st
   a slime's sheet, and every squad has a temperament you can feel.
 - **Risk:** less direct control, and it needs traits to be common enough to compose around.
 
-### Recommendation
+### Decided: **A — Wounds**, with the stakes tightened
 
-**D + C**, with A as flavor later.
+Implemented as of this pass. A slime that goes down forfeits **all** its held biomass and is
+**Wounded**; it recovers in a Convalescence Pool (2 slots / 24h at base, 6 slots / ~14h at
+level 5) and holds its royal jelly the entire time.
 
-The one-death rule is the floor: you can never lose more than one slime to a run, so slimes
-stay precious without a bad night wiping the roster. Unbanked loot is the ceiling: every stage
-you push is a real bet on the haul you are already carrying. Together the question at each
-stage is *"is this haul worth risking one of them?"* — which has a genuinely different answer
-depending on whose share is in the bag and how replaceable they are.
+Why this one over the others:
 
-Standing orders still set the depth target, and Reserves still guarantee the run ends. Wounds
-can layer on afterwards if losses still feel too cheap once it is playable.
+- It passes the bar the Downed idea failed. There is no "do I press on with three casualties"
+  non-choice, because the run simply ends when the party is down — the decision is *where to
+  send them and how much biomass to let them carry*, made beforehand, with information.
+- The cost is denominated in **time and capacity**, which is what an idle game is actually
+  made of, and it gives the Convalescence Pool's slot and duration upgrades a real job.
+- Slimes stop being ammunition without becoming invulnerable. You can lose a week of a
+  slime's accumulated biomass in one bad round, and your best four sitting in the pool while
+  a caravan passes is a genuine sting.
+- **Drawing biomass out** (§3) is the counterplay, and it is a real decision: bank before a
+  risky run and go in weaker, or carry it and gamble.
+
+C (extraction) is effectively folded in already — held biomass *is* unbanked loot, and
+withdrawing *is* banking it. B, D and E remain available if losses ever feel too soft; D in
+particular is the natural next dial, since auto-recalling on the first wound would cap how
+many slimes one bad night can put in the pool.

@@ -6,7 +6,7 @@ import SlimeSprite from './SlimeSprite.jsx';
 
 const SlimeDetail = ({
   slime, expState, getSlimeStats, getMaxHp, mutationSlots,
-  unlockedMutations = [], biomass: bank = 0, graftCost, onGraft,
+  unlockedMutations = [], biomass: bank = 0, graftCost, onGraft, onWithdraw,
 }) => {
   const tier = SLIME_TIERS[slime.tier];
   const [grafting, setGrafting] = useState(false);
@@ -37,7 +37,12 @@ const SlimeDetail = ({
         <SlimeSprite tier={slime.tier} size={60} hp={hp} maxHp={maxHp} mutations={mutations} status={expState?.status} primaryElement={slime.primaryElement} />
         <div style={{ flex: 1 }}>
           <div style={{ fontWeight: 'bold', fontSize: 16 }}>{slime.name}</div>
-          <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 8 }}>{tier.name}</div>
+          <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 8 }}>
+            {tier.name}
+            {slime.wounded && (
+              <span style={{ marginLeft: 8, color: '#f87171', fontWeight: 'bold' }}>🩹 Wounded</span>
+            )}
+          </div>
           <div style={{ marginBottom: 6 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, marginBottom: 2 }}><span>❤️ HP</span><span>{Math.ceil(hp)}/{maxHp}</span></div>
             <div style={{ height: 8, background: 'rgba(0,0,0,0.5)', borderRadius: 4, overflow: 'hidden' }}>
@@ -48,7 +53,7 @@ const SlimeDetail = ({
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, marginBottom: 2 }}><span>🧬 Biomass</span><span>{Math.floor(biomass)} (+{cappedPercent.toFixed(1)}%)</span></div>
             <div style={{ fontSize: 9, opacity: 0.6, marginTop: 2 }}>
               {atCap
-                ? `Fully grown — capped at +${tier.maxBiomassBonus}%. Reabsorb for Queen XP.`
+                ? `Carrying all it can — capped at +${tier.maxBiomassBonus}%.`
                 : `Next 1%: ${Math.ceil(tier.biomassPerPercent - (biomass % tier.biomassPerPercent))} more`}
             </div>
           </div>
@@ -142,6 +147,45 @@ const SlimeDetail = ({
               </div>
             );
           })}
+        </div>
+      )}
+
+      {slime.wounded && (
+        <div style={{
+          marginBottom: 15, padding: 10, borderRadius: 8,
+          background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.35)',
+        }}>
+          <div style={{ fontSize: 12, fontWeight: 'bold', color: '#f87171', marginBottom: 4 }}>
+            🩹 Wounded
+          </div>
+          <div style={{ fontSize: 10, opacity: 0.85 }}>
+            Went down in the field and lost everything it was carrying. It cannot be
+            deployed until it has mended in a Convalescence Pool — and it holds its
+            royal jelly the whole time.
+          </div>
+        </div>
+      )}
+
+      {/* Held biomass — temporary power you can bank without harming the slime */}
+      {onWithdraw && biomass > 0 && !inTheField && (
+        <div style={{
+          marginBottom: 15, padding: 10, borderRadius: 8,
+          background: 'rgba(74,222,128,0.10)', border: '1px solid rgba(74,222,128,0.3)',
+        }}>
+          <div style={{ fontSize: 10, opacity: 0.8, marginBottom: 8 }}>
+            {slime.name.split(' ')[0]} is carrying <strong style={{ color: '#4ade80' }}>{Math.floor(biomass)}🧬</strong>,
+            worth <strong>+{cappedPercent.toFixed(1)}%</strong> stats — and forfeit if it goes down.
+            Draw it out and the slime keeps working at its intrinsic power.
+          </div>
+          <button
+            onClick={() => onWithdraw(slime.id)}
+            style={{
+              fontSize: 11, padding: '6px 12px', borderRadius: 6, border: 'none', color: '#fff',
+              cursor: 'pointer', background: 'linear-gradient(135deg, #4ade80, #22d3ee)',
+            }}
+          >
+            🧬 Draw out {Math.floor(biomass)} biomass
+          </button>
         </div>
       )}
 

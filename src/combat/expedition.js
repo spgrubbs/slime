@@ -237,7 +237,7 @@ export function tickExpedition(exp, dt, ctx = {}, zone) {
         if (!s.dead && s.hp <= 0) {
           s.dead = true;
           log({ m: `${s.name} succumbs on the road 💔`, c: '#ef4444', v: 'died during travel' });
-          sideEffects.push({ type: 'slimeDeath', id: s.id });
+          sideEffects.push({ type: 'slimeDown', id: s.id });
         }
       });
       if (exp.slimes.every(s => s.dead)) {

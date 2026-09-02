@@ -117,10 +117,12 @@ const calculateOfflineProgress = (saved, bonuses, offlineCtx = {}) => {
       }
 
       sideEffects.forEach(se => {
-        if (se.type === 'slimeDeath') {
-          const lost = slimes.find(sl => sl.id === se.id);
-          results.slimesLost.push(lost?.name || 'Slime');
-          slimes = slimes.filter(sl => sl.id !== se.id);
+        if (se.type === 'slimeDown') {
+          const hurt = slimes.find(sl => sl.id === se.id);
+          results.slimesLost.push(hurt?.name || 'Slime');
+          slimes = slimes.map(sl => (
+            sl.id === se.id ? { ...sl, wounded: true, woundedAt: Date.now(), biomass: 0 } : sl
+          ));
         } else if (se.type === 'bioReclaim') {
           bio += se.amount;
           results.biomassGained += se.amount;
@@ -262,6 +264,7 @@ export default function HiveQueenGame() {
   // Filter tabs based on skill unlocks
   const visibleTabs = tabs.filter(t => !t.skillUnlock || isFeatureUnlocked(t.skillUnlock, purchasedSkills));
 
+  const woundedCount = slimes.filter(s => s.wounded).length;
   const maxJelly = BASE_JELLY + (queen.level - 1) * JELLY_PER_QUEEN_LEVEL + (builds.slimePit || 0) * 10 + (skillBonuses.maxJelly || 0);
   const usedJelly = slimes.reduce((s, sl) => s + (sl.magCost || 0), 0);
   const freeJelly = maxJelly - usedJelly;
@@ -696,13 +699,53 @@ export default function HiveQueenGame() {
     }
   };
 
+  /**
+   * A slime that goes down is wounded, not killed. It forfeits every point of
+   * held biomass — the temporary half of its power — and cannot be deployed
+   * again until it has recovered in a Convalescence Pool. It keeps its jelly
+   * slot the whole time, so a bad run clogs the hive's capacity.
+   */
+  const woundSlime = useCallback((id) => {
+    setSlimes(list => list.map(sl => (
+      sl.id === id ? { ...sl, wounded: true, woundedAt: Date.now(), biomass: 0 } : sl
+    )));
+  }, []);
+
+  /**
+   * Take the biomass a slime is carrying without harming it. This is how held
+   * biomass becomes spendable: the slime drops back to its intrinsic power and
+   * carries on.
+   */
+  const withdrawBiomass = (id) => {
+    const sl = slimes.find(s => s.id === id);
+    if (!sl) return;
+    const held = Math.floor(sl.biomass || 0);
+    if (held <= 0) return;
+    if (Object.values(exps).some(e => (e.slimes || []).some(x => x.id === id))) {
+      log('Recall them first — you cannot withdraw from a slime in the field.');
+      return;
+    }
+    setBio(p => p + held);
+    setSlimes(list => list.map(x => (x.id === id ? { ...x, biomass: 0 } : x)));
+    log(`Drew ${held}🧬 from ${sl.name}.`);
+  };
+
+  /** Dissolve a slime for good: its held biomass plus its body, and the jelly back. */
   const reabsorb = (id) => {
     const sl = slimes.find(s => s.id === id);
     if (!sl || Object.values(exps).some(e => (e.slimes || []).some(s => s.id === id))) { log('Cannot reabsorb!'); return; }
-    const biomassGained = sl.biomass || 0;
-    setBio(p => p + biomassGained);
+    const held = Math.floor(sl.biomass || 0);
+    const body = (SLIME_TIERS[sl.tier]?.jellyCost || 5) * 10;
+    setBio(p => p + held + body);
     setSlimes(p => p.filter(s => s.id !== id));
-    log(`Reabsorbed ${sl.name}! +${biomassGained}🧬`);
+    setRanchAssignments(prev => {
+      const next = {};
+      Object.entries(prev).forEach(([rid, list]) => {
+        next[rid] = (list || []).filter(a => (typeof a === 'object' ? a.slimeId : a) !== id);
+      });
+      return next;
+    });
+    log(`Reabsorbed ${sl.name}! +${held + body}🧬 (${held} held, ${body} from the body)`);
   };
 
   const levelUpQueen = () => {
@@ -827,6 +870,11 @@ export default function HiveQueenGame() {
 
     const slime = slimes.find(s => s.id === slimeId);
     if (!slime) return false;
+
+    // The Convalescence Pool only takes the wounded; every other ranch refuses
+    // them, because a wounded slime has nothing to give until it has mended.
+    if (ranch.woundedOnly && !slime.wounded) return false;
+    if (!ranch.woundedOnly && slime.wounded) return false;
 
     // Check if slime is on expedition
     if (Object.values(exps).some(e => (e.slimes || []).some(s => s.id === slimeId))) return false;
@@ -1332,6 +1380,36 @@ export default function HiveQueenGame() {
           const ranchSpeedMult = isHiveAbilityActive('nurturingAura') ? 2 : 1;
           next[ranchId] = (next[ranchId] || 0) + dtSeconds * ranchSpeedMult;
 
+          // Convalescence is per-slime, timed from when each was laid in,
+          // rather than sharing one ranch-wide cycle.
+          if (ranch.effect === 'recover') {
+            const healed = [];
+            (ranchAssignments[ranchId] || []).forEach(a => {
+              if (typeof a !== 'object') return;
+              // cycleTime is in real seconds; startTime is a ms timestamp.
+              if (Date.now() - a.startTime >= effectiveCycleTime * 1000) {
+                healed.push(a.slimeId);
+              }
+            });
+            if (healed.length) {
+              setTimeout(() => {
+                setSlimes(list => list.map(sl => (
+                  healed.includes(sl.id) ? { ...sl, wounded: false, woundedAt: null } : sl
+                )));
+                setRanchAssignments(prev => ({
+                  ...prev,
+                  [ranchId]: (prev[ranchId] || []).filter(a =>
+                    !healed.includes(typeof a === 'object' ? a.slimeId : a)),
+                }));
+                healed.forEach(id => {
+                  const sl = slimes.find(x => x.id === id);
+                  if (sl) log(`🩹 ${sl.name} is whole again.`);
+                });
+              }, 0);
+            }
+            return; // recovery has no accumulating reward
+          }
+
           // Check if cycle completes
           if (next[ranchId] >= effectiveCycleTime) {
             next[ranchId] = 0;
@@ -1476,8 +1554,8 @@ export default function HiveQueenGame() {
           setTimeout(() => {
             pending.forEach(se => {
               switch (se.type) {
-                case 'slimeDeath':
-                  setSlimes(list => list.filter(sl => sl.id !== se.id));
+                case 'slimeDown':
+                  woundSlime(se.id);
                   break;
                 case 'bioReclaim':
                   setBio(b => b + se.amount);
@@ -1529,7 +1607,7 @@ export default function HiveQueenGame() {
         if (sideEffects.length) {
           setTimeout(() => {
             sideEffects.forEach(se => {
-              if (se.type === 'slimeDeath') setSlimes(list => list.filter(sl => sl.id !== se.id));
+              if (se.type === 'slimeDown') woundSlime(se.id);
               if (se.type === 'bioReclaim') setBio(b => b + se.amount);
             });
           }, 0);
@@ -1564,10 +1642,18 @@ export default function HiveQueenGame() {
   ].filter(Boolean) : null;
 
   const onAmbush = new Set((ambush?.slimes || []).map(c => c.id));
+  const assignedToRanch = new Set(
+    Object.values(ranchAssignments).flat()
+      .map(a => (typeof a === 'object' ? a?.slimeId : a))
+      .filter(Boolean),
+  );
   const avail = slimes.filter(s =>
+    !s.wounded &&
+    !assignedToRanch.has(s.id) &&
     !Object.values(exps).some(e => (e.slimes || []).some(es => es.id === s.id)) &&
     !party.includes(s.id) &&
     !onAmbush.has(s.id));
+  const woundedSlimes = slimes.filter(s => s.wounded);
   const selSl = slimes.find(s => s.id === selSlime);
   const selExp = selSlime ? Object.values(exps).find(e => (e.slimes || []).some(s => s.id === selSlime)) : null;
   const getResTime = () => { if (!activeRes) return ''; const r = RESEARCH[activeRes.id]; const tot = r.time / bon.res; const rem = Math.ceil(tot * (1 - activeRes.prog / 100)); return `${Math.floor(rem / 60)}:${(rem % 60).toString().padStart(2, '0')}`; };
@@ -1692,6 +1778,7 @@ export default function HiveQueenGame() {
                 biomass={bio}
                 graftCost={graftCost}
                 onGraft={graftMutation}
+                onWithdraw={withdrawBiomass}
               />
               {!onExp && (
                 <button
@@ -1727,7 +1814,13 @@ export default function HiveQueenGame() {
         <button onClick={() => setMenu(true)} style={{ background: 'none', border: 'none', color: '#fff', fontSize: 24, cursor: 'pointer' }}>☰</button>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'rgba(0,0,0,0.3)', padding: '4px 10px', borderRadius: 12, fontSize: 12 }}>🧬 <strong>{Math.floor(bio)}</strong></div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'rgba(0,0,0,0.3)', padding: '4px 10px', borderRadius: 12, fontSize: 12 }}>🍯 <strong>{freeJelly}/{maxJelly}</strong></div>
+          <div
+            title={`Royal Jelly is your population cap — ${slimes.length} slime(s) alive${woundedCount ? `, ${woundedCount} wounded and still holding a slot` : ''}. Raise it with Queen levels, the Slime Pit, and skills.`}
+            style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'rgba(0,0,0,0.3)', padding: '4px 10px', borderRadius: 12, fontSize: 12 }}
+          >
+            🍯 <strong>{freeJelly}/{maxJelly}</strong>
+            {woundedCount > 0 && <span style={{ color: '#f87171', fontSize: 10 }}>🩹{woundedCount}</span>}
+          </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'rgba(0,0,0,0.3)', padding: '4px 10px', borderRadius: 12, fontSize: 12 }}>🔮 <strong>{mana}</strong></div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'rgba(0,0,0,0.3)', padding: '4px 10px', borderRadius: 12, fontSize: 12 }}>💎 <strong>{prisms}</strong></div>
         </div>
@@ -2023,6 +2116,7 @@ export default function HiveQueenGame() {
                 biomass={bio}
                 graftCost={graftCost}
                 onGraft={graftMutation}
+                onWithdraw={withdrawBiomass}
               />
               {!selExp && <button onClick={() => { reabsorb(selSl.id); setSelSlime(null); }} style={{ width: '100%', marginTop: 15, padding: 12, background: 'linear-gradient(135deg, #f59e0b, #ef4444)', border: 'none', borderRadius: 8, color: '#fff', fontWeight: 'bold', cursor: 'pointer' }}>🔄 Reabsorb</button>}
             </div>
@@ -2046,16 +2140,24 @@ export default function HiveQueenGame() {
                   const stats = getSlimeStats(s);
                   const biomass = s.biomass || 0;
                   return (
-                    <div key={s.id} onClick={() => setSelSlime(s.id)} style={{ background: 'rgba(0,0,0,0.3)', borderRadius: 10, padding: 12, border: `2px solid ${tier.color}33`, cursor: 'pointer' }}>
+                    <div key={s.id} onClick={() => setSelSlime(s.id)} style={{ background: s.wounded ? 'rgba(239,68,68,0.10)' : 'rgba(0,0,0,0.3)', borderRadius: 10, padding: 12, border: `2px solid ${s.wounded ? 'rgba(239,68,68,0.45)' : tier.color + '33'}`, cursor: 'pointer' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                         <SlimeSprite tier={s.tier} size={45} hp={expS?.hp} maxHp={expS?.maxHp || s.maxHp} mutations={s.mutations} status={expS?.status} primaryElement={s.primaryElement} />
                         <div style={{ flex: 1 }}>
                           <div style={{ fontWeight: 'bold', fontSize: 14 }}>{s.name}</div>
-                          <div style={{ fontSize: 11, opacity: 0.7 }}>{tier.name}</div>
+                          <div style={{ fontSize: 11, opacity: 0.7 }}>
+                            {tier.name}
+                            {s.wounded && <span style={{ color: '#f87171', fontWeight: 'bold', marginLeft: 6 }}>🩹 Wounded</span>}
+                          </div>
                           <div style={{ display: 'flex', gap: 8, fontSize: 10, marginTop: 4 }}>
                             {Object.entries(STAT_INFO).map(([k, v]) => <span key={k} style={{ color: v.color }}>{v.icon}{stats[k]}</span>)}
                           </div>
                           {onExp && <div style={{ fontSize: 10, color: '#22d3ee', marginTop: 4 }}>📍 {ZONES[onExp[0]].name} • ❤️ {Math.ceil(expS?.hp || 0)}/{s.maxHp}</div>}
+                          {s.wounded && !onExp && (
+                            <div style={{ fontSize: 10, color: '#f87171', marginTop: 4 }}>
+                              {assignedToRanch.has(s.id) ? '🩹 Mending in the pool' : '🩹 Needs a Convalescence Pool slot'}
+                            </div>
+                          )}
                         </div>
                         <div style={{ textAlign: 'right', fontSize: 10 }}>
                           <div style={{ opacity: 0.6 }}>❤️ {expS ? Math.ceil(expS.hp) : s.maxHp}/{s.maxHp}</div>

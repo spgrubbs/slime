@@ -7,6 +7,42 @@
 // Zone 5: Elite struggle, Royal comfortable, ~400-600 HP, 45-65 dmg
 // Zone 6: Royal struggle with investment, ~700-1000 HP, 70-100 dmg
 
+// ── Material drops ───────────────────────────────────────────────────────────
+//
+// Every material rolls independently when a monster dies, at a rate set by what
+// it gates rather than by which monster dropped it. Commons keep the economy
+// moving; gating materials are deliberately slow, because in an incremental the
+// wait IS the progression.
+//
+// Rare monsters are their own gate — they only appear ~5% of the time — so
+// everything they carry drops generously once you have actually found one.
+
+export const MATERIAL_RATES = {
+  common:   0.38,   // keeps buildings and ranches ticking over
+  uncommon: 0.16,
+  gating:   0.08,   // wanted in quantity by one specific building
+  fromRare: 0.45,   // anything on a rare monster; the spawn was the grind
+};
+
+/** Materials wanted in bulk by a building or ranch, so they drop slowly. */
+export const GATING_MATERIALS = new Set([
+  'Storm Core', 'Void Essence', 'Wyrm Scale', 'Snail Shell', 'Ancient Stone',
+  'Golem Core', 'Ember Core', 'Phoenix Ash', 'Turtle Shell', 'Life Essence',
+  'Mana Crystal', 'Crystal Shard',
+]);
+
+const UNCOMMON_MATERIALS = new Set([
+  'Iron Ore', 'Bat Wing', 'Snake Scale', 'Digestive Sac',
+]);
+
+/** Chance that `mat` drops from one kill of `monster`. */
+export const materialDropChance = (mat, monster) => {
+  if (monster?.rare) return MATERIAL_RATES.fromRare;
+  if (GATING_MATERIALS.has(mat)) return MATERIAL_RATES.gating;
+  if (UNCOMMON_MATERIALS.has(mat)) return MATERIAL_RATES.uncommon;
+  return MATERIAL_RATES.common;
+};
+
 // Monster Abilities - special attacks that monsters can use randomly
 // chance: probability (0-1) of using ability instead of normal attack
 // effect: what the ability does
@@ -161,7 +197,7 @@ export const MONSTER_TYPES = {
     hp: 40,
     dmg: 3,
     biomass: 7,
-    mats: ['Pebble Shard', 'Earthite'],
+    mats: ['Pebble Shard', 'Earthite', 'Iron Ore'],
     trait: null,
     drop: 0.03,
     abilities: ['Rocky hide'],
@@ -225,7 +261,7 @@ export const MONSTER_TYPES = {
     hp: 90,
     dmg: 8,
     biomass: 9,
-    mats: ['Sea Lion Tusk', 'Chitin Shell'],
+    mats: ['Sea Lion Tusk', 'Chitin Shell', 'Turtle Shell'],
     trait: null,
     drop: 0.03,
     abilities: ['Crushing bite'],
@@ -240,7 +276,7 @@ export const MONSTER_TYPES = {
     hp: 55,
     dmg: 12,
     biomass: 7,
-    mats: ['Strider Leg', 'Marsh Gas'],
+    mats: ['Strider Leg', 'Marsh Gas', 'Snake Scale'],
     trait: null,
     drop: 0.03,
     abilities: ['Poison sting'],
@@ -385,7 +421,7 @@ export const MONSTER_TYPES = {
     hp: 300,
     dmg: 28,
     biomass: 25,
-    mats: ['Alloy Shard', 'Crude Iron'],
+    mats: ['Alloy Shard', 'Crude Iron', 'Golem Core'],
     trait: null,
     drop: 0.03,
     abilities: ['Metal body'],
@@ -400,7 +436,7 @@ export const MONSTER_TYPES = {
     hp: 250,
     dmg: 35,
     biomass: 23,
-    mats: ['Magma Core', 'Molten Slag'],
+    mats: ['Magma Core', 'Molten Slag', 'Ember Core'],
     trait: null,
     drop: 0.03,
     abilities: ['Lava trail'],
@@ -415,7 +451,7 @@ export const MONSTER_TYPES = {
     hp: 200,
     dmg: 40,
     biomass: 24,
-    mats: ['Soul Fragment', 'Ash Wisp'],
+    mats: ['Soul Fragment', 'Ash Wisp', 'Phoenix Ash'],
     trait: null,
     drop: 0.03,
     abilities: ['Ghostly fire'],
@@ -463,7 +499,7 @@ export const MONSTER_TYPES = {
     hp: 600,
     dmg: 45,
     biomass: 40,
-    mats: ['Troll Hide', 'Stone Club'],
+    mats: ['Troll Hide', 'Stone Club', 'Iron Ore'],
     trait: null,
     drop: 0.03,
     abilities: ['Regeneration'],

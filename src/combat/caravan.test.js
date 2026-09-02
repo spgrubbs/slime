@@ -119,7 +119,7 @@ test('a weak squad loses only the slimes it sent', () => {
   assert.equal(a.summary.routed, false);
   assert.equal(a.summary.banked.prisms, 0);
   assert.ok(a.summary.lost.length > 0);
-  assert.ok(effects.every(e => e.type === 'slimeDeath' || e.type === 'bioReclaim'),
+  assert.ok(effects.every(e => e.type === 'slimeDown' || e.type === 'bioReclaim'),
     'the only losses should be the deployed slimes');
 });
 
