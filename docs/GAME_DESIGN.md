@@ -44,12 +44,16 @@ have in the field.
 `basic → enhanced → elite → royal`. Each tier ~doubles power and costs more jelly
 (population cap), gets more mutation slots, and is gated behind a building.
 
-| Tier | Jelly | Stat mult | Slots | Base HP | Biomass/1% | Cap |
+| Tier | Jelly | Stat mult | Slots | Base HP | Biomass/1% | Held cap |
 |---|---|---|---|---|---|---|
-| Basic | 5 | 1× | 1 | 30 | 3 | +80% |
-| Enhanced | 20 | 2× | 2 | 75 | 8 | +100% |
-| Elite | 50 | 3.5× | 3 | 150 | 20 | +120% |
-| Royal | 100 | 5× | 4 | 300 | 40 | +150% |
+| Basic | 5 | 1× | 1 | 30 | 3 | +35% |
+| Enhanced | 20 | 2× | 2 | 75 | 8 | +35% |
+| Elite | 50 | 3.5× | 3 | 150 | 20 | +35% |
+| Royal | 100 | 5× | 4 | 300 | 40 | +35% |
+
+The held cap is the same on every tier on purpose — it is temporary power (see below), and
+uniform is the clearest way to say "this is not part of the ladder". What differs per tier is
+how much biomass buys that 35%: a Basic fills up on 105, a Royal needs 1,400.
 
 ### Stats
 Three stats, deliberately non-standard so they read as *slime* properties:
@@ -148,8 +152,8 @@ stops turning over, that is the first place to look.
 
 Personality traits are separate from mutations — behavioral flavor with small mechanical
 weight, rolled at spawn (25% chance) or granted by ranches / Prism Shop. They also supply
-the slime's **title** (`Gloop the Reckless`), which is most of their value: they make
-individual slimes memorable in a game where slimes are disposable.
+the slime's **title** (`Gloop the Reckless`), which is most of their value: a slime you keep
+for months should be someone, not a row in a list.
 
 Rarities: common → uncommon → rare (ranch-only) → legendary (Prism-only:
 `ancient` +1 mutation slot, `primordial` +10% all stats).
