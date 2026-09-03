@@ -693,3 +693,107 @@ C (extraction) is effectively folded in already — held biomass *is* unbanked l
 withdrawing *is* banking it. B, D and E remain available if losses ever feel too soft; D in
 particular is the natural next dial, since auto-recalling on the first wound would cap how
 many slimes one bad night can put in the pool.
+
+---
+
+## 15. Proposal — the missing middle
+
+_Not built. The question this answers: the game stops introducing itself far too early, and
+nothing in it ever asks whether a slime is built **right** rather than built **big**._
+
+### The gap, measured
+
+| Fact | Consequence |
+|---|---|
+| All three activities — expeditions, ranches, caravans — are reachable by **Queen level ~4 of 50** | 92% of the progression introduces nothing new |
+| Zone gates are a Queen level plus one skill node, nothing else | Progress is a biomass total, not an accomplishment |
+| Rare monsters carry **no ability and no trait** — the Life Fairy is *weaker* than its zone average | "Rare" is a drop-rate tag, not an encounter |
+| Every fight is one monster against a party, resolved by whether your number is bigger | Nothing can be *countered*, only out-scaled |
+| Late biomass has no sink once buildings and research are done | The economy flattens exactly when it should deepen |
+
+The last two are the important ones. **Combat is fully automated, so every decision the player
+makes happens before the fight starts.** That means the only way to make preparation matter is
+to field encounters that *defeat specific preparations*. A pure stat check can only ever ask
+for **more**. A counter-condition asks for **different** — and "different" is the entire
+reason to keep a varied stable of slimes.
+
+### A. Zone Wardens — the reason to optimise
+
+One per zone. **Summoned, not wandered into**: calling a Warden costs a stack of that zone's
+materials, so it is an act of preparation with a price, not something you grind into by
+accident.
+
+Each Warden carries a **counter-condition**, published in the Compendium before you fight it,
+that makes some builds actively bad:
+
+| Warden | Condition | What it demands |
+|---|---|---|
+| Grotto | Reflects critical damage back at the attacker | Firmness and `stoneskin`; a crit build kills itself |
+| Cinderspire | Regenerates 12% max HP per round unless Burning | Somebody has to bring `pyrolyze` |
+| Stormspire | Takes 90% less from the same slime twice in a row | A wide party, not one carry |
+| Void | Immune to crits and status; its damage scales with your **living** party size | Few, tough slimes — inverts the action-economy lesson |
+
+Plus an **enrage timer**: after N rounds it stops being beatable. That makes every Warden a
+damage check *and* a survival check at once, which is what forces balanced builds rather than
+one maxed stat.
+
+Winning gates the next zone (replacing or supplementing the Queen-level gate, so advancement
+is something you *did*). Wardens are re-fightable at escalating threat tiers for scaling
+rewards, which gives the endgame a ladder that is not just a bigger number.
+
+This is the cheapest of the three to build: a Warden is a monster definition with hooks the
+resolver already supports, a summon cost, and the fight screen that already exists.
+
+### B. Provisioning — ranches become a supply chain
+
+Deep zones consume **Provisions** while a party is in the field. Ranches produce them,
+buildings refine them, and running out **auto-recalls the party** — a soft failure that costs
+you time rather than slimes.
+
+- **It gates**: you cannot sustain a Void expedition until your supply chain can feed one.
+  Unlike a skill node, this gate keeps mattering after you first pass it.
+- **It enhances**: better provisions mean longer, deeper, richer runs.
+- **It is the late biomass sink** the economy currently lacks.
+- Provision *types* — rations, stimulants, ballast — give a light loadout layer without
+  becoming crafted equipment, which mutations already are.
+
+This is the answer to "an economy from buildings and ranches that both gates and enhances
+later expeditions". It also promotes ranches from passive trickle to something you plan.
+
+### C. Brood lineage — the late scope expansion
+
+Unlocks around zone 5. A **Brood Chamber** lets two slimes produce an offspring that inherits
+a weighted mix of their traits, their elemental affinity, and a chance at one parent's
+mutation *without spending a slot*.
+
+- Gives elements and personality traits a second life as **heritable material** rather than
+  flavour.
+- Directly answers the risk flagged in §4 — that the roster stops turning over once you have a
+  stable of perfected Royals. Breeding makes the stable the *input* to something.
+- It is thematically the thing a Hive Queen should obviously do, and the current
+  spawn-from-a-menu is a strange omission for the fiction.
+- It arrives late and opens a deep optimisation space at exactly the point the game currently
+  runs out of new ideas.
+
+### Recommendation
+
+**Wardens first**, and if only one thing gets built, that one. It is the direct answer to
+"there has to be a challenging battle somewhere", it costs the least against the existing
+engine, and it is the piece that makes the other two worth having — provisions matter because
+Wardens are worth reaching, and breeding matters because Wardens demand variety.
+
+Suggested sequencing against the 50-level spine:
+
+| Introduced around | System | What it changes |
+|---|---|---|
+| Zone 2→3 (~25%) | **Zone Wardens** | Advancement becomes an accomplishment; builds start to matter |
+| Zone 4 (~50%) | **Provisioning** | Ranches become an economy; deep zones gain ongoing cost |
+| Zone 5 (~70%) | **Brood lineage** | The roster becomes an input, not an endpoint |
+
+### On the guided tutorial
+
+The eventual scripted opening — first spawn, first expedition, first recall, first
+reabsorb, first building — fits the current system without rework. Tutorial triggers are
+`when(state)` predicates, so a scripted track is just a `tutorialStep` counter in the snapshot
+and predicates of the form `s.tutorialStep === 3`. The free-firing entries stay as they are
+for systems met after the opening.
