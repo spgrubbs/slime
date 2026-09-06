@@ -797,3 +797,94 @@ reabsorb, first building — fits the current system without rework. Tutorial tr
 `when(state)` predicates, so a scripted track is just a `tutorialStep` counter in the snapshot
 and predicates of the form `s.tutorialStep === 3`. The free-firing entries stay as they are
 for systems met after the opening.
+
+---
+
+## 16. Proposal — mutagens replace kill-count unlocks
+
+_Not built. Replaces the current "kill 100 of a monster, then that mutation is unlimited
+forever" with a scarce, consumable item applied to one specific slime._
+
+### Why this is better
+
+The current system has three problems that all come from the same root — **once a mutation is
+unlocked it is free forever**:
+
+1. **Progression ends at the unlock.** The 100th wolf matters; the 400th is noise. In an idle
+   game where you will kill thousands of things, a threshold that fires once and never again
+   is a poor use of the most common event in the game.
+2. **There is no economy.** Nothing about a mutation is scarce after the unlock, so no
+   decision about one has a cost. Slots became the only constraint, which is thin.
+3. **Grafting is a patch.** It exists because `ancient` granted a slot nothing could fill. It
+   is not a system anybody would design from scratch.
+
+Mutagens fix all three. Every kill becomes a lottery ticket instead of a tally mark, mutations
+gain a real cost, and grafting stops being a special case — **applying a mutagen is the only
+way a slime ever gets a mutation**, so there is one mechanism instead of two.
+
+### The shape
+
+- Monsters drop a **mutagen** for their own mutation at a low rate.
+- A mutagen is an inventory item. Applying it to a slime with a free slot grants that mutation
+  **permanently and irreversibly**, and consumes the item.
+- Slimes spawn **blank**. The Forge chooses tier and name; the slime screen is where it is
+  developed. This suits "you *mutate* a slime" far better than ordering one pre-mutated.
+- **Wounds never touch mutations** — they are intrinsic (§3). Only reabsorbing destroys them.
+- **Reabsorbing a mutated slime destroys its mutagens**, until a late-game upgrade says
+  otherwise.
+
+### Drop rates
+
+A flat 1% is right for commons and badly wrong for rares. Measured against the real spawn
+tables:
+
+| Source | Drop | Zone kills for that specific mutagen |
+|---|---|---|
+| Common monster (23.8% spawn) | **1%** | ~420 |
+| Any mutagen from a zone | — | ~100 |
+| Rare monster at 1% (5% spawn) | 1% | **~2,000** — far too steep |
+| Rare monster at **3%** | 3% | ~670 |
+
+So the rate belongs to the **mutation's rarity, not the monster's** — the same correction
+already applied to materials, where a rare monster's ~5% spawn *is* the grind and its drops
+pay out generously once found.
+
+**Optional but recommended: a pity counter.** Pure 1% RNG with no floor can hand a player 500
+kills and nothing, which reads as broken rather than unlucky. Repurpose the existing
+`monsterKills` tally as a guaranteed floor — say, one mutagen every 150 kills of that type
+regardless of rolls. This keeps the lottery feel, caps the worst case, and gives the counter
+that is being retired a second job instead of deleting it.
+
+### The late-game recovery upgrade
+
+This is the strongest part of the idea and deserves to be built as a proper unlock — a
+**Rendering Vat**, gated behind endgame materials.
+
+- **Before it**, reabsorbing a developed slime destroys its genes, so you only ever dissolve
+  unmutated spares and your roster accretes. Retirement has a real cost.
+- **After it**, you can churn: dissolve a veteran and recover its mutagens to re-apply to a
+  Royal. Suddenly the whole stable is raw material.
+
+That is not a numerical upgrade — it **changes how the player relates to their roster**, which
+is exactly the kind of late-game evolution §15 argues the game is missing. Consider staging it:
+partial recovery (50%) at first tier, full recovery at a second.
+
+### Knock-on decisions
+
+| Thing | What happens to it |
+|---|---|
+| `requiredKills` on mutations | Retired as a gate; becomes the pity floor |
+| `monsterKills` | Kept as a Compendium record and the pity counter |
+| Spawn-time mutation picker | Removed — slimes spawn blank |
+| Grafting | Removed as a separate concept; applying a mutagen *is* the mechanism |
+| `alloyPotential` / `ancient` | **More** valuable — slots now cap how many scarce items a slime can hold |
+| Prism `mutationReset` | Re-scope: currently "remove all mutations", which would destroy items. Make it "extract one mutation back into a mutagen" — a premium Rendering Vat |
+| Prism `instantMutation` | Re-scope to "grants one random mutagen" |
+
+### The risk worth naming
+
+Loss-on-absorb may make absorbing a developed slime *never* correct before the Rendering Vat,
+which could clog the population cap. I think that is correct rather than a flaw — you dissolve
+spares, not veterans, and the Vat is what opens the other mode. But it should be a deliberate
+choice, not a surprise, and the Convalescence Pool's slot pressure is what keeps it from
+becoming a pure hoarding game.
