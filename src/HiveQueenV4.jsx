@@ -8,7 +8,7 @@ import {
   BASE_JELLY,
   JELLY_PER_QUEEN_LEVEL,
   AUTO_SAVE_INTERVAL,
-  TOWER_DEFENSE_COOLDOWN,
+  CARAVAN_COOLDOWN,
   ELEMENTS,
   ARENA_TICK_RATE,
   ROUND_MS,
@@ -19,7 +19,7 @@ import { MUTATION_LIBRARY, TRAIT_LIBRARY, STATUS_EFFECTS, SLIME_TRAITS, getMutat
 import { MONSTER_TYPES, MONSTER_ABILITIES } from './data/monsterData.js';
 import { ZONES, EXPLORATION_EVENTS, INTERMISSION_EVENTS, INTERMISSION_DURATION } from './data/zoneData.js';
 import { BUILDINGS, RESEARCH } from './data/buildingData.js';
-import { TD_LANES, LANE_ORDER, POSITION_ORDER } from './data/towerDefenseData.js';
+import { caravanDay, MAX_CARAVAN_TIER } from './data/caravanData.js';
 import { RANCH_TYPES, RANCH_EVENTS, RANCH_UPGRADE_BONUSES, MAX_RANCH_LEVEL, RANCH_MAX_ACCUMULATION_TIME } from './data/ranchData.js';
 import { HIVE_ABILITIES, PRISM_SHOP, MANA_UPDATE_INTERVAL, MANA_PER_SLIME_PER_HOUR } from './data/hiveData.js';
 import { SKILL_TREES, SKILL_POINTS_PER_LEVEL, getSkillEffects, isZoneUnlocked, isBuildingUnlocked, isPheromoneUnlocked, isFeatureUnlocked } from './data/skillTreeData.js';
@@ -31,9 +31,12 @@ import { saveGame, loadGame, deleteSave } from './utils/saveSystem.js';
 // Importing the combat module registers every mutation/trait effect and
 // validates the registry — a passive with no implementation fails here.
 import './combat/index.js';
-import { computeStats, computeMaxHp, mutationSlots, slotsFromSelection } from './combat/stats.js';
+import { computeStats, computeMaxHp, mutationSlots, slotsFromSelection, buildEffectList } from './combat/stats.js';
 import { makeExpedition, tickExpedition, hydrateExpedition } from './combat/expedition.js';
-import { makeTowerDefense, tickTowerDefense, towerDefenseRewards } from './combat/towerDefense.js';
+import { makeAmbush, tickAmbush, retreatAmbush, hydrateAmbush, dehydrateAmbush } from './combat/caravan.js';
+import { nextTutorial, TUTORIALS, TUTORIAL_ORDER } from './data/tutorialData.js';
+import { MUTAGEN_PITY_KILLS } from './data/monsterData.js';
+import { mutagenName } from './data/traitData.js';
 
 /**
  * Rebuild the live references a saved expedition dropped. Combatants are
@@ -52,8 +55,9 @@ const rehydrateExps = (exps, slimes = []) => {
 import {
   SlimeSprite,
   MonsterSprite,
-  ArenaCanvas,
-  TowerDefense,
+  CombatView,
+  Caravan,
+  TutorialModal,
   SlimeForge,
   SlimeDetail,
   Compendium,
@@ -117,10 +121,12 @@ const calculateOfflineProgress = (saved, bonuses, offlineCtx = {}) => {
       }
 
       sideEffects.forEach(se => {
-        if (se.type === 'slimeDeath') {
-          const lost = slimes.find(sl => sl.id === se.id);
-          results.slimesLost.push(lost?.name || 'Slime');
-          slimes = slimes.filter(sl => sl.id !== se.id);
+        if (se.type === 'slimeDown') {
+          const hurt = slimes.find(sl => sl.id === se.id);
+          results.slimesLost.push(hurt?.name || 'Slime');
+          slimes = slimes.map(sl => (
+            sl.id === se.id ? { ...sl, wounded: true, woundedAt: Date.now(), biomass: 0 } : sl
+          ));
         } else if (se.type === 'bioReclaim') {
           bio += se.amount;
           results.biomassGained += se.amount;
@@ -213,10 +219,12 @@ export default function HiveQueenGame() {
   const [speed, setSpeed] = useState(1);
   const [lastTick, setLastTick] = useState(Date.now());
   const [lastSave, setLastSave] = useState(null);
-  const [lastTowerDefense, setLastTowerDefense] = useState(0);
-  const [towerDefense, setTowerDefense] = useState(null);
+  const [lastCaravan, setLastCaravan] = useState(0);
+  const [caravanTier, setCaravanTier] = useState(1);
+  const [ambush, setAmbush] = useState(null);
   const [monsterKills, setMonsterKills] = useState({});
-  const [unlockedMutations, setUnlockedMutations] = useState([]);
+  const [mutagens, setMutagens] = useState({});   // { [mutationId]: count }
+  const [pityKills, setPityKills] = useState({});  // kills since the last pity mutagen
   const [purchasedSkills, setPurchasedSkills] = useState(['expeditionBasics', 'hiveFoundation', 'combatTraining']);
 
   // Ranch system state
@@ -232,34 +240,43 @@ export default function HiveQueenGame() {
   const [activeHiveAbilities, setActiveHiveAbilities] = useState({});
   // Format: { abilityId: expirationTimestamp, ... }
 
-  const [tab, setTab] = useState(0);
+  const [tab, setTab] = useState('hive');
+  // The Brood screen holds both the roster and the pools the slimes rest in.
+  const [broodView, setBroodView] = useState('roster');
   const [menu, setMenu] = useState(false);
   const [dev, setDev] = useState(false);
+  const [seenTutorials, setSeenTutorials] = useState([]);
+  const [tutorialsOn, setTutorialsOn] = useState(true);
   const [selZone, setSelZone] = useState('forest');
   const [party, setParty] = useState([]);
   const [selSlime, setSelSlime] = useState(null);
   const touchX = useRef(null);
   const lastArenaTickRef = useRef(Date.now());
-  const lastTdTickRef = useRef(Date.now());
+  const lastAmbushTickRef = useRef(Date.now());
 
   // Calculate skill effects from purchased skills (must be first, before other calculations)
   const skillEffects = useMemo(() => getSkillEffects(purchasedSkills), [purchasedSkills]);
   const skillBonuses = skillEffects.bonuses;
 
+  // Named for the hive rather than the menu, and one screen shorter: materials
+  // now sit with the buildings that eat them, mutagens with the slimes they go
+  // into, so there is no inventory screen to bounce off.
+  // Six screens, grouped by what they are *about* rather than by system:
+  // the Queen and her hive, the slimes themselves, where slimes are sent,
+  // the one timed event, the record, and the knobs.
   const tabs = [
-    { id: 0, icon: '👑', label: 'Queen' },
-    { id: 1, icon: '🟢', label: 'Slimes', badge: slimes.length },
-    { id: 2, icon: '🗺️', label: 'Explore' },
-    { id: 3, icon: '🏠', label: 'Ranch', skillUnlock: 'ranch' },
-    { id: 4, icon: '🎯', label: 'Defense' },
-    { id: 5, icon: '🌳', label: 'Skills' },
-    { id: 6, icon: '📦', label: 'Inventory' },
-    { id: 7, icon: '📖', label: 'Compendium' },
-    { id: 8, icon: '⚙️', label: 'Settings' },
+    { id: 'hive', icon: '👑', label: 'The Hive' },
+    { id: 'brood', icon: '🟢', label: 'The Brood', badge: slimes.length },
+    { id: 'wilds', icon: '🗺️', label: 'The Wilds' },
+    { id: 'road', icon: '🎯', label: 'The Road' },
+    { id: 'memory', icon: '📖', label: 'Memory' },
+    { id: 'settings', icon: '⚙️', label: 'Settings' },
   ];
 
   // Filter tabs based on skill unlocks
   const visibleTabs = tabs.filter(t => !t.skillUnlock || isFeatureUnlocked(t.skillUnlock, purchasedSkills));
+
+  const woundedCount = slimes.filter(s => s.wounded).length;
 
   const maxJelly = BASE_JELLY + (queen.level - 1) * JELLY_PER_QUEEN_LEVEL + (builds.slimePit || 0) * 10 + (skillBonuses.maxJelly || 0);
   const usedJelly = slimes.reduce((s, sl) => s + (sl.magCost || 0), 0);
@@ -275,6 +292,8 @@ export default function HiveQueenGame() {
     bio: 1 + (research.includes('efficientDigestion') ? 0.2 : 0),
     xp: 1 + (research.includes('enhancedAbsorption') ? 0.25 : 0),
     spd: 1 + (research.includes('swiftSlimes') ? 0.2 : 0),
+    travel: research.includes('extendedExpedition') ? 0.6 : 1,   // Expedition Depot
+    mats: 1 + (research.includes('infiniteExpedition') ? 0.25 : 0), // Deep Exploration Hub
     hp: 1 + (research.includes('slimeVitality') ? 0.15 : 0),
     res: (1 + (builds.researchLab || 0) * 0.25) * (1 + (skillBonuses.researchSpeed || 0) / 100),
   };
@@ -298,7 +317,7 @@ export default function HiveQueenGame() {
     rareSpawn: 1 + (skillBonuses.rareSpawn || 0) / 100,
     expeditionRewards: 1 + (skillBonuses.expeditionRewards || 0) / 100,
     biomassGain: 1 + ((skillBonuses.biomassGain || 0) + (skillBonuses.allResources || 0)) / 100,
-    defenseSlots: skillBonuses.defenseSlots || 0, // Extra tower defense slots
+    squadSlots: skillBonuses.defenseSlots || 0, // Extra caravan ambush slots
     mutationSlots: skillBonuses.mutationSlots || 0, // Extra mutation slots for slimes
   };
 
@@ -308,7 +327,7 @@ export default function HiveQueenGame() {
   // Calculate ranch bonuses from active ranch buildings
   const getRanchBonuses = useCallback(() => {
     const bonuses = {
-      towerDefenseDamage: 0, // % bonus to TD damage from warDen
+      ambushDamage: 0,       // % bonus to caravan ambush damage from warDen
       bonusManaPerHour: 0,   // Extra mana per hour from manaWell
       expeditionRewards: 0,  // % bonus to expedition rewards from scoutPost
     };
@@ -329,7 +348,7 @@ export default function HiveQueenGame() {
 
         if (ranch.effect === 'defenseBonus' && ranch.buffType === 'damage') {
           // warDen: +damage% based on firmness
-          bonuses.towerDefenseDamage += stats.firmness * ranch.effectValue * effectMult;
+          bonuses.ambushDamage += stats.firmness * ranch.effectValue * effectMult;
         } else if (ranch.effect === 'manaBonus') {
           // manaWell: +mana/hour based on viscosity
           bonuses.bonusManaPerHour += stats.viscosity * ranch.effectValue * effectMult;
@@ -456,15 +475,11 @@ export default function HiveQueenGame() {
         }
         break;
       case 'instantMutation':
-        const lockedMutations = Object.keys(MUTATION_LIBRARY).filter(m => !unlockedMutations.includes(m));
-        if (lockedMutations.length > 0) {
-          const newMutation = lockedMutations[Math.floor(Math.random() * lockedMutations.length)];
-          setUnlockedMutations(p => [...p, newMutation]);
-          log(`🧬 Unlocked mutation: ${MUTATION_LIBRARY[newMutation].name}!`);
-        } else {
-          // Refund if no mutations to unlock
-          setPrisms(p => p + item.cost);
-          log(`Already unlocked all mutations!`);
+        {
+          const all = Object.keys(MUTATION_LIBRARY);
+          const rolled = all[Math.floor(Math.random() * all.length)];
+          grantMutagen(rolled);
+          log(`🧬 A ${MUTATION_LIBRARY[rolled].name} mutagen condenses out of the prism.`);
         }
         break;
       default:
@@ -487,7 +502,11 @@ export default function HiveQueenGame() {
         setResearch(offline.newState.research);
         setQueen(saved.queen);
         setBuilds(saved.builds || {});
-        setLastTowerDefense(saved.lastTowerDefense || 0);
+        setLastCaravan(saved.lastCaravan || 0);
+        setCaravanTier(saved.caravanTier || 1);
+        setAmbush(saved.ambush ? hydrateAmbush(saved.ambush, saved.slimes || [], buildEffectList) : null);
+        setSeenTutorials(saved.seenTutorials || []);
+        setTutorialsOn(saved.tutorialsOn !== false);
 
         // Apply monster kills gained from offline progress
         const newMonsterKills = { ...(saved.monsterKills || {}) };
@@ -495,19 +514,9 @@ export default function HiveQueenGame() {
           newMonsterKills[type] = (newMonsterKills[type] || 0) + count;
         });
         setMonsterKills(newMonsterKills);
+        setMutagens(saved.mutagens || {});
+        setPityKills(saved.pityKills || {});
 
-        // Check for new mutation unlocks from offline kills
-        const newUnlocks = [...(saved.unlockedMutations || [])];
-        Object.entries(newMonsterKills).forEach(([monsterType, kills]) => {
-          const md = MONSTER_TYPES[monsterType];
-          if (md?.trait && !newUnlocks.includes(md.trait)) {
-            const mutation = MUTATION_LIBRARY[md.trait];
-            if (mutation && kills >= mutation.requiredKills) {
-              newUnlocks.push(md.trait);
-            }
-          }
-        });
-        setUnlockedMutations(newUnlocks);
         setPurchasedSkills(saved.purchasedSkills || ['expeditionBasics', 'hiveFoundation', 'combatTraining']);
 
         // Load ranch state
@@ -532,9 +541,14 @@ export default function HiveQueenGame() {
         setBuilds(saved.builds || {});
         setResearch(saved.research || []);
         setActiveRes(saved.activeRes);
-        setLastTowerDefense(saved.lastTowerDefense || 0);
+        setLastCaravan(saved.lastCaravan || 0);
+        setCaravanTier(saved.caravanTier || 1);
+        setAmbush(saved.ambush ? hydrateAmbush(saved.ambush, saved.slimes || [], buildEffectList) : null);
+        setSeenTutorials(saved.seenTutorials || []);
+        setTutorialsOn(saved.tutorialsOn !== false);
         setMonsterKills(saved.monsterKills || {});
-        setUnlockedMutations(saved.unlockedMutations || []);
+        setMutagens(saved.mutagens || {});
+        setPityKills(saved.pityKills || {});
         setPurchasedSkills(saved.purchasedSkills || ['expeditionBasics', 'hiveFoundation', 'combatTraining']);
         setPrisms(saved.prisms || 0);
         setRanchBuildings(saved.ranchBuildings || {});
@@ -554,16 +568,16 @@ export default function HiveQueenGame() {
   useEffect(() => {
     if (!gameLoaded) return;
     const interval = setInterval(() => {
-      const state = { queen, bio, mats, slimes, exps, builds, research, activeRes, lastTowerDefense, monsterKills, unlockedMutations, purchasedSkills, prisms, ranchBuildings, ranchAssignments, ranchProgress, mana, lastManaUpdate, activeHiveAbilities, lastSave: Date.now() };
+      const state = { queen, bio, mats, slimes, exps, builds, research, activeRes, lastCaravan, caravanTier, ambush, seenTutorials, tutorialsOn, monsterKills, mutagens, pityKills, purchasedSkills, prisms, ranchBuildings, ranchAssignments, ranchProgress, mana, lastManaUpdate, activeHiveAbilities, lastSave: Date.now() };
       if (saveGame(state)) {
         setLastSave(Date.now());
       }
     }, AUTO_SAVE_INTERVAL);
     return () => clearInterval(interval);
-  }, [gameLoaded, queen, bio, mats, slimes, exps, builds, research, activeRes, lastTowerDefense, monsterKills, unlockedMutations, purchasedSkills, prisms, ranchBuildings, ranchAssignments, ranchProgress, mana, lastManaUpdate, activeHiveAbilities]);
+  }, [gameLoaded, queen, bio, mats, slimes, exps, builds, research, activeRes, lastCaravan, caravanTier, ambush, seenTutorials, tutorialsOn, monsterKills, mutagens, pityKills, purchasedSkills, prisms, ranchBuildings, ranchAssignments, ranchProgress, mana, lastManaUpdate, activeHiveAbilities]);
 
   const manualSave = () => {
-    const state = { queen, bio, mats, slimes, exps, builds, research, activeRes, lastTowerDefense, monsterKills, unlockedMutations, purchasedSkills, prisms, ranchBuildings, ranchAssignments, ranchProgress, mana, lastManaUpdate, activeHiveAbilities, lastSave: Date.now() };
+    const state = { queen, bio, mats, slimes, exps, builds, research, activeRes, lastCaravan, caravanTier, ambush, seenTutorials, tutorialsOn, monsterKills, mutagens, pityKills, purchasedSkills, prisms, ranchBuildings, ranchAssignments, ranchProgress, mana, lastManaUpdate, activeHiveAbilities, lastSave: Date.now() };
     if (saveGame(state)) {
       setLastSave(Date.now());
       log('💾 Game saved!');
@@ -582,10 +596,14 @@ export default function HiveQueenGame() {
     setResearch([]);
     setActiveRes(null);
     setLastSave(null);
-    setLastTowerDefense(0);
-    setTowerDefense(null);
+    setLastCaravan(0);
+    setCaravanTier(1);
+    setAmbush(null);
+    setSeenTutorials([]);
+    setTutorialsOn(true);
+    setMutagens({});
+    setPityKills({});
     setMonsterKills({});
-    setUnlockedMutations([]);
     setPurchasedSkills(['expeditionBasics', 'hiveFoundation', 'combatTraining']);
     setPrisms(0);
     setRanchBuildings({});
@@ -606,82 +624,58 @@ export default function HiveQueenGame() {
   const onTouchEnd = (e) => {
     if (touchX.current === null) return;
     const diff = touchX.current - e.changedTouches[0].clientX;
-    if (Math.abs(diff) > 50) { if (diff > 0 && tab < tabs.length - 1) setTab(tab + 1); else if (diff < 0 && tab > 0) setTab(tab - 1); }
+    if (Math.abs(diff) > 50) {
+      const i = visibleTabs.findIndex(t => t.id === tab);
+      const next = i + (diff > 0 ? 1 : -1);
+      if (i >= 0 && next >= 0 && next < visibleTabs.length) setTab(visibleTabs[next].id);
+    }
     touchX.current = null;
   };
 
-  const spawn = (tier, selMutations, name, magCost) => {
+  const spawn = (tier, name, magCost) => {
     const td = SLIME_TIERS[tier];
-    const bioCost = BASE_SLIME_COST + selMutations.length * 5;
+    const bioCost = BASE_SLIME_COST;
     if (bio < bioCost || freeJelly < magCost) return;
 
-    // Base stats: flat 5, scaled by tier multiplier
-    // Primal Blessing hive ability: +10% base stats
+    // Slimes are born blank. Everything they become is applied afterwards.
     const spawnBoostMult = isHiveAbilityActive('spawnBoost') ? 1.10 : 1.0;
     const baseStat = Math.floor(5 * td.statMultiplier * spawnBoostMult);
     const baseStats = { firmness: baseStat, slipperiness: baseStat, viscosity: baseStat };
-    // Each mutation's flat `bonus` is the only stat it contributes at spawn;
-    // anything else it does is a hook, resolved in combat.
-    selMutations.forEach(id => { const m = MUTATION_LIBRARY[id]; if (m) baseStats[m.stat] += m.bonus; });
 
-    // Random personality trait at spawn
     let spawnTraits = [];
     const traitRoll = Math.random();
     if (traitRoll < 0.05) {
-      // 5% chance for uncommon trait
-      const uncommonTraits = Object.entries(SLIME_TRAITS)
-        .filter(([_, t]) => t.rarity === 'uncommon' && !t.source)
-        .map(([id]) => id);
-      if (uncommonTraits.length > 0) {
-        spawnTraits = [uncommonTraits[Math.floor(Math.random() * uncommonTraits.length)]];
-      }
+      const uncommon = Object.entries(SLIME_TRAITS)
+        .filter(([, t]) => t.rarity === 'uncommon' && !t.source).map(([id]) => id);
+      if (uncommon.length) spawnTraits = [uncommon[Math.floor(Math.random() * uncommon.length)]];
     } else if (traitRoll < 0.25) {
-      // 20% chance for common trait
-      const commonTraits = Object.entries(SLIME_TRAITS)
-        .filter(([_, t]) => t.rarity === 'common' && !t.source)
-        .map(([id]) => id);
-      if (commonTraits.length > 0) {
-        spawnTraits = [commonTraits[Math.floor(Math.random() * commonTraits.length)]];
-      }
+      const common = Object.entries(SLIME_TRAITS)
+        .filter(([, t]) => t.rarity === 'common' && !t.source).map(([id]) => id);
+      if (common.length) spawnTraits = [common[Math.floor(Math.random() * common.length)]];
     }
 
-    // Generate name with potential title from trait
     const slimeName = spawnTraits.length > 0 ? genName(spawnTraits) : name;
-
-    // Max HP comes from the shared helper, which reads hpMod hooks (hardy,
-    // glutton, primordial) and recomputes as the slime's firmness grows.
-    const provisional = { tier, mutations: selMutations, traits: spawnTraits, baseStats, biomass: 0 };
+    const provisional = { tier, mutations: [], traits: spawnTraits, baseStats, biomass: 0 };
     const maxHp = computeMaxHp(
       provisional,
       computeStats(provisional, 0, combatBonuses, combatBonuses.mutationPower),
       bon, combatBonuses, combatBonuses.mutationPower,
     );
 
-    // Apply element bonuses from selected mutations
-    const startingElements = createDefaultElements();
-    selMutations.forEach(id => {
-      const m = MUTATION_LIBRARY[id];
-      if (m?.elementBonus) {
-        Object.entries(m.elementBonus).forEach(([elem, bonus]) => {
-          startingElements[elem] = Math.min(100, (startingElements[elem] || 0) + bonus);
-        });
-      }
-    });
     setSlimes(p => [...p, {
       id: genId(),
       name: slimeName,
       tier,
       biomass: 0,
-      mutations: selMutations,  // Combat abilities from MUTATION_LIBRARY
-      traits: spawnTraits,      // Personality traits from SLIME_TRAITS
+      mutations: [],
+      traits: spawnTraits,
       baseStats,
       maxHp,
       magCost,
-      elements: startingElements,
+      elements: createDefaultElements(),
       primaryElement: null,
     }]);
     setBio(p => p - bioCost);
-    // Mutations are unlimited once unlocked - no inventory consumption
     if (spawnTraits.length > 0) {
       const trait = SLIME_TRAITS[spawnTraits[0]];
       log(`${slimeName} emerges with ${trait.icon} ${trait.name} trait!`);
@@ -690,13 +684,119 @@ export default function HiveQueenGame() {
     }
   };
 
+  /**
+   * A slime that goes down is wounded, not killed. It forfeits every point of
+   * held biomass — the temporary half of its power — and cannot be deployed
+   * again until it has recovered in a Convalescence Pool. It keeps its jelly
+   * slot the whole time, so a bad run clogs the hive's capacity.
+   */
+  const woundSlime = useCallback((id) => {
+    setSlimes(list => list.map(sl => (
+      sl.id === id ? { ...sl, wounded: true, woundedAt: Date.now(), biomass: 0 } : sl
+    )));
+  }, []);
+
+  /**
+   * Take the biomass a slime is carrying without harming it. This is how held
+   * biomass becomes spendable: the slime drops back to its intrinsic power and
+   * carries on.
+   */
+  const grantMutagen = useCallback((mutationId, n = 1) => {
+    setMutagens(prev => ({ ...prev, [mutationId]: (prev[mutationId] || 0) + n }));
+  }, []);
+
+  /**
+   * Apply a mutagen to a slime. Permanent and irreversible: the item is spent,
+   * the mutation becomes intrinsic, and only the Rendering Vat ever gets it back.
+   */
+  const applyMutagen = (slimeId, mutationId) => {
+    const slime = slimes.find(s => s.id === slimeId);
+    const mut = MUTATION_LIBRARY[mutationId];
+    if (!slime || !mut || (mutagens[mutationId] || 0) <= 0) return;
+    if ((slime.mutations || []).includes(mutationId)) return;
+    if ((slime.mutations || []).length >= mutationSlots(slime, combatBonuses.mutationSlots)) return;
+    if (Object.values(exps).some(e => (e.slimes || []).some(x => x.id === slimeId))) {
+      log('Recall them before you start cutting.');
+      return;
+    }
+
+    setMutagens(prev => {
+      const n = { ...prev, [mutationId]: (prev[mutationId] || 0) - 1 };
+      if (n[mutationId] <= 0) delete n[mutationId];
+      return n;
+    });
+    setSlimes(list => list.map(sl => {
+      if (sl.id !== slimeId) return sl;
+      const next = {
+        ...sl,
+        mutations: [...(sl.mutations || []), mutationId],
+        baseStats: { ...sl.baseStats, [mut.stat]: sl.baseStats[mut.stat] + mut.bonus },
+      };
+      if (mut.elementBonus && !next.primaryElement) {
+        const elements = { ...(next.elements || createDefaultElements()) };
+        Object.entries(mut.elementBonus).forEach(([el, bonus]) => {
+          elements[el] = Math.min(100, (elements[el] || 0) + bonus);
+        });
+        next.elements = elements;
+      }
+      next.maxHp = getMaxHp(next);
+      return next;
+    }));
+    log(`🧬 ${mut.icon} ${mut.name} takes hold in ${slime.name}.`);
+  };
+
+  /** How much of a dissolved slime's genework the Rendering Vat gives back. */
+  const mutagenRecovery = () => [0, 0.5, 1][builds.renderingVat || 0] ?? 1;
+
+  const withdrawBiomass = (id) => {
+    const sl = slimes.find(s => s.id === id);
+    if (!sl) return;
+    const held = Math.floor(sl.biomass || 0);
+    if (held <= 0) return;
+    if (Object.values(exps).some(e => (e.slimes || []).some(x => x.id === id))) {
+      log('Recall them first — you cannot withdraw from a slime in the field.');
+      return;
+    }
+    setBio(p => p + held);
+    setSlimes(list => list.map(x => (x.id === id ? { ...x, biomass: 0 } : x)));
+    log(`Drew ${held}🧬 from ${sl.name}.`);
+  };
+
+  /** Dissolve a slime for good: its held biomass plus its body, and the jelly back. */
   const reabsorb = (id) => {
     const sl = slimes.find(s => s.id === id);
     if (!sl || Object.values(exps).some(e => (e.slimes || []).some(s => s.id === id))) { log('Cannot reabsorb!'); return; }
-    const biomassGained = sl.biomass || 0;
-    setBio(p => p + biomassGained);
+    const held = Math.floor(sl.biomass || 0);
+    const body = (SLIME_TIERS[sl.tier]?.jellyCost || 5) * 10;
+    setBio(p => p + held + body);
+
+    // Dissolving a developed slime destroys its genework until the Rendering
+    // Vat is built — the point at which the roster becomes raw material.
+    const carried = sl.mutations || [];
+    const recovery = mutagenRecovery();
+    if (carried.length) {
+      const recovered = carried.filter(() => Math.random() < recovery);
+      if (recovered.length) {
+        setMutagens(prev => {
+          const n = { ...prev };
+          recovered.forEach(m => { n[m] = (n[m] || 0) + 1; });
+          return n;
+        });
+        log(`⚗️ The vat reclaims ${recovered.map(m => mutagenName(m)).join(', ')}.`);
+      }
+      const lost = carried.length - recovered.length;
+      if (lost > 0) log(`🧬 ${lost} mutation${lost === 1 ? '' : 's'} lost with the body.`);
+    }
+
     setSlimes(p => p.filter(s => s.id !== id));
-    log(`Reabsorbed ${sl.name}! +${biomassGained}🧬`);
+    setRanchAssignments(prev => {
+      const next = {};
+      Object.entries(prev).forEach(([rid, list]) => {
+        next[rid] = (list || []).filter(a => (typeof a === 'object' ? a.slimeId : a) !== id);
+      });
+      return next;
+    });
+    log(`Reabsorbed ${sl.name}! +${held + body}🧬 (${held} held, ${body} from the body)`);
   };
 
   const levelUpQueen = () => {
@@ -724,6 +824,23 @@ export default function HiveQueenGame() {
     return total;
   }, 0);
   const availableSkillPoints = totalSkillPoints - spentSkillPoints;
+
+  // Everything the tutorial triggers need, and nothing else.
+  const tutorialState = {
+    tab,
+    broodView,
+    skillPoints: availableSkillPoints,
+    woundedCount,
+    mutagenKinds: Object.keys(mutagens).length,
+    maxHeldBiomass: slimes.reduce((n, sl) => Math.max(n, sl.biomass || 0), 0),
+    maxElementAffinity: slimes.reduce(
+      (n, sl) => Math.max(n, ...Object.values(sl.elements || { a: 0 })), 0),
+    totalKills: Object.values(monsterKills).reduce((n, c) => n + c, 0),
+  };
+  const activeTutorial = tutorialsOn ? nextTutorial(tutorialState, seenTutorials) : null;
+  const dismissTutorial = () => {
+    if (activeTutorial) setSeenTutorials(prev => [...prev, activeTutorial.id]);
+  };
 
   // ============== RANCH FUNCTIONS ==============
   // ranchAssignments structure: { ranchId: [{ slimeId, startTime, accumulated: { biomass, element, stats, events } }] }
@@ -821,6 +938,11 @@ export default function HiveQueenGame() {
 
     const slime = slimes.find(s => s.id === slimeId);
     if (!slime) return false;
+
+    // The Convalescence Pool only takes the wounded; every other ranch refuses
+    // them, because a wounded slime has nothing to give until it has mended.
+    if (ranch.woundedOnly && !slime.wounded) return false;
+    if (!ranch.woundedOnly && slime.wounded) return false;
 
     // Check if slime is on expedition
     if (Object.values(exps).some(e => (e.slimes || []).some(s => s.id === slimeId))) return false;
@@ -953,11 +1075,9 @@ export default function HiveQueenGame() {
     return Date.now();
   };
 
-  const [expDuration, setExpDuration] = useState('10'); // '10', '100', 'infinite'
   const [expSummaries, setExpSummaries] = useState([]); // Array of expedition summaries
   const [expandedSections, setExpandedSections] = useState({ research: false, buildings: false, queenUnlocks: false, mana: false }); // Collapsible sections
   const [verboseLogs, setVerboseLogs] = useState(false); // Toggle for detailed combat calculations in logs
-  const [queenSlimeModal, setQueenSlimeModal] = useState(null); // Slime ID for modal on queen screen
   const [editingSlimeName, setEditingSlimeName] = useState(null); // { id, name, title } for editing
 
   // Function to update a slime's name or title
@@ -998,12 +1118,13 @@ export default function HiveQueenGame() {
 
   /** Everything the resolver needs to know about global game state. */
   const combatContext = useCallback(() => ({
-    combatBonuses,
+    combatBonuses: { ...combatBonuses, materialDrop: combatBonuses.materialDrop * bon.mats },
     bon,
     builds,
     passives: skillEffects.passives,
     mutationPower: combatBonuses.mutationPower || 1,
     ranchBonus: getRanchBonuses().expeditionRewards,
+    travelMult: bon.travel,
     roundMs: ROUND_MS,
     hiveAbilities: {
       sharedVigor:      isHiveAbilityActive('sharedVigor'),
@@ -1012,9 +1133,10 @@ export default function HiveQueenGame() {
     },
   }), [combatBonuses, bon, builds, skillEffects, getRanchBonuses, activeHiveAbilities]);
 
-  const startExp = (zone, duration = expDuration) => {
+  const startExp = (zone) => {
     if (exps[zone] || !party.length) return;
-    const targetKills = duration === '10' ? 10 : duration === '100' ? 100 : Infinity;
+    // Expeditions run until you recall them or the party goes down.
+    const targetKills = Infinity;
 
     const roster = party.map(id => slimes.find(s => s.id === id)).filter(Boolean);
     const exp = makeExpedition(zone, roster, targetKills, combatContext());
@@ -1092,25 +1214,22 @@ export default function HiveQueenGame() {
 
       log(`Recalled from ${ZONES[zone].name}! Materials secured.`);
 
-      // Count kills toward mutation unlocks (only on successful recall)
+      // Kills no longer unlock anything — they are the pity floor that
+      // guarantees a mutagen eventually, however the rolls fall.
       Object.entries(summary.monsterKillCounts || {}).forEach(([monsterType, count]) => {
         if (count <= 0) return;
-        setMonsterKills(prev => {
-          const newTotal = (prev[monsterType] || 0) + count;
-          const md = MONSTER_TYPES[monsterType];
-          if (md && md.mutation) {
-            const mutation = MUTATION_LIBRARY[md.mutation];
-            if (mutation && newTotal >= mutation.requiredKills) {
-              setUnlockedMutations(p => {
-                if (!p.includes(md.mutation)) {
-                  log(`🧬 Mutation Unlocked: ${mutation.name}!`);
-                  return [...p, md.mutation];
-                }
-                return p;
-              });
-            }
+        setMonsterKills(prev => ({ ...prev, [monsterType]: (prev[monsterType] || 0) + count }));
+
+        const md = MONSTER_TYPES[monsterType];
+        if (!md?.mutation) return;
+        setPityKills(prev => {
+          const total = (prev[monsterType] || 0) + count;
+          const earned = Math.floor(total / MUTAGEN_PITY_KILLS);
+          if (earned > 0) {
+            grantMutagen(md.mutation, earned);
+            log(`🧬 Enough ${md.name} samples to culture ${earned > 1 ? `${earned} mutagens` : 'a mutagen'}.`);
           }
-          return { ...prev, [monsterType]: newTotal };
+          return { ...prev, [monsterType]: total % MUTAGEN_PITY_KILLS };
         });
       });
     } else {
@@ -1119,47 +1238,6 @@ export default function HiveQueenGame() {
 
     setExpSummaries(s => [...s, { ...summary, id: Date.now() }]);
     setBLogs(p => { const n = { ...p }; delete n[zone]; return n; });
-  };
-
-  /**
-   * Cost to graft one more mutation onto an existing slime. Scaled by tier, so
-   * adding to a mature Royal is a real investment rather than a formality.
-   */
-  const graftCost = (slime) => (SLIME_TIERS[slime?.tier]?.jellyCost || 5) * 10;
-
-  const graftMutation = (slimeId, mutationId) => {
-    const slime = slimes.find(s => s.id === slimeId);
-    const mut = MUTATION_LIBRARY[mutationId];
-    if (!slime || !mut || !unlockedMutations.includes(mutationId)) return;
-    if ((slime.mutations || []).includes(mutationId)) return;
-
-    // Slots come from tier + ancient + alloyPotential + skill tree.
-    const slots = mutationSlots(slime, combatBonuses.mutationSlots);
-    if ((slime.mutations || []).length >= slots) return;
-
-    const cost = graftCost(slime);
-    if (bio < cost) return;
-
-    setBio(b => b - cost);
-    setSlimes(list => list.map(sl => {
-      if (sl.id !== slimeId) return sl;
-      const next = {
-        ...sl,
-        mutations: [...(sl.mutations || []), mutationId],
-        baseStats: { ...sl.baseStats, [mut.stat]: sl.baseStats[mut.stat] + mut.bonus },
-      };
-      // Grafting can carry elemental affinity with it, same as at spawn.
-      if (mut.elementBonus && !next.primaryElement) {
-        const elements = { ...(next.elements || createDefaultElements()) };
-        Object.entries(mut.elementBonus).forEach(([el, bonus]) => {
-          elements[el] = Math.min(100, (elements[el] || 0) + bonus);
-        });
-        next.elements = elements;
-      }
-      next.maxHp = getMaxHp(next);
-      return next;
-    }));
-    log(`🧬 Grafted ${mut.icon} ${mut.name} onto ${slime.name} for ${cost}🧬.`);
   };
 
   const startRes = (id) => {
@@ -1199,53 +1277,70 @@ export default function HiveQueenGame() {
     log(`Built ${b.name}!`);
   };
 
-  // ── Tower Defense ─────────────────────────────────────────────────────────
-  // Runs on the same round resolver as expeditions, with lanes and positions
-  // instead of a single arena. See src/combat/towerDefense.js.
+  // ── Caravan ambush ────────────────────────────────────────────────────────
+  // A daily damage race on the same round resolver. The only decision is who
+  // goes; everything after that you can walk away from. See combat/caravan.js.
 
-  const tdCooldownLeft = () => {
-    const remaining = TOWER_DEFENSE_COOLDOWN - (Date.now() - lastTowerDefense);
-    return remaining > 0 ? remaining : 0;
+  const caravanCooldownLeft = () => Math.max(0, CARAVAN_COOLDOWN - (Date.now() - lastCaravan));
+  const squadSize = 3 + (builds.ambushSlot || 0) + (combatBonuses.squadSlots || 0);
+  const hasScouts = (builds.scoutCamp || 0) > 0;
+
+  const startAmbush = (squadIds) => {
+    if (!squadIds?.length || caravanCooldownLeft() > 0) return;
+    const roster = squadIds.map(id => slimes.find(s => s.id === id)).filter(Boolean);
+    if (!roster.length) return;
+
+    // The War Den ranch trains the raiding party specifically, so its bonus
+    // rides on the ambush context rather than the global one.
+    const base = combatContext();
+    const warDen = getRanchBonuses().ambushDamage || 0;
+    const ctx = warDen > 0
+      ? { ...base, combatBonuses: { ...base.combatBonuses, firmness: (base.combatBonuses.firmness || 1) * (1 + warDen) } }
+      : base;
+
+    setAmbush(makeAmbush(roster, caravanTier, { ...ctx, catapults: builds.slimeCatapult || 0 }, caravanDay()));
+    lastAmbushTickRef.current = Date.now();
+    log(`🎯 Ambush sprung on a tier ${caravanTier} caravan!`);
   };
 
-  const startTowerDefense = (placements) => {
-    const anyPlaced = Object.values(placements || {})
-      .some(lane => Object.values(lane || {}).some(Boolean));
-    if (!anyPlaced || tdCooldownLeft() > 0) return;
+  const finishAmbush = useCallback((finished) => {
+    const { summary } = finished;
+    const { banked } = summary;
 
-    setTowerDefense(makeTowerDefense(placements, slimes, queen.level, combatContext()));
-    lastTdTickRef.current = Date.now();
-    log('🎯 The humans are coming. Hold the line!');
-  };
-
-  const finishTowerDefense = useCallback((td) => {
-    const summary = towerDefenseRewards(td);
-    const { rewards } = summary;
-
-    setBio(b => b + rewards.biomass);
-    if (rewards.prisms > 0) setPrisms(p => p + rewards.prisms);
-    if (Object.keys(rewards.materials).length) {
+    if (banked.biomass > 0) setBio(b => b + banked.biomass);
+    if (banked.prisms > 0)  setPrisms(p => p + banked.prisms);
+    if (Object.keys(banked.mats).length) {
       setMats(m => {
         const n = { ...m };
-        Object.entries(rewards.materials).forEach(([mat, c]) => { n[mat] = (n[mat] || 0) + c; });
+        Object.entries(banked.mats).forEach(([mat, c]) => { n[mat] = (n[mat] || 0) + c; });
         return n;
       });
     }
 
-    if (summary.flawless) {
-      log(`🏆 Flawless defense! +${rewards.biomass}🧬, +1💎 Prism, +1🏅 Champion Badge`);
-    } else if (summary.victory) {
-      log(`🎉 Line held (${summary.breaches.length} lane lost). +${rewards.biomass}🧬, +1💎 Prism`);
+    const matStr = Object.entries(banked.mats).map(([m, c]) => `${c}× ${m}`).join(', ');
+    if (summary.routed) {
+      setCaravanTier(t => Math.min(MAX_CARAVAN_TIER, t + 1));
+      log(`💎 Caravan routed! +${banked.biomass}🧬, +1💎${matStr ? `, ${matStr}` : ''}. Caravans rise to tier ${summary.nextTier}.`);
+    } else if (banked.biomass > 0) {
+      log(`🎯 Ambush over — ${summary.killed.length} killed. +${banked.biomass}🧬${matStr ? `, ${matStr}` : ''}`);
     } else {
-      log(`💀 The hive was overrun. Salvaged +${rewards.biomass}🧬 from the waves you cleared.`);
+      log('🌫️ The caravan got clear before anything fell.');
     }
-    summary.lost.forEach(s => log(`💔 ${s.name} fell defending the ${TD_LANES[s.lane].name}.`));
+    summary.lost.forEach(sl => log(`💔 ${sl.name} was lost in the ambush.`));
 
-    setTowerDefense(prev => (prev ? { ...prev, summary } : prev));
-    setLastTowerDefense(Date.now());
+    setLastCaravan(Date.now());
   }, [log]);
 
-  const closeTowerDefense = () => setTowerDefense(null);
+  const doRetreat = () => {
+    setAmbush(prev => {
+      if (!prev || prev.phase !== 'battle') return prev;
+      const next = retreatAmbush({ ...prev });
+      setTimeout(() => finishAmbush(next), 0);
+      return { ...next };
+    });
+  };
+
+  const closeAmbush = () => setAmbush(null);
 
   // Game Loop
   useEffect(() => {
@@ -1308,6 +1403,36 @@ export default function HiveQueenGame() {
           // Nurturing Aura hive ability: double ranch tick speed
           const ranchSpeedMult = isHiveAbilityActive('nurturingAura') ? 2 : 1;
           next[ranchId] = (next[ranchId] || 0) + dtSeconds * ranchSpeedMult;
+
+          // Convalescence is per-slime, timed from when each was laid in,
+          // rather than sharing one ranch-wide cycle.
+          if (ranch.effect === 'recover') {
+            const healed = [];
+            (ranchAssignments[ranchId] || []).forEach(a => {
+              if (typeof a !== 'object') return;
+              // cycleTime is in real seconds; startTime is a ms timestamp.
+              if (Date.now() - a.startTime >= effectiveCycleTime * 1000) {
+                healed.push(a.slimeId);
+              }
+            });
+            if (healed.length) {
+              setTimeout(() => {
+                setSlimes(list => list.map(sl => (
+                  healed.includes(sl.id) ? { ...sl, wounded: false, woundedAt: null } : sl
+                )));
+                setRanchAssignments(prev => ({
+                  ...prev,
+                  [ranchId]: (prev[ranchId] || []).filter(a =>
+                    !healed.includes(typeof a === 'object' ? a.slimeId : a)),
+                }));
+                healed.forEach(id => {
+                  const sl = slimes.find(x => x.id === id);
+                  if (sl) log(`🩹 ${sl.name} is whole again.`);
+                });
+              }, 0);
+            }
+            return; // recovery has no accumulating reward
+          }
 
           // Check if cycle completes
           if (next[ranchId] >= effectiveCycleTime) {
@@ -1453,14 +1578,17 @@ export default function HiveQueenGame() {
           setTimeout(() => {
             pending.forEach(se => {
               switch (se.type) {
-                case 'slimeDeath':
-                  setSlimes(list => list.filter(sl => sl.id !== se.id));
+                case 'slimeDown':
+                  woundSlime(se.id);
                   break;
                 case 'bioReclaim':
                   setBio(b => b + se.amount);
                   break;
                 case 'prism':
                   setPrisms(p => p + 1);
+                  break;
+                case 'mutagen':
+                  grantMutagen(se.mutation);
                   break;
                 case 'grantTrait':
                   setSlimes(list => list.map(sl =>
@@ -1487,46 +1615,73 @@ export default function HiveQueenGame() {
     return () => clearInterval(iv);
   }, [gameLoaded, exps, speed, combatContext]);
 
-  // Tower Defense loop — same cadence as expeditions, one round at a time.
+  // Caravan loop — same cadence as expeditions, one round at a time.
   useEffect(() => {
-    if (!gameLoaded || !towerDefense || towerDefense.phase !== 'battle') return;
+    if (!gameLoaded || !ambush || ambush.phase !== 'battle') return;
 
     const iv = setInterval(() => {
       const now = Date.now();
-      const dt = (now - lastTdTickRef.current) * speed;
-      lastTdTickRef.current = now;
+      const dt = (now - lastAmbushTickRef.current) * speed;
+      lastAmbushTickRef.current = now;
 
       const ctx = combatContext();
 
-      setTowerDefense(prev => {
+      setAmbush(prev => {
         if (!prev || prev.phase !== 'battle') return prev;
 
-        const { td, sideEffects } = tickTowerDefense(prev, dt, ctx, ROUND_MS);
+        const { ambush: next, sideEffects } = tickAmbush(prev, dt, ctx, ROUND_MS);
 
         if (sideEffects.length) {
           setTimeout(() => {
             sideEffects.forEach(se => {
-              if (se.type === 'slimeDeath') setSlimes(list => list.filter(sl => sl.id !== se.id));
+              if (se.type === 'slimeDown') woundSlime(se.id);
+              if (se.type === 'bioReclaim') setBio(b => b + se.amount);
+              if (se.type === 'mutagen') grantMutagen(se.mutation);
             });
           }, 0);
         }
 
-        if (td.phase !== 'battle') setTimeout(() => finishTowerDefense(td), 0);
-        return { ...td };
+        if (next.phase !== 'battle') setTimeout(() => finishAmbush(next), 0);
+        return { ...next };
       });
     }, ARENA_TICK_RATE);
 
     return () => clearInterval(iv);
-  }, [gameLoaded, towerDefense, speed, combatContext, finishTowerDefense]);
+  }, [gameLoaded, ambush, speed, combatContext, finishAmbush]);
 
-  const deployedToDefense = new Set(
-    LANE_ORDER.flatMap(laneId =>
-      POSITION_ORDER.map(posId => towerDefense?.lanes?.[laneId]?.slots?.[posId]?.id).filter(Boolean)),
+    // The combat view is a projection of the expedition, not part of it — the
+  // renderer invents all geometry from this.
+  const selExpedition = exps[selZone];
+  const expView = selExpedition ? {
+    zone: selZone,
+    slimes: selExpedition.slimes || [],
+    enemies: selExpedition.enemy ? [selExpedition.enemy] : [],
+    focusId: selExpedition.enemy?.id,
+    marching: false,
+  } : null;
+  const expHud = selExpedition ? [
+    { text: `💀 ${selExpedition.kills}${selExpedition.targetKills !== Infinity ? `/${selExpedition.targetKills}` : ''}`, color: '#f59e0b' },
+    { text: `Round ${selExpedition.round}`, color: '#94a3b8' },
+    selExpedition.phase === 'intermission'
+      ? { text: '🚶 Traveling', color: '#22d3ee' }
+      : selExpedition.enemy
+        ? { text: `${selExpedition.enemy.name} ${Math.ceil(selExpedition.enemy.hp)}/${selExpedition.enemy.maxHp}`, color: '#ef4444' }
+        : null,
+  ].filter(Boolean) : null;
+
+  const onAmbush = new Set((ambush?.slimes || []).map(c => c.id));
+  const assignedToRanch = new Set(
+    Object.values(ranchAssignments).flat()
+      .map(a => (typeof a === 'object' ? a?.slimeId : a))
+      .filter(Boolean),
   );
   const avail = slimes.filter(s =>
+    !s.wounded &&
+    !assignedToRanch.has(s.id) &&
     !Object.values(exps).some(e => (e.slimes || []).some(es => es.id === s.id)) &&
     !party.includes(s.id) &&
-    !deployedToDefense.has(s.id));
+    !onAmbush.has(s.id));
+  const woundedSlimes = slimes.filter(s => s.wounded);
   const selSl = slimes.find(s => s.id === selSlime);
   const selExp = selSlime ? Object.values(exps).find(e => (e.slimes || []).some(s => s.id === selSlime)) : null;
   const getResTime = () => { if (!activeRes) return ''; const r = RESEARCH[activeRes.id]; const tot = r.time / bon.res; const rem = Math.ceil(tot * (1 - activeRes.prog / 100)); return `${Math.floor(rem / 60)}:${(rem % 60).toString().padStart(2, '0')}`; };
@@ -1545,148 +1700,19 @@ export default function HiveQueenGame() {
   return (
     <div onTouchStart={onTouch} onTouchEnd={onTouchEnd} style={{ fontFamily: 'system-ui', background: 'linear-gradient(135deg, #1a1a2e, #16213e)', minHeight: '100vh', color: '#e0e0e0' }}>
       {welcomeBack && <WelcomeBackModal data={welcomeBack} onClose={() => setWelcomeBack(null)} />}
-
-      {/* Slime Examination Modal */}
-      {queenSlimeModal && (() => {
-        const sl = slimes.find(s => s.id === queenSlimeModal);
-        const onExp = sl ? Object.entries(exps).find(([_, e]) => (e.slimes || []).some(s => s.id === sl.id)) : null;
-        const expS = onExp ? (onExp[1].slimes || []).find(s => s.id === sl.id) : null;
-        if (!sl) return null;
-        return (
-          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }} onClick={() => setQueenSlimeModal(null)}>
-            <div onClick={(e) => e.stopPropagation()} style={{ background: 'linear-gradient(135deg, #1a1a2e, #16213e)', borderRadius: 15, padding: 20, maxWidth: 500, width: '100%', maxHeight: '90vh', overflowY: 'auto' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 }}>
-                <h3 style={{ margin: 0, fontSize: 18 }}>Examine Slime</h3>
-                <button onClick={() => setQueenSlimeModal(null)} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 6, padding: '8px 16px', color: '#fff', cursor: 'pointer' }}>✕ Close</button>
-              </div>
-
-              {/* Editable Name and Title */}
-              <div style={{ background: 'rgba(0,0,0,0.3)', borderRadius: 10, padding: 12, marginBottom: 15 }}>
-                {editingSlimeName?.id === sl.id ? (
-                  <div>
-                    <div style={{ marginBottom: 10 }}>
-                      <label style={{ fontSize: 11, opacity: 0.7, display: 'block', marginBottom: 4 }}>Name</label>
-                      <input
-                        type="text"
-                        value={editingSlimeName.name}
-                        onChange={(e) => setEditingSlimeName(prev => ({ ...prev, name: e.target.value }))}
-                        maxLength={20}
-                        style={{
-                          width: '100%',
-                          padding: 8,
-                          background: 'rgba(0,0,0,0.3)',
-                          border: '1px solid rgba(255,255,255,0.2)',
-                          borderRadius: 6,
-                          color: '#fff',
-                          fontSize: 14
-                        }}
-                      />
-                    </div>
-                    <div style={{ marginBottom: 10 }}>
-                      <label style={{ fontSize: 11, opacity: 0.7, display: 'block', marginBottom: 4 }}>Title (leave blank for trait title)</label>
-                      <input
-                        type="text"
-                        value={editingSlimeName.title}
-                        onChange={(e) => setEditingSlimeName(prev => ({ ...prev, title: e.target.value }))}
-                        placeholder={sl.traits?.[0] ? SLIME_TRAITS[sl.traits[0]]?.title || '' : ''}
-                        maxLength={25}
-                        style={{
-                          width: '100%',
-                          padding: 8,
-                          background: 'rgba(0,0,0,0.3)',
-                          border: '1px solid rgba(255,255,255,0.2)',
-                          borderRadius: 6,
-                          color: '#fff',
-                          fontSize: 14
-                        }}
-                      />
-                    </div>
-                    <div style={{ display: 'flex', gap: 10 }}>
-                      <button
-                        onClick={() => updateSlimeName(sl.id, editingSlimeName.name, editingSlimeName.title)}
-                        style={{ flex: 1, padding: 8, background: 'linear-gradient(135deg, #22c55e, #16a34a)', border: 'none', borderRadius: 6, color: '#fff', fontWeight: 'bold', cursor: 'pointer', fontSize: 12 }}
-                      >
-                        Save
-                      </button>
-                      <button
-                        onClick={() => setEditingSlimeName(null)}
-                        style={{ flex: 1, padding: 8, background: 'rgba(100,100,100,0.5)', border: 'none', borderRadius: 6, color: '#fff', cursor: 'pointer', fontSize: 12 }}
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div>
-                      <div style={{ fontSize: 16, fontWeight: 'bold' }}>
-                        {sl.name}
-                        <span style={{ fontSize: 12, opacity: 0.7, marginLeft: 4 }}>
-                          {sl.customTitle || (sl.traits?.[0] && SLIME_TRAITS[sl.traits[0]]?.title) || ''}
-                        </span>
-                      </div>
-                      <div style={{ fontSize: 11, opacity: 0.5 }}>Click edit to customize name & title</div>
-                    </div>
-                    <button
-                      onClick={() => setEditingSlimeName({
-                        id: sl.id,
-                        name: sl.name,
-                        title: sl.customTitle || ''
-                      })}
-                      style={{ padding: '6px 12px', background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 6, color: '#fff', cursor: 'pointer', fontSize: 11 }}
-                    >
-                      ✏️ Edit
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              <SlimeDetail
-                slime={sl}
-                expState={expS}
-                getSlimeStats={getSlimeStats}
-                getMaxHp={getMaxHp}
-                mutationSlots={(x) => mutationSlots(x, combatBonuses.mutationSlots)}
-                unlockedMutations={unlockedMutations}
-                biomass={bio}
-                graftCost={graftCost}
-                onGraft={graftMutation}
-              />
-              {!onExp && (
-                <button
-                  onClick={() => { reabsorb(sl.id); setQueenSlimeModal(null); }}
-                  style={{
-                    width: '100%',
-                    marginTop: 15,
-                    padding: 12,
-                    background: 'linear-gradient(135deg, #f59e0b, #ef4444)',
-                    border: 'none',
-                    borderRadius: 8,
-                    color: '#fff',
-                    fontWeight: 'bold',
-                    cursor: 'pointer'
-                  }}
-                >
-                  🔄 Reabsorb
-                </button>
-              )}
-              {onExp && (
-                <div style={{ marginTop: 15, padding: 10, background: 'rgba(34,211,238,0.1)', borderRadius: 8, fontSize: 12, color: '#22d3ee' }}>
-                  ⚠️ This slime is currently on an expedition in {ZONES[onExp[0]].name} and cannot be reabsorbed.
-                </div>
-              )}
-            </div>
-          </div>
-        );
-      })()}
-
       <Menu open={menu} close={() => setMenu(false)} tab={tab} setTab={setTab} tabs={tabs} />
       
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 15px', background: 'rgba(0,0,0,0.3)', position: 'sticky', top: 0, zIndex: 100 }}>
         <button onClick={() => setMenu(true)} style={{ background: 'none', border: 'none', color: '#fff', fontSize: 24, cursor: 'pointer' }}>☰</button>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'rgba(0,0,0,0.3)', padding: '4px 10px', borderRadius: 12, fontSize: 12 }}>🧬 <strong>{Math.floor(bio)}</strong></div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'rgba(0,0,0,0.3)', padding: '4px 10px', borderRadius: 12, fontSize: 12 }}>🍯 <strong>{freeJelly}/{maxJelly}</strong></div>
+          <div
+            title={`Royal Jelly is your population cap — ${slimes.length} slime(s) alive${woundedCount ? `, ${woundedCount} wounded and still holding a slot` : ''}. Raise it with Queen levels, the Slime Pit, and skills.`}
+            style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'rgba(0,0,0,0.3)', padding: '4px 10px', borderRadius: 12, fontSize: 12 }}
+          >
+            🍯 <strong>{freeJelly}/{maxJelly}</strong>
+            {woundedCount > 0 && <span style={{ color: '#f87171', fontSize: 10 }}>🩹{woundedCount}</span>}
+          </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'rgba(0,0,0,0.3)', padding: '4px 10px', borderRadius: 12, fontSize: 12 }}>🔮 <strong>{mana}</strong></div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'rgba(0,0,0,0.3)', padding: '4px 10px', borderRadius: 12, fontSize: 12 }}>💎 <strong>{prisms}</strong></div>
         </div>
@@ -1700,7 +1726,7 @@ export default function HiveQueenGame() {
       <main style={{ padding: 15, paddingBottom: 100 }}>
         <h2 style={{ margin: '0 0 15px', fontSize: 20 }}>{tabs.find(t => t.id === tab)?.icon} {tabs.find(t => t.id === tab)?.label}</h2>
         
-        {tab === 0 && (
+        {tab === 'hive' && (
           <div>
             <div style={{ background: 'rgba(236,72,153,0.1)', borderRadius: 12, marginBottom: 20, padding: 20 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 20, marginBottom: 15 }}>
@@ -1926,49 +1952,47 @@ export default function HiveQueenGame() {
               )}
             </div>
 
-            {/* Slime Management */}
-            <div style={{ background: 'rgba(0,0,0,0.2)', borderRadius: 10, padding: 15 }}>
-              <div style={{ fontSize: 16, fontWeight: 'bold', marginBottom: 15 }}>🧬 Slime Management</div>
-              {slimes.length ? (
-                <div style={{ display: 'grid', gap: 8 }}>
-                  {slimes.map(s => {
-                    const tier = SLIME_TIERS[s.tier];
-                    const onExp = Object.entries(exps).find(([_, e]) => (e.slimes || []).some(es => es.id === s.id));
-                    const expS = onExp ? (onExp[1].slimes || []).find(es => es.id === s.id) : null;
-                    const stats = getSlimeStats(s);
-                    const biomass = s.biomass || 0;
-                    return (
-                      <div key={s.id} onClick={() => setQueenSlimeModal(s.id)} style={{ background: 'rgba(0,0,0,0.3)', borderRadius: 8, padding: 10, border: `2px solid ${tier.color}33`, cursor: 'pointer' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                          <SlimeSprite tier={s.tier} size={40} hp={expS?.hp} maxHp={expS?.maxHp || s.maxHp} mutations={s.mutations} status={expS?.status} primaryElement={s.primaryElement} />
-                          <div style={{ flex: 1 }}>
-                            <div style={{ fontWeight: 'bold', fontSize: 13 }}>{s.name}</div>
-                            <div style={{ fontSize: 10, opacity: 0.7 }}>{tier.name}</div>
-                            <div style={{ display: 'flex', gap: 6, fontSize: 9, marginTop: 3 }}>
-                              {Object.entries(STAT_INFO).map(([k, v]) => <span key={k} style={{ color: v.color }}>{v.icon}{stats[k]}</span>)}
-                            </div>
-                          </div>
-                          <div style={{ textAlign: 'right', fontSize: 10 }}>
-                            <div style={{ opacity: 0.6 }}>❤️ {expS ? Math.ceil(expS.hp) : s.maxHp}/{s.maxHp}</div>
-                            <div style={{ opacity: 0.6 }}>🧬 {Math.floor(biomass)}</div>
-                            {onExp && <div style={{ fontSize: 9, color: '#22d3ee', marginTop: 2 }}>📍 {ZONES[onExp[0]].name}</div>}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div style={{ textAlign: 'center', padding: 20, opacity: 0.5 }}>
-                  <div style={{ fontSize: 40 }}>🥚</div>
-                  <div style={{ fontSize: 12 }}>No slimes yet! Create one in the Slimes tab.</div>
-                </div>
-              )}
-            </div>
+            {/* Stores — kept next to the buildings that eat them */}
+            <details open={availableSkillPoints > 0} style={{ background: 'rgba(0,0,0,0.2)', borderRadius: 10, padding: 15, marginBottom: 15 }}>
+              <summary style={{ fontSize: 16, fontWeight: 'bold', cursor: 'pointer' }}>
+                🌳 Instincts{' '}
+                <span style={{ fontSize: 12, fontWeight: 'normal', opacity: availableSkillPoints > 0 ? 1 : 0.55, color: availableSkillPoints > 0 ? '#4ade80' : undefined }}>
+                  {availableSkillPoints > 0 ? `${availableSkillPoints} point${availableSkillPoints > 1 ? 's' : ''} to spend` : 'no points'}
+                </span>
+              </summary>
+              <div style={{ marginTop: 12 }}>
+              <SkillTree
+                queenLevel={queen.level}
+                purchasedSkills={purchasedSkills}
+                onPurchaseSkill={purchaseSkill}
+                availablePoints={availableSkillPoints}
+              />
+              </div>
+            </details>
+
+            <details style={{ background: 'rgba(0,0,0,0.2)', borderRadius: 10, padding: 15, marginBottom: 15 }}>
+              <summary style={{ fontSize: 16, fontWeight: 'bold', cursor: 'pointer' }}>
+                📦 Stores <span style={{ fontSize: 12, opacity: 0.5, fontWeight: 'normal' }}>
+                  ({Object.keys(mats).length} kinds)
+                </span>
+              </summary>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8, marginTop: 12 }}>
+                {Object.entries(mats).sort(([a], [b]) => a.localeCompare(b)).map(([n, c]) => (
+                  <div key={n} style={{ padding: 9, background: 'rgba(0,0,0,0.3)', borderRadius: 8, fontSize: 12 }}>
+                    {n} <strong style={{ float: 'right' }}>×{c}</strong>
+                  </div>
+                ))}
+                {!Object.keys(mats).length && (
+                  <div style={{ opacity: 0.5, fontStyle: 'italic', gridColumn: '1/-1', fontSize: 12 }}>
+                    Nothing yet — monsters and caravans drop it.
+                  </div>
+                )}
+              </div>
+            </details>
           </div>
         )}
 
-        {tab === 1 && (
+        {tab === 'brood' && (
           selSl ? (
             <div>
               <button onClick={() => setSelSlime(null)} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 6, padding: '8px 16px', color: '#fff', cursor: 'pointer', marginBottom: 15 }}>← Back</button>
@@ -1978,24 +2002,102 @@ export default function HiveQueenGame() {
                 getSlimeStats={getSlimeStats}
                 getMaxHp={getMaxHp}
                 mutationSlots={(x) => mutationSlots(x, combatBonuses.mutationSlots)}
-                unlockedMutations={unlockedMutations}
-                biomass={bio}
-                graftCost={graftCost}
-                onGraft={graftMutation}
+                mutagens={mutagens}
+                onApplyMutagen={applyMutagen}
+                onWithdraw={withdrawBiomass}
               />
               {!selExp && <button onClick={() => { reabsorb(selSl.id); setSelSlime(null); }} style={{ width: '100%', marginTop: 15, padding: 12, background: 'linear-gradient(135deg, #f59e0b, #ef4444)', border: 'none', borderRadius: 8, color: '#fff', fontWeight: 'bold', cursor: 'pointer' }}>🔄 Reabsorb</button>}
             </div>
           ) : (
             <div>
-              <SlimeForge
-                unlockedMutations={unlockedMutations}
-                biomass={bio}
-                freeJelly={freeJelly}
-                tiers={unlockedTiers}
-                onSpawn={spawn}
-                extraMutationSlots={combatBonuses.mutationSlots}
-                slotsFromSelection={slotsFromSelection}
+              {/* The Brood is every slime you have: the ones on their feet and the ones mending. */}
+              <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
+                {[
+                  { id: 'roster', icon: '🟢', label: 'Roster', badge: slimes.length },
+                  { id: 'pools', icon: '🏠', label: 'Pools', badge: woundedCount || undefined, locked: !isFeatureUnlocked('ranch', purchasedSkills) },
+                ].map(v => (
+                  <button
+                    key={v.id}
+                    onClick={() => setBroodView(v.id)}
+                    style={{
+                      flex: 1, padding: '9px 6px', fontSize: 13, cursor: 'pointer', color: '#fff',
+                      background: broodView === v.id ? 'rgba(236,72,153,0.22)' : 'rgba(0,0,0,0.25)',
+                      border: `1px solid ${broodView === v.id ? 'rgba(236,72,153,0.6)' : 'rgba(255,255,255,0.08)'}`,
+                      borderRadius: 8, fontWeight: broodView === v.id ? 'bold' : 'normal',
+                      opacity: v.locked ? 0.55 : 1,
+                    }}
+                  >
+                    {v.locked ? '🔒' : v.icon} {v.label}
+                    {v.badge !== undefined && (
+                      <span style={{ marginLeft: 6, background: 'rgba(236,72,153,0.85)', padding: '1px 7px', borderRadius: 9, fontSize: 11 }}>{v.badge}</span>
+                    )}
+                  </button>
+                ))}
+              </div>
+
+              {broodView === 'pools' && (isFeatureUnlocked('ranch', purchasedSkills) ? (
+              <Ranch
+                queen={queen}
+                bio={bio}
+                mats={mats}
+                prisms={prisms}
+                slimes={slimes}
+                exps={exps}
+                ranchBuildings={ranchBuildings}
+                ranchAssignments={ranchAssignments}
+                ranchProgress={ranchProgress}
+                ranchEvents={ranchEvents}
+                canBuildRanch={canBuildRanch}
+                buildRanch={buildRanch}
+                canUpgradeRanch={canUpgradeRanch}
+                upgradeRanch={upgradeRanch}
+                getRanchCapacity={getRanchCapacity}
+                canAssignToRanch={canAssignToRanch}
+                assignToRanch={assignToRanch}
+                removeFromRanch={removeFromRanch}
+                getSlimeRanch={getSlimeRanch}
+                isRanchUnlocked={isRanchUnlocked}
+                getAssignedSlimeIds={getAssignedSlimeIds}
+                getSlimeAccumulated={getSlimeAccumulated}
+                getSlimeStartTime={getSlimeStartTime}
               />
+            ) : (
+              <div style={{ textAlign: 'center', padding: 40 }}>
+                <div style={{ fontSize: 48, marginBottom: 15 }}>🏠</div>
+                <div style={{ fontSize: 16, fontWeight: 'bold', marginBottom: 10 }}>Slime Ranch</div>
+                <div style={{ opacity: 0.7, marginBottom: 15 }}>🔒 Unlock via Skill Tree (Hive Growth → Cultivation Pools)</div>
+              </div>
+            ))}
+
+              {broodView === 'roster' && (<>
+              <SlimeForge biomass={bio} freeJelly={freeJelly} tiers={unlockedTiers} onSpawn={spawn} />
+              {Object.keys(mutagens).length > 0 && (
+                <details open style={{ background: 'rgba(168,85,247,0.08)', border: '1px solid rgba(168,85,247,0.25)', borderRadius: 10, padding: 12, marginBottom: 12 }}>
+                  <summary style={{ fontSize: 13, fontWeight: 'bold', cursor: 'pointer', color: '#c084fc' }}>
+                    🧬 Mutagens <span style={{ fontSize: 11, opacity: 0.6, fontWeight: 'normal' }}>
+                      ({Object.values(mutagens).reduce((n, c) => n + c, 0)} on hand)
+                    </span>
+                  </summary>
+                  <div style={{ fontSize: 10, opacity: 0.6, margin: '8px 0' }}>
+                    Open a slime with a free slot to apply one.
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    {Object.entries(mutagens).map(([id, count]) => {
+                      const m = MUTATION_LIBRARY[id];
+                      if (!m) return null;
+                      return (
+                        <div key={id} title={getMutationDesc(id, 10)} style={{
+                          fontSize: 11, padding: '5px 9px', borderRadius: 6,
+                          background: `${m.color}22`, border: `1px solid ${m.color}55`,
+                        }}>
+                          {m.icon} {m.name} <strong style={{ color: m.color }}>×{count}</strong>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </details>
+              )}
+
               {slimes.length ? (
                 <div style={{ display: 'grid', gap: 10 }}>
                 {slimes.map(s => {
@@ -2005,16 +2107,24 @@ export default function HiveQueenGame() {
                   const stats = getSlimeStats(s);
                   const biomass = s.biomass || 0;
                   return (
-                    <div key={s.id} onClick={() => setSelSlime(s.id)} style={{ background: 'rgba(0,0,0,0.3)', borderRadius: 10, padding: 12, border: `2px solid ${tier.color}33`, cursor: 'pointer' }}>
+                    <div key={s.id} onClick={() => setSelSlime(s.id)} style={{ background: s.wounded ? 'rgba(239,68,68,0.10)' : 'rgba(0,0,0,0.3)', borderRadius: 10, padding: 12, border: `2px solid ${s.wounded ? 'rgba(239,68,68,0.45)' : tier.color + '33'}`, cursor: 'pointer' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                         <SlimeSprite tier={s.tier} size={45} hp={expS?.hp} maxHp={expS?.maxHp || s.maxHp} mutations={s.mutations} status={expS?.status} primaryElement={s.primaryElement} />
                         <div style={{ flex: 1 }}>
                           <div style={{ fontWeight: 'bold', fontSize: 14 }}>{s.name}</div>
-                          <div style={{ fontSize: 11, opacity: 0.7 }}>{tier.name}</div>
+                          <div style={{ fontSize: 11, opacity: 0.7 }}>
+                            {tier.name}
+                            {s.wounded && <span style={{ color: '#f87171', fontWeight: 'bold', marginLeft: 6 }}>🩹 Wounded</span>}
+                          </div>
                           <div style={{ display: 'flex', gap: 8, fontSize: 10, marginTop: 4 }}>
                             {Object.entries(STAT_INFO).map(([k, v]) => <span key={k} style={{ color: v.color }}>{v.icon}{stats[k]}</span>)}
                           </div>
                           {onExp && <div style={{ fontSize: 10, color: '#22d3ee', marginTop: 4 }}>📍 {ZONES[onExp[0]].name} • ❤️ {Math.ceil(expS?.hp || 0)}/{s.maxHp}</div>}
+                          {s.wounded && !onExp && (
+                            <div style={{ fontSize: 10, color: '#f87171', marginTop: 4 }}>
+                              {assignedToRanch.has(s.id) ? '🩹 Mending in the pool' : '🩹 Needs a Convalescence Pool slot'}
+                            </div>
+                          )}
                         </div>
                         <div style={{ textAlign: 'right', fontSize: 10 }}>
                           <div style={{ opacity: 0.6 }}>❤️ {expS ? Math.ceil(expS.hp) : s.maxHp}/{s.maxHp}</div>
@@ -2027,11 +2137,12 @@ export default function HiveQueenGame() {
               </div>
               ) : <div style={{ textAlign: 'center', padding: 40, opacity: 0.5 }}><div style={{ fontSize: 48 }}>🥚</div><div>No slimes yet!</div></div>
               }
+              </>)}
             </div>
           )
         )}
 
-        {tab === 2 && (
+        {tab === 'wilds' && (
           <div>
             {/* Expedition Summaries */}
             {expSummaries.length > 0 && (
@@ -2079,10 +2190,12 @@ export default function HiveQueenGame() {
                 </button>;
               })}
             </div>
-            <ArenaCanvas
-              exp={exps[selZone]}
-              zone={selZone}
+            <CombatView
+              view={expView}
+              anim={exps[selZone]?.anim}
               logs={exps[selZone]?.logs}
+              hud={expHud}
+              emptyLabel={`${ZONES[selZone].icon} ${ZONES[selZone].name}`}
               verboseLogs={verboseLogs}
               setVerboseLogs={setVerboseLogs}
             />
@@ -2090,39 +2203,7 @@ export default function HiveQueenGame() {
               <button onClick={() => stopExp(selZone)} style={{ width: '100%', marginTop: 15, padding: 12, background: 'linear-gradient(135deg, #ef4444, #f59e0b)', border: 'none', borderRadius: 8, color: '#fff', fontWeight: 'bold', cursor: 'pointer' }}>🛑 Recall</button>
             ) : (
               <div style={{ marginTop: 15 }}>
-                <div style={{ fontSize: 12, marginBottom: 8, opacity: 0.7 }}>Expedition Duration</div>
-                <div style={{ display: 'flex', gap: 8, marginBottom: 15 }}>
-                  {[
-                    { value: '10', label: '10 Enemies', icon: '⚡', unlock: null, skillUnlock: null },
-                    { value: '100', label: '100 Enemies', icon: '⚔️', unlock: 'extendedExpedition', skillUnlock: null },
-                    { value: 'infinite', label: 'Infinite', icon: '♾️', unlock: null, skillUnlock: 'infiniteExpedition' }
-                  ].map(opt => {
-                    const unlocked = (!opt.unlock || research.includes(opt.unlock)) && (!opt.skillUnlock || isFeatureUnlocked(opt.skillUnlock, purchasedSkills));
-                    return (
-                      <button
-                        key={opt.value}
-                        onClick={() => unlocked && setExpDuration(opt.value)}
-                        disabled={!unlocked}
-                        style={{
-                          flex: 1,
-                          padding: 10,
-                          background: !unlocked ? 'rgba(100,100,100,0.3)' : expDuration === opt.value ? 'rgba(34,211,238,0.3)' : 'rgba(0,0,0,0.3)',
-                          border: `2px solid ${expDuration === opt.value ? '#22d3ee' : 'transparent'}`,
-                          borderRadius: 8,
-                          color: '#fff',
-                          cursor: unlocked ? 'pointer' : 'not-allowed',
-                          fontSize: 10,
-                          fontWeight: expDuration === opt.value ? 'bold' : 'normal',
-                          opacity: unlocked ? 1 : 0.5
-                        }}
-                      >
-                        <div style={{ fontSize: 16 }}>{unlocked ? opt.icon : '🔒'}</div>
-                        <div>{opt.label}</div>
-                      </button>
-                    );
-                  })}
-                </div>
-                <div style={{ fontSize: 12, marginBottom: 8, opacity: 0.7 }}>Party (max 4)</div>
+                <div style={{ fontSize: 12, marginBottom: 8, opacity: 0.7 }}>Party</div>
                 <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
                   {[0, 1, 2, 3].map(i => {
                     const sid = party[i];
@@ -2148,111 +2229,62 @@ export default function HiveQueenGame() {
           </div>
         )}
 
-        {tab === 3 && (
-          isFeatureUnlocked('ranch', purchasedSkills) ? (
-            <Ranch
-              queen={queen}
-              bio={bio}
-              mats={mats}
-              prisms={prisms}
-              slimes={slimes}
-              exps={exps}
-              ranchBuildings={ranchBuildings}
-              ranchAssignments={ranchAssignments}
-              ranchProgress={ranchProgress}
-              ranchEvents={ranchEvents}
-              canBuildRanch={canBuildRanch}
-              buildRanch={buildRanch}
-              canUpgradeRanch={canUpgradeRanch}
-              upgradeRanch={upgradeRanch}
-              getRanchCapacity={getRanchCapacity}
-              canAssignToRanch={canAssignToRanch}
-              assignToRanch={assignToRanch}
-              removeFromRanch={removeFromRanch}
-              getSlimeRanch={getSlimeRanch}
-              isRanchUnlocked={isRanchUnlocked}
-              getAssignedSlimeIds={getAssignedSlimeIds}
-              getSlimeAccumulated={getSlimeAccumulated}
-              getSlimeStartTime={getSlimeStartTime}
-            />
-          ) : (
-            <div style={{ textAlign: 'center', padding: 40 }}>
-              <div style={{ fontSize: 48, marginBottom: 15 }}>🏠</div>
-              <div style={{ fontSize: 16, fontWeight: 'bold', marginBottom: 10 }}>Slime Ranch</div>
-              <div style={{ opacity: 0.7, marginBottom: 15 }}>🔒 Unlock via Skill Tree (Hive Growth → Cultivation Pools)</div>
-            </div>
-          )
-        )}
-
-        {tab === 4 && (
+        {tab === 'road' && (
           <div>
-            <p style={{ margin: '-8px 0 14px', fontSize: 11, opacity: 0.7 }}>
-              The humans come once a day. Where you put each slime is the whole fight.
-            </p>
-            <TowerDefense
-              towerDefense={towerDefense}
+            <Caravan
+              ambush={ambush}
               slimes={avail}
               getSlimeStats={getSlimeStats}
-              queenLevel={queen.level}
-              cooldownLeft={tdCooldownLeft() > 0 ? formatTime(Math.ceil(tdCooldownLeft() / 1000)) : 0}
-              onStart={startTowerDefense}
-              onClose={closeTowerDefense}
+              tier={caravanTier}
+              scouted={hasScouts}
+              squadSize={squadSize}
+              catapults={builds.slimeCatapult || 0}
+              cooldownLeft={caravanCooldownLeft() > 0 ? formatTime(Math.ceil(caravanCooldownLeft() / 1000)) : 0}
+              onStart={startAmbush}
+              onRetreat={doRetreat}
+              onClose={closeAmbush}
               verboseLogs={verboseLogs}
               setVerboseLogs={setVerboseLogs}
             />
           </div>
         )}
 
-        {tab === 5 && (
-          <SkillTree
-            queenLevel={queen.level}
-            purchasedSkills={purchasedSkills}
-            onPurchaseSkill={purchaseSkill}
-            availablePoints={availableSkillPoints}
+        {tab === 'memory' && (
+          <Compendium
+            queen={queen}
+            monsterKills={monsterKills}
+            mutagens={mutagens}
+            seenTutorials={seenTutorials}
           />
         )}
 
-        {tab === 6 && (
-          <div>
-            <h3 style={{ margin: '0 0 10px', fontSize: 14, opacity: 0.7 }}>Materials</h3>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8, marginBottom: 20 }}>
-              {Object.entries(mats).map(([n, c]) => <div key={n} style={{ padding: 10, background: 'rgba(0,0,0,0.3)', borderRadius: 8, fontSize: 12 }}>{n} <strong style={{ float: 'right' }}>x{c}</strong></div>)}
-              {!Object.keys(mats).length && <div style={{ opacity: 0.5, fontStyle: 'italic', gridColumn: '1/-1' }}>No materials</div>}
-            </div>
-            <h3 style={{ margin: '0 0 10px', fontSize: 14, opacity: 0.7 }}>Unlocked Mutations ({unlockedMutations.length}/{Object.keys(MUTATION_LIBRARY).length})</h3>
-            <div style={{ display: 'grid', gap: 8 }}>
-              {unlockedMutations.map((id) => {
-                const m = MUTATION_LIBRARY[id];
-                if (!m) return null;
-                return <div key={id} style={{ padding: 12, background: `${m.color}22`, borderRadius: 8, border: `1px solid ${m.color}44` }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}><span style={{ fontSize: 20 }}>{m.icon}</span><span style={{ fontSize: 14, fontWeight: 'bold' }}>{m.name}</span></div>
-                  <div style={{ fontSize: 11, opacity: 0.7 }}>+{m.bonus} {STAT_INFO[m.stat]?.name}</div>
-                  <div style={{ fontSize: 11, color: m.color }}>{getMutationDesc(id, 10)}</div>
-                  {m.elementBonus && (
-                    <div style={{ fontSize: 10, marginTop: 4 }}>
-                      {Object.entries(m.elementBonus).map(([elem, bonus]) => (
-                        <span key={elem} style={{ color: ELEMENTS[elem]?.color, marginRight: 8 }}>
-                          {ELEMENTS[elem]?.icon}+{bonus}%
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>;
-              })}
-              {!unlockedMutations.length && <div style={{ opacity: 0.5, fontStyle: 'italic' }}>No mutations unlocked. Defeat 100 of any monster type!</div>}
-            </div>
-          </div>
+        {tab === 'settings' && (
+          <SettingsTab
+            onSave={manualSave}
+            onDelete={handleDelete}
+            lastSave={lastSave}
+            prisms={prisms}
+            slimes={slimes}
+            purchasePrismItem={purchasePrismItem}
+            tutorialsOn={tutorialsOn}
+            setTutorialsOn={setTutorialsOn}
+            seenTutorials={seenTutorials}
+            resetTutorials={() => { setSeenTutorials([]); setTutorialsOn(true); }}
+            totalTutorials={TUTORIAL_ORDER.length}
+          />
         )}
-
-        {tab === 7 && <Compendium queen={queen} monsterKills={monsterKills} unlockedMutations={unlockedMutations} />}
-
-        {tab === 8 && <SettingsTab onSave={manualSave} onDelete={handleDelete} lastSave={lastSave} prisms={prisms} slimes={slimes} purchasePrismItem={purchasePrismItem} />}
       </main>
 
       <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: 'rgba(0,0,0,0.95)', borderTop: '1px solid rgba(255,255,255,0.1)', maxHeight: 70, overflowY: 'auto', padding: 8 }}>
         <div style={{ fontSize: 10, opacity: 0.5, marginBottom: 4 }}>📜 Log</div>
         {logs.slice(-4).reverse().map((l, i) => <div key={i} style={{ fontSize: 10, padding: '2px 0', opacity: i === 0 ? 1 : 0.6 }}><span style={{ opacity: 0.4, marginRight: 6 }}>{l.t}</span>{l.m}</div>)}
       </div>
+
+      <TutorialModal
+        tutorial={activeTutorial}
+        onDismiss={dismissTutorial}
+        onDisableAll={() => { dismissTutorial(); setTutorialsOn(false); }}
+      />
 
       {dev && (
         <div style={{ position: 'fixed', top: 60, right: 10, width: 220, background: 'rgba(0,0,0,0.95)', borderRadius: 10, padding: 15, zIndex: 200, border: '1px solid rgba(255,255,255,0.2)' }}>
@@ -2261,12 +2293,15 @@ export default function HiveQueenGame() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             <button onClick={() => setBio(b => b + 100)} style={{ padding: 8, background: '#4ade80', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 12 }}>+100🧬</button>
             <button onClick={() => setMats(m => ({ ...m, 'Wolf Fang': (m['Wolf Fang'] || 0) + 10, 'Wolf Pelt': (m['Wolf Pelt'] || 0) + 10, 'Spider Silk': (m['Spider Silk'] || 0) + 10, 'Mana Crystal': (m['Mana Crystal'] || 0) + 5, 'Snail Shell': (m['Snail Shell'] || 0) + 5, 'Wyrm Scale': (m['Wyrm Scale'] || 0) + 3, 'Storm Core': (m['Storm Core'] || 0) + 3, 'Void Essence': (m['Void Essence'] || 0) + 3, 'Human Bone': (m['Human Bone'] || 0) + 10, 'Iron Sword': (m['Iron Sword'] || 0) + 10, 'Champion Badge': (m['Champion Badge'] || 0) + 2 }))} style={{ padding: 8, background: '#f59e0b', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 12 }}>+Mats</button>
-            <button onClick={() => setUnlockedMutations(['sharp', 'digest', 'stoneskin', 'vinewebs', 'resurrect', 'spiny', 'whirlpool', 'ethereal', 'lifesteal', 'pyrolyze', 'draconicPower', 'voidTouched'])} style={{ padding: 8, background: '#a855f7', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 12 }}>Unlock Mutations</button>
+            <button onClick={() => setMutagens(m => { const n = { ...m }; ['sharp','digest','stoneskin','vinewebs','resurrect','spiny','pyrolyze','lifesteal','theTouch','fracture','stormcaller','voidTouched'].forEach(k => { n[k] = (n[k] || 0) + 3; }); return n; })} style={{ padding: 8, background: '#a855f7', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 12 }}>+3 Each Mutagen</button>
             <button onClick={() => setMonsterKills(k => ({ ...k, youngWolf: (k.youngWolf || 0) + 50, venusSlimetrap: (k.venusSlimetrap || 0) + 50, serratedCarp: (k.serratedCarp || 0) + 50, crystalBat: (k.crystalBat || 0) + 50, emberWyrm: (k.emberWyrm || 0) + 50, voidHollow: (k.voidHollow || 0) + 50 }))} style={{ padding: 8, background: '#22c55e', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 12 }}>+50 Kills</button>
             <button onClick={() => setQueen(q => ({ ...q, level: q.level + 5 }))} style={{ padding: 8, background: '#ec4899', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 12 }}>+5 Queen Lv</button>
-            <button onClick={() => { setLastTowerDefense(0); setTowerDefense(null); log('🎯 Tower Defense reset!'); }} style={{ padding: 8, background: '#22d3ee', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 12 }}>Reset TD Timer</button>
+            <button onClick={() => { setLastCaravan(0); setAmbush(null); log('🎯 Caravan timer reset!'); }} style={{ padding: 8, background: '#22d3ee', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 12 }}>Reset Caravan</button>
             <button onClick={() => setPrisms(p => p + 100)} style={{ padding: 8, background: '#8b5cf6', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 12 }}>+100 Prisms</button>
             <button onClick={() => setMana(p => p + 100)} style={{ padding: 8, background: '#10b981', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 12 }}>+100 Mana</button>
+            <button onClick={() => { setSeenTutorials([]); setTutorialsOn(true); }} style={{ padding: 8, background: '#a855f7', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 12 }}>Replay Tutorials</button>
+            <button onClick={() => { setSeenTutorials(TUTORIAL_ORDER); }} style={{ padding: 8, background: 'rgba(255,255,255,0.15)', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 12, color: '#fff' }}>Skip Tutorials</button>
+            <button onClick={() => setSlimes(list => list.map((sl, i) => (i === 0 ? { ...sl, wounded: true, woundedAt: Date.now(), biomass: 0 } : sl)))} style={{ padding: 8, background: '#ef4444', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 12 }}>Wound First Slime</button>
           </div>
         </div>
       )}

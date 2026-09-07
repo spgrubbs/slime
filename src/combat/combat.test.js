@@ -4,7 +4,10 @@ import assert from 'node:assert/strict';
 import '../combat/index.js';
 import { validateRegistry } from './validate.js';
 import { computeStats, computeMaxHp, mutationSlots } from './stats.js';
-import { makeSlimeCombatant, makeEnemyCombatant, resolveRound, resolveKill, effectiveStats, turnOrder } from './resolveRound.js';
+import {
+  makeSlimeCombatant, makeEnemyCombatant, resolveRound, resolveKill, effectiveStats,
+  turnOrder, enemyActions, dodgeFromSlip, critFromSlip, DODGE_CAP,
+} from './resolveRound.js';
 import { effectPower, effectChance } from './hooks.js';
 import { MUTATION_LIBRARY } from '../data/traitData.js';
 
@@ -483,4 +486,63 @@ test('status proc rolls appear in the attacking hit trace, landed or not', () =>
   assert.ok(hit, 'no slime hit landed');
   assert.ok(hit.log.v.includes('Pyrolyze'), hit.log.v);
   assert.ok(hit.log.v.includes('✗'), 'a failed proc roll should still be shown');
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Balance curves
+// ═════════════════════════════════════════════════════════════════════════════
+
+test('monsters act more often as their zone tier rises', () => {
+  // A party of four each acting once against a lone monster acting once is a
+  // 4:1 economy that swamps every stat difference. Action count is the dial.
+  assert.equal(enemyActions({ tier: 1 }), 1);
+  assert.equal(enemyActions({ tier: 2 }), 1);
+  assert.equal(enemyActions({ tier: 3 }), 2);
+  assert.equal(enemyActions({ tier: 4 }), 2);
+  assert.equal(enemyActions({ tier: 5 }), 3);
+  assert.equal(enemyActions({ tier: 6 }), 3);
+  assert.equal(enemyActions({ tier: 5, rare: true }), 4, 'rares get an extra action');
+  assert.equal(enemyActions({ tier: 1, actions: 7 }), 7, 'an explicit count wins');
+});
+
+test('a deep monster actually takes its extra actions', () => {
+  const w = world([makeSlimeCombatant(slime())], 'hollowOne'); // zone 6 rare
+  const { records } = resolveRound(w, { rng: always(0.9) });
+  const extra = records.filter(r => r.log?.m.includes('strikes again'));
+  assert.ok(extra.length >= 1, logsOf(records));
+});
+
+test('dodge has diminishing returns and never becomes immunity', () => {
+  assert.ok(dodgeFromSlip(5) < 0.10);
+  assert.ok(dodgeFromSlip(37) > 0.20 && dodgeFromSlip(37) < 0.30);
+  // The old linear curve gave 62 slipperiness a 93% dodge, which is why the top
+  // tiers cleared every zone untouched.
+  assert.ok(dodgeFromSlip(62) < 0.35, `62 slip dodges ${dodgeFromSlip(62)}`);
+  assert.ok(dodgeFromSlip(1000) < DODGE_CAP);
+});
+
+test('total evasion is capped even with every dodge source stacked', () => {
+  // allSeeing + timid + cautious + vinewebs + ethereal on a very slippery slime
+  const dodgy = makeSlimeCombatant(slime({
+    mutations: ['allSeeing', 'vinewebs', 'ethereal'],
+    traits: ['timid', 'cautious'],
+    baseStats: { firmness: 10, slipperiness: 200, viscosity: 60 },
+  }));
+  dodgy.hp = Math.floor(dodgy.maxHp * 0.4); // triggers cautious too
+
+  let hits = 0;
+  for (let i = 0; i < 600; i++) {
+    const w = world([dodgy], 'hollowOne');
+    dodgy.dead = false;
+    dodgy.hp = Math.floor(dodgy.maxHp * 0.4);
+    const before = dodgy.hp;
+    resolveRound(w, { rng: seeded(i * 31) });
+    if (dodgy.hp < before) hits++;
+  }
+  assert.ok(hits > 0, 'a fully stacked dodge build was never hit at all');
+});
+
+test('crit chance also has diminishing returns', () => {
+  assert.ok(critFromSlip(5) < 0.08);
+  assert.ok(critFromSlip(62) < 0.35, `62 slip crits ${critFromSlip(62)}`);
 });

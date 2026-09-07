@@ -100,10 +100,10 @@ export const RANCH_TYPES = {
     id: 'warDen',
     name: 'War Den',
     icon: '⚔️',
-    desc: 'A training barracks. Slimes here boost Tower Defense damage based on total Firmness.',
+    desc: 'A training barracks. Slimes here boost caravan ambush damage based on total Firmness.',
     effect: 'defenseBonus',
     buffType: 'damage',
-    effectValue: 0.02,                   // +2% tower defense damage per Firmness point per slime
+    effectValue: 0.02,                   // +2% ambush damage per Firmness point per slime
     cycleTime: 45 * 60,                 // 45 minutes
     capacity: 3,
     unlock: { type: 'materials' },
@@ -155,6 +155,22 @@ export const RANCH_TYPES = {
     upgradeCost: { prisms: 50, multiplier: 2 },
     color: '#6b21a8',
   },
+  convalescencePool: {
+    id: 'convalescencePool',
+    name: 'Convalescence Pool',
+    icon: '🩹',
+    desc: 'Wounded slimes knit themselves back together here. One per slot, 24 hours.',
+    effect: 'recover',
+    effectValue: 1,
+    cycleTime: 24 * 60 * 60,            // 24 hours; upgrades cut it toward 12
+    capacity: 2,                        // +1 per level
+    woundedOnly: true,                  // only wounded slimes may be assigned
+    unlock: { type: 'materials' },
+    cost: { biomass: 700, mats: { 'Life Essence': 2, 'Digestive Sac': 4 } },
+    upgradeCost: { biomass: 1400, mats: { 'Life Essence': 4 }, multiplier: 2 },
+    color: '#4ade80',
+  },
+
   luxuryLounge: {
     id: 'luxuryLounge',
     name: 'Luxury Lounge',

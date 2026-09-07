@@ -66,7 +66,9 @@ export function makeExpedition(zone, slimes, targetKills, ctx = {}) {
     materials: {},
     monsterKillCounts: {},
     logs,
-    intermission: enemy ? null : { timer: 0, duration: INTERMISSION_DURATION, event: null },
+    intermission: enemy ? null : {
+      timer: 0, duration: INTERMISSION_DURATION * (ctx.travelMult ?? 1), event: null,
+    },
     anim: null,
   };
 }
@@ -237,7 +239,7 @@ export function tickExpedition(exp, dt, ctx = {}, zone) {
         if (!s.dead && s.hp <= 0) {
           s.dead = true;
           log({ m: `${s.name} succumbs on the road 💔`, c: '#ef4444', v: 'died during travel' });
-          sideEffects.push({ type: 'slimeDeath', id: s.id });
+          sideEffects.push({ type: 'slimeDown', id: s.id });
         }
       });
       if (exp.slimes.every(s => s.dead)) {
@@ -304,7 +306,11 @@ export function tickExpedition(exp, dt, ctx = {}, zone) {
       sideEffects.push({ type: 'expComplete' });
     } else {
       exp.phase = 'intermission';
-      exp.intermission = { timer: 0, duration: INTERMISSION_DURATION, event: null };
+      exp.intermission = {
+        timer: 0,
+        duration: INTERMISSION_DURATION * (ctx.travelMult ?? 1),
+        event: null,
+      };
     }
     return { exp, sideEffects };
   }

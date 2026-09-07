@@ -9,7 +9,9 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { STATUS_EFFECTS } from '../data/traitData.js';
-import { MONSTER_TYPES, MONSTER_ABILITIES } from '../data/monsterData.js';
+import {
+  MONSTER_TYPES, MONSTER_ABILITIES, materialDropChance, mutagenDropChance,
+} from '../data/monsterData.js';
 import { calculateElementalDamage } from '../utils/helpers.js';
 import { runHooks } from './hooks.js';
 import { computeStats, computeMaxHp, buildEffectList } from './stats.js';
@@ -56,6 +58,10 @@ export function makeEnemyCombatant(type, { hpMultiplier = 1, isBoss = false } = 
   if (!md) return null;
   const maxHp = Math.floor(md.hp * hpMultiplier);
   const tier = md.tier || 1;
+  // A party of four each act once per round against a lone monster acting once,
+  // so raw stats barely matter next to that 4:1 economy. Deeper monsters get
+  // more actions to claw it back — this is the main difficulty dial.
+  const actions = enemyActions(md);
   return {
     id: `enemy-${type}`,
     name: md.name,
@@ -65,6 +71,7 @@ export function makeEnemyCombatant(type, { hpMultiplier = 1, isBoss = false } = 
     isBoss: isBoss || !!md.rare,
     hp: maxHp,
     maxHp,
+    actions,
     stats: { firmness: md.dmg, slipperiness: tier, viscosity: tier },
     tempStats: { firmness: 0, slipperiness: 0, viscosity: 0 },
     primaryElement: md.element || null,
@@ -74,6 +81,34 @@ export function makeEnemyCombatant(type, { hpMultiplier = 1, isBoss = false } = 
     dead: false,
   };
 }
+
+/**
+ * How many times a monster acts per round.
+ *
+ * Zone tier 1-2 act once, 3-4 twice, 5-6 three times; rare monsters get an
+ * extra. Explicit `actions` on a monster definition overrides the curve.
+ */
+export function enemyActions(md) {
+  if (!md) return 1;
+  if (md.actions) return md.actions;
+  const tier = md.tier || 1;
+  return Math.max(1, Math.ceil(tier / 2)) + (md.rare ? 1 : 0);
+}
+
+// ── Stat curves ──────────────────────────────────────────────────────────────
+//
+// Dodge and crit used to be flat multiples of slipperiness, which meant a
+// matured slime reached ~90% dodge and simply stopped being hittable — the top
+// two tiers cleared every zone without effort. Both now use diminishing
+// returns, so slipperiness stays worth taking without ever becoming immunity.
+
+export const DODGE_CAP = 0.70;   // ceiling on all evasion combined
+
+/** Dodge from the stat alone: ~6% at 5, ~25% at 37, ~30% at 62. */
+export const dodgeFromSlip = (slip = 0) => 0.45 * slip / (slip + 30);
+
+/** Crit from the stat alone: ~5% at 5, ~23% at 37, ~29% at 62. */
+export const critFromSlip = (slip = 0) => 0.5 * slip / (slip + 45);
 
 // ── Status helpers ───────────────────────────────────────────────────────────
 
@@ -204,8 +239,19 @@ function resolveAttack(attacker, defender, world, ctx, records, opts = {}) {
   };
   // Evasion is purely defender-side — attacker-side crit sources live in
   // onBeforeAttack, so a dodgy attacker never makes its own swing easier to dodge.
-  hitEv.chance.dodge += effectiveStats(defender).slipperiness * 0.015;
+  hitEv.chance.dodge += dodgeFromSlip(effectiveStats(defender).slipperiness);
   runHooks(defender, 'onHitChance', hitEv, ctx.mutationPower);
+
+  // Evasion is capped as a whole, so stacking dodge sources cannot make a slime
+  // untouchable. The cap is shared across the sources proportionally.
+  const evadeTotal = hitEv.chance.dodge + hitEv.chance.block + hitEv.chance.phase;
+  if (evadeTotal > DODGE_CAP) {
+    const scale = DODGE_CAP / evadeTotal;
+    hitEv.chance.dodge *= scale;
+    hitEv.chance.block *= scale;
+    hitEv.chance.phase *= scale;
+    trace.note(`evasion capped at ${(DODGE_CAP * 100).toFixed(0)}%`);
+  }
 
   const evade = [
     ['dodges',  hitEv.chance.dodge, '💨'],
@@ -250,7 +296,7 @@ function resolveAttack(attacker, defender, world, ctx, records, opts = {}) {
     crit = true;
   } else if (!hitEv.noCrit && !defender.critImmune) {
     const critCh = Math.min(0.95,
-      0.05 + (cb.critChance || 0) + aStats.slipperiness * 0.01 +
+      0.05 + (cb.critChance || 0) + critFromSlip(aStats.slipperiness) +
       beforeEv.critBonus + (attacker.critBonus || 0) + (isSlime ? aura.critChance : 0));
     if (critCh >= 0.95 && (attacker.critBonus || 0) >= 1) {
       crit = true;
@@ -476,7 +522,7 @@ function checkDeaths(world, ctx, records, sideEffects) {
       kind: 'death', actorId: s.id, actorName: s.name,
       log: { m: `${s.name} fell! 💔`, c: C.death, v: `${s.name} removed from the party` },
     });
-    sideEffects.push({ type: 'slimeDeath', id: s.id });
+    sideEffects.push({ type: 'slimeDown', id: s.id });
 
     const reclaimer = ctx.builds?.biomassReclaimer || 0;
     if (reclaimer > 0 && s.ref?.biomass > 0) {
@@ -504,7 +550,9 @@ export function resolveKill(world, ctx, records, sideEffects, zoneDef) {
   const ev = {
     enemy, world,
     biomassMult: 1, biomassFlat: 0,
-    matChance: 0.5 * (cb.materialDrop || 1) * (1 + (ctx.ranchBonus || 0)),
+    // A multiplier on every material's own rate, not a flat chance for one.
+    matChance: 0,
+    matMult: (cb.materialDrop || 1) * (1 + (ctx.ranchBonus || 0)),
     elementMult: 1, blockElement: false,
     heal: 0, healLabel: '',
     log: [],
@@ -575,16 +623,34 @@ export function resolveKill(world, ctx, records, sideEffects, zoneDef) {
     sideEffects.push({ type: 'prism' });
     records.push({ kind: 'reward', log: { m: '💎 Found a Prism!', c: C.crit, v: '0.1% drop' } });
   }
-  const matRoll = ctx.rng();
-  if (matRoll < ev.matChance) {
-    const mat = md.mats[Math.floor(ctx.rng() * md.mats.length)];
+  // The monster's own mutagen. Rare, and the only way a slime ever gains a
+  // mutation — the host applies a pity floor on top of this roll.
+  if (md.mutation) {
+    const chance = Math.min(0.95, mutagenDropChance(md) * ev.matMult);
+    const roll = ctx.rng();
+    if (roll < chance) {
+      sideEffects.push({ type: 'mutagen', mutation: md.mutation });
+      records.push({
+        kind: 'reward',
+        log: { m: `🧬 A ${md.name} mutagen!`, c: '#a855f7',
+               v: `roll ${(roll * 100).toFixed(2)}% vs ${(chance * 100).toFixed(2)}%` },
+      });
+    }
+  }
+
+  // Each material rolls on its own, at a rate set by what it gates. Lucky
+  // slimes and drop skills raise every rate together.
+  (md.mats || []).forEach(mat => {
+    const chance = Math.min(0.95, (materialDropChance(mat, md) + ev.matChance) * ev.matMult);
+    const roll = ctx.rng();
+    if (roll >= chance) return;
     sideEffects.push({ type: 'material', mat });
     records.push({
       kind: 'reward',
       log: { m: `Found ${mat}! 📦`, c: C.crit,
-             v: `roll ${(matRoll * 100).toFixed(1)}% vs ${(ev.matChance * 100).toFixed(1)}%` },
+             v: `roll ${(roll * 100).toFixed(1)}% vs ${(chance * 100).toFixed(1)}%` },
     });
-  }
+  });
   return total;
 }
 
@@ -676,8 +742,19 @@ export function resolveRound(world, ctx = {}) {
       resolveAttack(actor, world.enemy, world, c, records, { aura });
       if (world.enemy.hp <= 0) world.enemy.dead = true;
     } else {
-      resolveEnemyTurn(actor, world, c, records, aura);
-      checkDeaths(world, c, records, sideEffects);
+      const actions = actor.actions || 1;
+      for (let a = 0; a < actions; a++) {
+        if (world.slimes.every(s => s.dead)) break;
+        if (actions > 1) {
+          records.push({
+            kind: 'effect',
+            log: { m: `${actor.name} strikes again! (${a + 1}/${actions})`, c: '#f97316',
+                   v: `tier ${actor.ref?.tier || 1} monster — ${actions} actions per round` },
+          });
+        }
+        resolveEnemyTurn(actor, world, c, records, aura);
+        checkDeaths(world, c, records, sideEffects);
+      }
     }
   }
 

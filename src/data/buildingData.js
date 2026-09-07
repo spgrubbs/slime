@@ -43,13 +43,42 @@ export const BUILDINGS = {
     max: 5,                             // Can build multiple
     category: 'capacity',
   },
-  defenseSlot: {
-    name: 'Defense Slot',
+  ambushSlot: {
+    name: 'Ambush Post',
     icon: '🎯',
-    desc: '+1 Tower Defense party slot',
+    desc: '+1 slime in the caravan ambush squad',
     cost: { biomass: 500, mats: { 'Ash Remnant': 5, 'Ancient Stone': 3 } },
-    max: 4,                             // Reduced from 6
+    max: 4,
     category: 'capacity',
+  },
+
+  slimeCatapult: {
+    name: 'Slime Catapult',
+    icon: '🪃',
+    desc: 'A road emplacement that lobs slimes at passing caravans every round',
+    cost: { biomass: 1200, mats: { 'Ancient Stone': 6, 'Iron Ore': 4, 'Human Bone': 3 } },
+    max: 4,
+    category: 'utility',
+    skillUnlock: 'siegeEngineering',
+  },
+
+  renderingVat: {
+    name: 'Rendering Vat',
+    icon: '⚗️',
+    desc: 'Recover mutagens from a reabsorbed slime instead of losing them',
+    cost: { biomass: 4000, mats: { 'Void Essence': 3, 'Champion Badge': 1, 'Mana Crystal': 8 } },
+    max: 2,                             // tier 1 recovers half, tier 2 all of it
+    category: 'utility',
+    skillUnlock: 'renderingVat',
+  },
+
+  scoutCamp: {
+    name: 'Scout Camp',
+    icon: '🔭',
+    desc: 'Scouts read the road: see tomorrow\'s caravan before you commit to it',
+    cost: { biomass: 900, mats: { 'Human Bone': 4, 'Spider Silk': 6 } },
+    max: 1,
+    category: 'utility',
   },
 
   // === UTILITY BUILDINGS ===
@@ -116,8 +145,8 @@ export const BUILDINGS = {
   extendedExpedition: {
     name: 'Expedition Depot',
     icon: '🗺️',
-    desc: 'Unlock 100-enemy expeditions',
-    cost: 1000,                         // Increased from 250
+    desc: 'Parties travel between encounters 40% faster',
+    cost: 1000,
     time: 3600,                         // 1 hour
     max: 1,
     category: 'research',
@@ -125,8 +154,8 @@ export const BUILDINGS = {
   infiniteExpedition: {
     name: 'Deep Exploration Hub',
     icon: '🌌',
-    desc: 'Unlock infinite expeditions',
-    cost: 2500,                         // Increased from 500
+    desc: '+25% material drops on expeditions',
+    cost: 2500,
     time: 7200,                         // 2 hours
     max: 1,
     category: 'research',

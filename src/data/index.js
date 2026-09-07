@@ -5,4 +5,4 @@ export * from './traitData.js';
 export * from './monsterData.js';
 export * from './zoneData.js';
 export * from './buildingData.js';
-export * from './towerDefenseData.js';
+export * from './caravanData.js';

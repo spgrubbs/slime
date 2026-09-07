@@ -190,10 +190,10 @@ export const SKILL_TREES = {
         id: 'infiniteEndurance',
         name: 'Endless Ooze',
         icon: '♾️',
-        desc: 'Unlock infinite expeditions',
+        desc: 'Slimes knit themselves back together in the field, healing each round',
         cost: 5,
         requires: ['peaksAccess', 'evolutionPulseSkill'],
-        effect: { type: 'unlock', feature: 'infiniteExpedition' },
+        effect: { type: 'passive', passive: 'regeneration' },
         position: { x: 25, y: 70 },
       },
 
@@ -592,9 +592,9 @@ export const SKILL_TREES = {
       // Fifth tier
       towerDefenseSlots: {
         id: 'towerDefenseSlots',
-        name: 'Defensive Formation',
+        name: 'Raiding Party',
         icon: '🎯',
-        desc: '+2 Tower Defense party slots',
+        desc: '+2 slimes in the caravan ambush squad',
         cost: 4,
         requires: ['berserkMode', 'lastStand'],
         effect: { type: 'bonus', stat: 'defenseSlots', value: 2 },
@@ -610,6 +610,28 @@ export const SKILL_TREES = {
         requires: ['mutationSynergy', 'decoySkill'],
         effect: { type: 'bonus', stat: 'mutationSlots', value: 1 },
         position: { x: 65, y: 70 },
+      },
+
+      renderingVat: {
+        id: 'renderingVat',
+        name: 'Rendering',
+        icon: '⚗️',
+        desc: 'Unlocks the Rendering Vat — reclaim mutagens from a dissolved slime',
+        cost: 6,
+        requires: ['combatMastery'],
+        effect: { type: 'unlock', building: 'renderingVat' },
+        position: { x: 50, y: 94 },
+      },
+
+      siegeEngineering: {
+        id: 'siegeEngineering',
+        name: 'Siege Engineering',
+        icon: '🪃',
+        desc: 'Unlocks the Slime Catapult — a road emplacement that fires on caravans every round',
+        cost: 4,
+        requires: ['towerDefenseSlots'],
+        effect: { type: 'unlock', building: 'slimeCatapult' },
+        position: { x: 20, y: 82 },
       },
 
       // Capstone
@@ -703,7 +725,7 @@ export const isZoneUnlocked = (zoneId, purchasedSkills) => {
 // Helper to check if a building is unlocked
 export const isBuildingUnlocked = (buildingId, purchasedSkills) => {
   // Some buildings don't need skill unlocks (research items)
-  const skillGatedBuildings = ['spawningVat', 'royalHatchery', 'primordialChamber', 'slimePit', 'researchLab'];
+  const skillGatedBuildings = ['spawningVat', 'royalHatchery', 'primordialChamber', 'slimePit', 'researchLab', 'slimeCatapult', 'renderingVat'];
   if (!skillGatedBuildings.includes(buildingId)) return true;
 
   const effects = getSkillEffects(purchasedSkills);
@@ -721,9 +743,6 @@ export const isFeatureUnlocked = (featureId, purchasedSkills) => {
   // Ranch requires ranchBasics skill
   if (featureId === 'ranch') {
     return purchasedSkills.includes('ranchBasics');
-  }
-  if (featureId === 'infiniteExpedition') {
-    return purchasedSkills.includes('infiniteEndurance');
   }
   const effects = getSkillEffects(purchasedSkills);
   return effects.unlockedFeatures.includes(featureId);

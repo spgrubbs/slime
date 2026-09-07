@@ -6,7 +6,7 @@ import SlimeSprite from './SlimeSprite.jsx';
 
 const SlimeDetail = ({
   slime, expState, getSlimeStats, getMaxHp, mutationSlots,
-  unlockedMutations = [], biomass: bank = 0, graftCost, onGraft,
+  mutagens = {}, onApplyMutagen, onWithdraw,
 }) => {
   const tier = SLIME_TIERS[slime.tier];
   const [grafting, setGrafting] = useState(false);
@@ -27,9 +27,11 @@ const SlimeDetail = ({
   const mutations = slime.mutations || [];
   const slots = mutationSlots ? mutationSlots(slime) : (tier.traitSlots || 1);
   const freeSlots = Math.max(0, slots - mutations.length);
-  const cost = graftCost ? graftCost(slime) : 0;
-  const graftable = unlockedMutations.filter(id => !mutations.includes(id));
   const inTheField = !!expState;
+  // Mutagens you hold that this slime does not already carry.
+  const usable = Object.entries(mutagens)
+    .filter(([id, n]) => n > 0 && !mutations.includes(id))
+    .map(([id]) => id);
 
   return (
     <div style={{ background: 'rgba(0,0,0,0.3)', borderRadius: 10, padding: 15, border: `2px solid ${tier.color}33` }}>
@@ -37,7 +39,12 @@ const SlimeDetail = ({
         <SlimeSprite tier={slime.tier} size={60} hp={hp} maxHp={maxHp} mutations={mutations} status={expState?.status} primaryElement={slime.primaryElement} />
         <div style={{ flex: 1 }}>
           <div style={{ fontWeight: 'bold', fontSize: 16 }}>{slime.name}</div>
-          <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 8 }}>{tier.name}</div>
+          <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 8 }}>
+            {tier.name}
+            {slime.wounded && (
+              <span style={{ marginLeft: 8, color: '#f87171', fontWeight: 'bold' }}>🩹 Wounded</span>
+            )}
+          </div>
           <div style={{ marginBottom: 6 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, marginBottom: 2 }}><span>❤️ HP</span><span>{Math.ceil(hp)}/{maxHp}</span></div>
             <div style={{ height: 8, background: 'rgba(0,0,0,0.5)', borderRadius: 4, overflow: 'hidden' }}>
@@ -48,7 +55,7 @@ const SlimeDetail = ({
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, marginBottom: 2 }}><span>🧬 Biomass</span><span>{Math.floor(biomass)} (+{cappedPercent.toFixed(1)}%)</span></div>
             <div style={{ fontSize: 9, opacity: 0.6, marginTop: 2 }}>
               {atCap
-                ? `Fully grown — capped at +${tier.maxBiomassBonus}%. Reabsorb for Queen XP.`
+                ? `Carrying all it can — capped at +${tier.maxBiomassBonus}%.`
                 : `Next 1%: ${Math.ceil(tier.biomassPerPercent - (biomass % tier.biomassPerPercent))} more`}
             </div>
           </div>
@@ -145,6 +152,42 @@ const SlimeDetail = ({
         </div>
       )}
 
+      {slime.wounded && (
+        <div style={{
+          marginBottom: 15, padding: 10, borderRadius: 8,
+          background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.35)',
+        }}>
+          <div style={{ fontSize: 12, fontWeight: 'bold', color: '#f87171', marginBottom: 4 }}>
+            🩹 Wounded
+          </div>
+          <div style={{ fontSize: 10, opacity: 0.8 }}>
+            Cannot be deployed. Mends in a Convalescence Pool.
+          </div>
+        </div>
+      )}
+
+      {/* Held biomass — temporary power you can bank without harming the slime */}
+      {onWithdraw && biomass > 0 && !inTheField && (
+        <div style={{
+          marginBottom: 15, padding: 10, borderRadius: 8,
+          background: 'rgba(74,222,128,0.10)', border: '1px solid rgba(74,222,128,0.3)',
+        }}>
+          <div style={{ fontSize: 10, opacity: 0.8, marginBottom: 8 }}>
+            Carrying <strong style={{ color: '#4ade80' }}>{Math.floor(biomass)}🧬</strong>
+            {' '}(+{cappedPercent.toFixed(1)}% stats) — forfeit if it goes down.
+          </div>
+          <button
+            onClick={() => onWithdraw(slime.id)}
+            style={{
+              fontSize: 11, padding: '6px 12px', borderRadius: 6, border: 'none', color: '#fff',
+              cursor: 'pointer', background: 'linear-gradient(135deg, #4ade80, #22d3ee)',
+            }}
+          >
+            🧬 Draw out {Math.floor(biomass)} biomass
+          </button>
+        </div>
+      )}
+
       {/* Mutations Section (Combat Abilities) */}
       <div>
         <div style={{ fontSize: 11, opacity: 0.7, marginBottom: 6 }}>
@@ -178,43 +221,29 @@ const SlimeDetail = ({
           )}
         </div>
 
-        {/* Grafting — the point of the slots that Ancient and Alloy Potential grant */}
-        {freeSlots > 0 && onGraft && (
+        {/* Applying a mutagen — the only way a slime ever gains a mutation */}
+        {freeSlots > 0 && onApplyMutagen && (
           <div style={{ marginTop: 10, padding: 10, background: 'rgba(168,85,247,0.1)', border: '1px solid rgba(168,85,247,0.3)', borderRadius: 8 }}>
-            <div style={{ fontSize: 11, color: '#c084fc', marginBottom: 4 }}>
+            <div style={{ fontSize: 11, color: '#c084fc', marginBottom: 6 }}>
               🧬 {freeSlots} open slot{freeSlots === 1 ? '' : 's'}
             </div>
-            <div style={{ fontSize: 10, opacity: 0.75, marginBottom: 8 }}>
-              Graft another mutation onto {slime.name.split(' ')[0]} for 🧬{cost}.
-              {inTheField && ' Recall them first.'}
-            </div>
 
-            {!grafting ? (
-              <button
-                onClick={() => setGrafting(true)}
-                disabled={bank < cost || !graftable.length || inTheField}
-                style={{
-                  fontSize: 11, padding: '6px 12px', borderRadius: 6, border: 'none', color: '#fff',
-                  cursor: bank >= cost && graftable.length && !inTheField ? 'pointer' : 'not-allowed',
-                  background: bank >= cost && graftable.length && !inTheField
-                    ? 'linear-gradient(135deg, #a855f7, #6366f1)'
-                    : 'rgba(100,100,100,0.5)',
-                }}
-              >
-                {inTheField ? 'On expedition'
-                  : !graftable.length ? 'Nothing left to graft'
-                  : bank < cost ? `Need 🧬${cost}`
-                  : 'Graft mutation'}
-              </button>
+            {inTheField ? (
+              <div style={{ fontSize: 10, opacity: 0.6 }}>Recall them first.</div>
+            ) : !usable.length ? (
+              <div style={{ fontSize: 10, opacity: 0.6 }}>No mutagens on hand.</div>
             ) : (
-              <div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, maxHeight: 150, overflowY: 'auto' }}>
-                  {graftable.map(id => {
+              <>
+                <div style={{ fontSize: 10, opacity: 0.7, marginBottom: 8 }}>
+                  Permanent. The mutagen is spent.
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, maxHeight: 170, overflowY: 'auto' }}>
+                  {usable.map(id => {
                     const m = MUTATION_LIBRARY[id];
                     return (
                       <button
                         key={id}
-                        onClick={() => { onGraft(slime.id, id); setGrafting(false); }}
+                        onClick={() => onApplyMutagen(slime.id, id)}
                         title={getMutationDesc(id, currentStats.viscosity)}
                         style={{
                           fontSize: 10, padding: '5px 8px', borderRadius: 5, cursor: 'pointer',
@@ -222,17 +251,12 @@ const SlimeDetail = ({
                         }}
                       >
                         {m.icon} {m.name}
+                        <span style={{ opacity: 0.6 }}> ×{mutagens[id]}</span>
                       </button>
                     );
                   })}
                 </div>
-                <button
-                  onClick={() => setGrafting(false)}
-                  style={{ marginTop: 8, fontSize: 10, padding: '4px 10px', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: 4, color: '#aaa', cursor: 'pointer' }}
-                >
-                  Cancel
-                </button>
-              </div>
+              </>
             )}
           </div>
         )}
