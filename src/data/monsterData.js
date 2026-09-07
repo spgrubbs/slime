@@ -43,6 +43,31 @@ export const materialDropChance = (mat, monster) => {
   return MATERIAL_RATES.common;
 };
 
+// ── Mutagens ─────────────────────────────────────────────────────────────────
+//
+// Every monster carries the mutagen for its own mutation. Applying one to a
+// slime grants that mutation permanently and consumes the item — so a mutation
+// is a scarce thing you spend, not a threshold you cross once.
+//
+// The rate belongs to the MUTATION's rarity, not the monster's: a rare monster
+// already appears ~5% of the time, and taxing that twice would put its mutagen
+// past 2,000 zone kills.
+
+export const MUTAGEN_RATES = {
+  common: 0.01,   // ~420 zone kills for one specific mutagen, ~100 for any
+  rare:   0.03,   // ~670 zone kills, behind a 5% spawn
+};
+
+/**
+ * Guaranteed floor. Pure 1% with no floor can hand a player 500 kills and
+ * nothing, which reads as broken rather than unlucky — so the kill tally that
+ * used to gate unlocks becomes the safety net instead of being deleted.
+ */
+export const MUTAGEN_PITY_KILLS = 150;
+
+export const mutagenDropChance = (monster) =>
+  monster?.rare ? MUTAGEN_RATES.rare : MUTAGEN_RATES.common;
+
 // Monster Abilities - special attacks that monsters can use randomly
 // chance: probability (0-1) of using ability instead of normal attack
 // effect: what the ability does

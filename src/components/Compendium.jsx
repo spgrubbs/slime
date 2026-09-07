@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { ZONES } from '../data/zoneData.js';
-import { MONSTER_TYPES, MONSTER_ABILITIES, MATERIAL_RATES } from '../data/monsterData.js';
+import { MONSTER_TYPES, MONSTER_ABILITIES, MATERIAL_RATES, MUTAGEN_RATES, MUTAGEN_PITY_KILLS } from '../data/monsterData.js';
 import { MUTATION_LIBRARY, SLIME_TRAITS, STATUS_EFFECTS, TRAIT_RARITY_COLORS } from '../data/traitData.js';
 import { SLIME_TIERS, STAT_INFO } from '../data/slimeData.js';
 import { ELEMENTS } from '../data/gameConstants.js';
@@ -167,7 +167,7 @@ function Reference() {
   );
 }
 
-const Compendium = ({ queen, monsterKills, unlockedMutations, seenTutorials = [] }) => {
+const Compendium = ({ queen, monsterKills, mutagens = {}, seenTutorials = [] }) => {
   const [tab, setTab] = useState('zones'); // 'zones' | 'guide' | 'reference'
   const [zone, setZone] = useState('forest');
   const z = ZONES[zone];
@@ -212,8 +212,11 @@ const Compendium = ({ queen, monsterKills, unlockedMutations, seenTutorials = []
             if (!m) return null;
             const mutation = m.mutation ? MUTATION_LIBRARY[m.mutation] : null;
             const kills = monsterKills?.[mid] || 0;
-            const isUnlocked = mutation && unlockedMutations?.includes(m.mutation);
-            const progress = mutation ? Math.min(100, (kills / mutation.requiredKills) * 100) : 0;
+            // Mutations are items now: what matters is whether you hold one,
+            // and how close the pity floor is to handing you another.
+            const held = mutation ? (mutagens?.[m.mutation] || 0) : 0;
+            const isUnlocked = held > 0;
+            const progress = mutation ? Math.min(100, ((kills % MUTAGEN_PITY_KILLS) / MUTAGEN_PITY_KILLS) * 100) : 0;
             const discovered = kills > 0;
             const monAbility = m.ability ? MONSTER_ABILITIES[m.ability] : null;
 
@@ -280,9 +283,11 @@ const Compendium = ({ queen, monsterKills, unlockedMutations, seenTutorials = []
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                         <span style={{ fontSize: 16 }}>{mutation.icon}</span>
                         <span style={{ fontSize: 12, fontWeight: 'bold' }}>{mutation.name}</span>
-                        {isUnlocked && <span style={{ fontSize: 10, color: '#4ade80', background: 'rgba(74,222,128,0.2)', padding: '2px 6px', borderRadius: 4 }}>UNLOCKED</span>}
+                        {isUnlocked && <span style={{ fontSize: 10, color: '#4ade80', background: 'rgba(74,222,128,0.2)', padding: '2px 6px', borderRadius: 4 }}>×{held} HELD</span>}
                       </div>
-                      <span style={{ fontSize: 11, opacity: 0.8 }}>{kills}/{mutation.requiredKills}</span>
+                      <span style={{ fontSize: 11, opacity: 0.8 }} title="Kills until a mutagen is guaranteed, whatever the drop rolls do">
+                        {kills % MUTAGEN_PITY_KILLS}/{MUTAGEN_PITY_KILLS}
+                      </span>
                     </div>
 
                     {/* Progress Bar */}

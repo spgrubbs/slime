@@ -9,7 +9,9 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { STATUS_EFFECTS } from '../data/traitData.js';
-import { MONSTER_TYPES, MONSTER_ABILITIES, materialDropChance } from '../data/monsterData.js';
+import {
+  MONSTER_TYPES, MONSTER_ABILITIES, materialDropChance, mutagenDropChance,
+} from '../data/monsterData.js';
 import { calculateElementalDamage } from '../utils/helpers.js';
 import { runHooks } from './hooks.js';
 import { computeStats, computeMaxHp, buildEffectList } from './stats.js';
@@ -621,6 +623,21 @@ export function resolveKill(world, ctx, records, sideEffects, zoneDef) {
     sideEffects.push({ type: 'prism' });
     records.push({ kind: 'reward', log: { m: '💎 Found a Prism!', c: C.crit, v: '0.1% drop' } });
   }
+  // The monster's own mutagen. Rare, and the only way a slime ever gains a
+  // mutation — the host applies a pity floor on top of this roll.
+  if (md.mutation) {
+    const chance = Math.min(0.95, mutagenDropChance(md) * ev.matMult);
+    const roll = ctx.rng();
+    if (roll < chance) {
+      sideEffects.push({ type: 'mutagen', mutation: md.mutation });
+      records.push({
+        kind: 'reward',
+        log: { m: `🧬 A ${md.name} mutagen!`, c: '#a855f7',
+               v: `roll ${(roll * 100).toFixed(2)}% vs ${(chance * 100).toFixed(2)}%` },
+      });
+    }
+  }
+
   // Each material rolls on its own, at a rate set by what it gates. Lucky
   // slimes and drop skills raise every rate together.
   (md.mats || []).forEach(mat => {

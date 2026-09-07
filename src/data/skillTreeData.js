@@ -612,6 +612,17 @@ export const SKILL_TREES = {
         position: { x: 65, y: 70 },
       },
 
+      renderingVat: {
+        id: 'renderingVat',
+        name: 'Rendering',
+        icon: '⚗️',
+        desc: 'Unlocks the Rendering Vat — reclaim mutagens from a dissolved slime',
+        cost: 6,
+        requires: ['combatMastery'],
+        effect: { type: 'unlock', building: 'renderingVat' },
+        position: { x: 50, y: 94 },
+      },
+
       siegeEngineering: {
         id: 'siegeEngineering',
         name: 'Siege Engineering',
@@ -714,7 +725,7 @@ export const isZoneUnlocked = (zoneId, purchasedSkills) => {
 // Helper to check if a building is unlocked
 export const isBuildingUnlocked = (buildingId, purchasedSkills) => {
   // Some buildings don't need skill unlocks (research items)
-  const skillGatedBuildings = ['spawningVat', 'royalHatchery', 'primordialChamber', 'slimePit', 'researchLab', 'slimeCatapult'];
+  const skillGatedBuildings = ['spawningVat', 'royalHatchery', 'primordialChamber', 'slimePit', 'researchLab', 'slimeCatapult', 'renderingVat'];
   if (!skillGatedBuildings.includes(buildingId)) return true;
 
   const effects = getSkillEffects(purchasedSkills);

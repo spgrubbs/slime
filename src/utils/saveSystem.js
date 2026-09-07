@@ -19,7 +19,8 @@ export const getDefaultState = () => ({
   lastCaravan: 0,
   caravanTier: 1,
   monsterKills: {},
-  unlockedMutations: [],
+  mutagens: {},
+  pityKills: {},
   purchasedSkills: ['expeditionBasics', 'hiveFoundation', 'combatTraining'], // Root skills free
   lastSave: Date.now(),
 });
@@ -68,19 +69,20 @@ const migrateSaveData = (data) => {
     migrated.slimes = migrated.slimes.map(migrateSlimeData);
   }
 
-  // Migrate old traits inventory to unlockedMutations
-  // Old structure: traits = { wolfFang: 2, dragonHeart: 1 }
-  // New structure: unlockedMutations = ['wolfFang', 'dragonHeart']
-  if (migrated.traits && typeof migrated.traits === 'object' && !migrated.unlockedMutations) {
-    migrated.unlockedMutations = Object.keys(migrated.traits);
-    // Delete the old traits inventory
-    delete migrated.traits;
+  // Mutations used to be unlocked account-wide by kill count; they are now scarce
+  // consumables (see docs/GAME_DESIGN.md §4). Anything a save had unlocked under the old
+  // rules is paid out once, as one mutagen per unlocked mutation, and the old fields go.
+  if (!migrated.mutagens) {
+    const owed = Array.isArray(migrated.unlockedMutations)
+      ? migrated.unlockedMutations
+      : (migrated.traits && typeof migrated.traits === 'object' ? Object.keys(migrated.traits) : []);
+    migrated.mutagens = {};
+    for (const id of owed) migrated.mutagens[id] = (migrated.mutagens[id] || 0) + 1;
   }
+  delete migrated.unlockedMutations;
+  delete migrated.traits;
 
-  // Ensure unlockedMutations exists
-  if (!migrated.unlockedMutations) {
-    migrated.unlockedMutations = [];
-  }
+  if (!migrated.pityKills) migrated.pityKills = {};
 
   // Migrate defeatedMonsters array to monsterKills object
   // Old structure: defeatedMonsters = ['wolf', 'goblin', 'wolf']

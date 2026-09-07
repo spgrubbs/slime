@@ -44,7 +44,7 @@ export const TUTORIALS = {
       '**Firmness** hits and holds. **Slipperiness** dodges and crits. **Viscosity** makes mutations land.',
       'Every slime you keep alive occupies **royal jelly** — that is your population cap.',
     ],
-    when: (s) => s.tab === 1,
+    when: (s) => s.tab === 'brood',
   },
 
   expeditions: {
@@ -57,7 +57,7 @@ export const TUTORIALS = {
       'They keep going while the game is closed.',
       'Each zone lists the stats it expects. Going in under-strength gets slimes hurt.',
     ],
-    when: (s) => s.tab === 2,
+    when: (s) => s.tab === 'wilds',
   },
 
   heldBiomass: {
@@ -96,7 +96,7 @@ export const TUTORIALS = {
       'Mutations are the part of a slime you actually design. They are never lost to wounds.',
       'Most scale with **Viscosity**, so a high-VISC slime is one whose tricks fire.',
     ],
-    when: (s) => s.unlockedMutations > 0,
+    when: (s) => s.mutagenKinds > 0,
   },
 
   ranch: {
@@ -109,7 +109,7 @@ export const TUTORIALS = {
       'They grow biomass, elemental affinity, raw stats and traits.',
       'The **Convalescence Pool** is the odd one out: it only takes the wounded.',
     ],
-    when: (s) => s.tab === 3,
+    when: (s) => s.tab === 'brood' && s.broodView === 'pools',
   },
 
   caravan: {
@@ -122,7 +122,7 @@ export const TUTORIALS = {
       'You are **paid per kill, immediately** — break off whenever you like and keep the lot.',
       'Wipe out a whole column and the road gets richer and more dangerous, permanently.',
     ],
-    when: (s) => s.tab === 4,
+    when: (s) => s.tab === 'road',
   },
 
   elements: {
@@ -148,7 +148,7 @@ export const TUTORIALS = {
       'Three trees: expeditions, hive economy, and combat.',
       'Zone access lives here — not in your slimes.',
     ],
-    when: (s) => s.tab === 5,
+    when: (s) => s.tab === 'hive' && s.skillPoints > 0,
   },
 
   verboseLog: {

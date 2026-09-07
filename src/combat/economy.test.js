@@ -5,7 +5,12 @@ import './index.js';
 import { computeStats } from './stats.js';
 import { makeSlimeCombatant, makeEnemyCombatant, resolveKill } from './resolveRound.js';
 import { SLIME_TIERS } from '../data/slimeData.js';
-import { MONSTER_TYPES, materialDropChance, GATING_MATERIALS, MATERIAL_RATES } from '../data/monsterData.js';
+import {
+  MONSTER_TYPES, materialDropChance, GATING_MATERIALS, MATERIAL_RATES,
+  mutagenDropChance, MUTAGEN_RATES, MUTAGEN_PITY_KILLS,
+} from '../data/monsterData.js';
+import { MUTATION_LIBRARY } from '../data/traitData.js';
+import { ZONES } from '../data/zoneData.js';
 import { BUILDINGS } from '../data/buildingData.js';
 import { RANCH_TYPES } from '../data/ranchData.js';
 import { CARAVAN_UNITS } from '../data/caravanData.js';
@@ -129,4 +134,75 @@ test('drop skills and Lucky raise every material together', () => {
     plain += b.filter(x => x.type === 'material').length;
   }
   assert.ok(boosted > plain, `${boosted} vs ${plain}`);
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Mutagens
+// ═════════════════════════════════════════════════════════════════════════════
+
+test('every monster carries the mutagen for its own mutation', () => {
+  // The round trip has to hold in both directions or a mutation becomes
+  // unobtainable without anything failing loudly.
+  Object.entries(MONSTER_TYPES).forEach(([id, m]) => {
+    assert.ok(m.mutation, `${id} drops no mutagen`);
+    assert.equal(MUTATION_LIBRARY[m.mutation].monster, id,
+      `${id} and ${m.mutation} disagree about each other`);
+  });
+});
+
+test('mutagen rate follows the mutation, not the monster', () => {
+  // A rare monster already appears ~5% of the time. Taxing that twice puts its
+  // mutagen past 2,000 zone kills.
+  assert.equal(mutagenDropChance(MONSTER_TYPES.youngWolf), MUTAGEN_RATES.common);
+  assert.equal(mutagenDropChance(MONSTER_TYPES.theSnail), MUTAGEN_RATES.rare);
+  assert.ok(MUTAGEN_RATES.rare > MUTAGEN_RATES.common);
+});
+
+test('a specific mutagen is a real grind, and any mutagen is not', () => {
+  const commonSpawn = 0.95 / 4;          // four commons share the common slot
+  const specific = 1 / (commonSpawn * MUTAGEN_RATES.common);
+  assert.ok(specific > 250 && specific < 700, `${Math.round(specific)} zone kills for a specific mutagen`);
+
+  const any = 1 / MUTAGEN_RATES.common;  // any monster's own mutagen
+  assert.ok(any <= 150, `${Math.round(any)} kills before seeing any mutagen at all`);
+});
+
+test('a rare mutagen costs more than a common one, but not absurdly', () => {
+  const rareSpawn = 0.05;
+  const kills = 1 / (rareSpawn * MUTAGEN_RATES.rare);
+  assert.ok(kills > 400, `${Math.round(kills)} kills is too cheap for a rare`);
+  assert.ok(kills < 1200, `${Math.round(kills)} kills is a wall, not a chase`);
+});
+
+test('the pity floor caps the worst case', () => {
+  // Pure 1% with no floor can hand a player 500 kills and nothing.
+  const worstCaseWithoutPity = Infinity;
+  assert.ok(MUTAGEN_PITY_KILLS < worstCaseWithoutPity);
+  assert.ok(MUTAGEN_PITY_KILLS >= 100 && MUTAGEN_PITY_KILLS <= 300,
+    `pity at ${MUTAGEN_PITY_KILLS} kills`);
+
+  // The floor must be reachable sooner than the raw drop's expected wait for a
+  // specific common, or it never actually protects anyone.
+  const expectedRawKillsOfThatMonster = 1 / MUTAGEN_RATES.common;
+  assert.ok(MUTAGEN_PITY_KILLS <= expectedRawKillsOfThatMonster * 2);
+});
+
+test('mutagens actually drop from kills', () => {
+  const sl = makeSlimeCombatant(slime('royal'));
+  let drops = 0;
+  const N = 6000;
+  for (let i = 0; i < N; i++) {
+    const se = [];
+    resolveKill({ slimes: [sl], enemy: makeEnemyCombatant('youngWolf') }, { rng: Math.random }, [], se, null);
+    drops += se.filter(x => x.type === 'mutagen' && x.mutation === 'sharp').length;
+  }
+  const rate = drops / N;
+  assert.ok(rate > 0.005 && rate < 0.02, `observed ${(rate * 100).toFixed(2)}% vs 1% expected`);
+});
+
+test('every mutation is obtainable from a monster that exists in a zone', () => {
+  const inAZone = new Set(Object.values(ZONES).flatMap(z => z.monsters));
+  Object.entries(MUTATION_LIBRARY).forEach(([id, m]) => {
+    assert.ok(inAZone.has(m.monster), `${id} comes from ${m.monster}, which no zone spawns`);
+  });
 });

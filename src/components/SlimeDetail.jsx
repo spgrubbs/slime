@@ -6,7 +6,7 @@ import SlimeSprite from './SlimeSprite.jsx';
 
 const SlimeDetail = ({
   slime, expState, getSlimeStats, getMaxHp, mutationSlots,
-  unlockedMutations = [], biomass: bank = 0, graftCost, onGraft, onWithdraw,
+  mutagens = {}, onApplyMutagen, onWithdraw,
 }) => {
   const tier = SLIME_TIERS[slime.tier];
   const [grafting, setGrafting] = useState(false);
@@ -27,9 +27,11 @@ const SlimeDetail = ({
   const mutations = slime.mutations || [];
   const slots = mutationSlots ? mutationSlots(slime) : (tier.traitSlots || 1);
   const freeSlots = Math.max(0, slots - mutations.length);
-  const cost = graftCost ? graftCost(slime) : 0;
-  const graftable = unlockedMutations.filter(id => !mutations.includes(id));
   const inTheField = !!expState;
+  // Mutagens you hold that this slime does not already carry.
+  const usable = Object.entries(mutagens)
+    .filter(([id, n]) => n > 0 && !mutations.includes(id))
+    .map(([id]) => id);
 
   return (
     <div style={{ background: 'rgba(0,0,0,0.3)', borderRadius: 10, padding: 15, border: `2px solid ${tier.color}33` }}>
@@ -219,42 +221,29 @@ const SlimeDetail = ({
           )}
         </div>
 
-        {/* Grafting — the point of the slots that Ancient and Alloy Potential grant */}
-        {freeSlots > 0 && onGraft && (
+        {/* Applying a mutagen — the only way a slime ever gains a mutation */}
+        {freeSlots > 0 && onApplyMutagen && (
           <div style={{ marginTop: 10, padding: 10, background: 'rgba(168,85,247,0.1)', border: '1px solid rgba(168,85,247,0.3)', borderRadius: 8 }}>
-            <div style={{ fontSize: 11, color: '#c084fc', marginBottom: 4 }}>
+            <div style={{ fontSize: 11, color: '#c084fc', marginBottom: 6 }}>
               🧬 {freeSlots} open slot{freeSlots === 1 ? '' : 's'}
             </div>
-            <div style={{ fontSize: 10, opacity: 0.75, marginBottom: 8 }}>
-              Graft a mutation for 🧬{cost}.{inTheField && ' Recall them first.'}
-            </div>
 
-            {!grafting ? (
-              <button
-                onClick={() => setGrafting(true)}
-                disabled={bank < cost || !graftable.length || inTheField}
-                style={{
-                  fontSize: 11, padding: '6px 12px', borderRadius: 6, border: 'none', color: '#fff',
-                  cursor: bank >= cost && graftable.length && !inTheField ? 'pointer' : 'not-allowed',
-                  background: bank >= cost && graftable.length && !inTheField
-                    ? 'linear-gradient(135deg, #a855f7, #6366f1)'
-                    : 'rgba(100,100,100,0.5)',
-                }}
-              >
-                {inTheField ? 'On expedition'
-                  : !graftable.length ? 'Nothing left to graft'
-                  : bank < cost ? `Need 🧬${cost}`
-                  : 'Graft mutation'}
-              </button>
+            {inTheField ? (
+              <div style={{ fontSize: 10, opacity: 0.6 }}>Recall them first.</div>
+            ) : !usable.length ? (
+              <div style={{ fontSize: 10, opacity: 0.6 }}>No mutagens on hand.</div>
             ) : (
-              <div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, maxHeight: 150, overflowY: 'auto' }}>
-                  {graftable.map(id => {
+              <>
+                <div style={{ fontSize: 10, opacity: 0.7, marginBottom: 8 }}>
+                  Permanent. The mutagen is spent.
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, maxHeight: 170, overflowY: 'auto' }}>
+                  {usable.map(id => {
                     const m = MUTATION_LIBRARY[id];
                     return (
                       <button
                         key={id}
-                        onClick={() => { onGraft(slime.id, id); setGrafting(false); }}
+                        onClick={() => onApplyMutagen(slime.id, id)}
                         title={getMutationDesc(id, currentStats.viscosity)}
                         style={{
                           fontSize: 10, padding: '5px 8px', borderRadius: 5, cursor: 'pointer',
@@ -262,17 +251,12 @@ const SlimeDetail = ({
                         }}
                       >
                         {m.icon} {m.name}
+                        <span style={{ opacity: 0.6 }}> ×{mutagens[id]}</span>
                       </button>
                     );
                   })}
                 </div>
-                <button
-                  onClick={() => setGrafting(false)}
-                  style={{ marginTop: 8, fontSize: 10, padding: '4px 10px', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: 4, color: '#aaa', cursor: 'pointer' }}
-                >
-                  Cancel
-                </button>
-              </div>
+              </>
             )}
           </div>
         )}

@@ -62,6 +62,16 @@ export const BUILDINGS = {
     skillUnlock: 'siegeEngineering',
   },
 
+  renderingVat: {
+    name: 'Rendering Vat',
+    icon: '⚗️',
+    desc: 'Recover mutagens from a reabsorbed slime instead of losing them',
+    cost: { biomass: 4000, mats: { 'Void Essence': 3, 'Champion Badge': 1, 'Mana Crystal': 8 } },
+    max: 2,                             // tier 1 recovers half, tier 2 all of it
+    category: 'utility',
+    skillUnlock: 'renderingVat',
+  },
+
   scoutCamp: {
     name: 'Scout Camp',
     icon: '🔭',
