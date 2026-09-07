@@ -70,15 +70,10 @@ const SkillTree = ({ queenLevel, purchasedSkills, onPurchaseSkill, availablePoin
   };
 
   return (
-    <div style={{ background: 'rgba(0,0,0,0.2)', borderRadius: 12, padding: 15 }}>
-      {/* Header with points */}
+    <div>
+      {/* The screen it lives on already names it; state the numbers, not the title. */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 }}>
-        <div>
-          <h3 style={{ margin: 0, fontSize: 18 }}>🌳 Queen Skill Tree</h3>
-          <div style={{ fontSize: 12, opacity: 0.7, marginTop: 4 }}>
-            Level {queenLevel} • Unlock powerful abilities
-          </div>
-        </div>
+        <div style={{ fontSize: 12, opacity: 0.7 }}>Queen level {queenLevel}</div>
         <div style={{
           background: 'rgba(236,72,153,0.2)',
           padding: '8px 16px',

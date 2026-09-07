@@ -13,7 +13,7 @@ back changed — fatter with biomass, or wounded and empty-handed. Nothing you b
 deleted by bad luck; what you lose is the biomass it was carrying and the days it spends
 mending. The fun is in **building a slime**, not in piloting one.
 
-Loop: `spawn → graft mutations → send on expedition → draw off the biomass → build → repeat`
+Loop: `spawn → apply mutagens → send on expedition → draw off the biomass → build → repeat`
 
 Genre: idle/incremental with a creature-builder core. Designed for **3–4 check-ins per day**,
 not continuous play.
@@ -107,12 +107,12 @@ Two actions, deliberately distinct:
 
 ## 4. Mutations
 
-30 mutations, 5 per zone, unlocked account-wide by killing 100 of the associated monster
-(200–600 for rares). Once unlocked they are **unlimited** — the unlock is the progression,
-not the inventory.
+30 mutations, 5 per zone. A mutation reaches a slime exactly one way: you find a **mutagen**
+and apply it. There is no unlock threshold, no spawn-time picker, and no graft — one
+mechanism, used everywhere.
 
 Each mutation carries:
-- a flat stat `bonus` applied at spawn,
+- a flat stat `bonus` applied when the mutagen takes hold,
 - a `passive` — the actual combat behavior,
 - an optional `elementBonus` — starting elemental affinity,
 - VISC scaling on the passive's magnitude or proc chance.
@@ -127,24 +127,43 @@ Every passive is implemented as a hook (§9.3), and `validateRegistry()` fails a
 one is not. Mutation slots come from the tier, plus `ancient` and `alloyPotential`, plus the
 skill tree.
 
-### Do mutations still fit, now that slimes persist?
+### Mutagens
 
-**Yes — more than before.** They sit squarely in the intrinsic half: permanent, safe from
-wounds, and the only part of a slime you author deliberately. And now that held biomass is
-capped at +35%, the intrinsic layer carries the power curve, so mutations are most of what
-distinguishes two slimes of the same tier.
+Each monster drops the mutagen for its own mutation. The rate follows the **mutation's**
+rarity, not the monster's — a rare monster is already scarce at ~5% spawn, so taxing it twice
+would put a specific rare mutagen 2,000 kills away.
 
-The unlock — 100 kills of the associated monster, 200–600 for rares — is also exactly the
-kind of mild grind an incremental wants, and it already exists. Because a slime now lives
-through its mistakes, **grafting** is the natural expression of a long-term investment: an
-old veteran with an open slot is worth feeding.
+| Source | Drop chance | Kills in-zone for that specific mutagen |
+|---|---|---|
+| Common monster | 1% | ~420 |
+| Rare monster | 3% | ~670 |
+| *Any* mutagen from a zone | — | ~100 |
 
-One tension to watch. Mutations are unlimited once unlocked, so the binding constraint is
-*slots*, not supply — which makes tier and slot upgrades the scarcity, and that is fine. The
-risk is the opposite one: with slimes persistent, the optimal play drifts toward a small
-stable of perfected Royals that never changes. The population cap and the Convalescence Pool
-are what push back — you need bodies in rotation while others mend — but if the roster ever
-stops turning over, that is the first place to look.
+`monsterKills` no longer gates anything; it is now a **pity floor** — every 150 kills of a type
+grants that mutagen outright, so a cold streak reads as unlucky rather than broken. The
+Compendium shows both the per-kill rate and progress toward the floor.
+
+Applying a mutagen is permanent and irreversible, and consumes the item. Slimes spawn blank —
+the Forge picks tier and name, the slime screen is where a slime is *developed*.
+
+### Why this shape
+
+Every kill is a lottery ticket rather than a tally mark that stops mattering at 100, and a
+mutation now has a real cost, so choosing where to spend one is a decision. It also makes
+slots meaningfully scarce in the right direction: `ancient` and `alloyPotential` gained value
+because a slot is now a place to put something you had to find.
+
+**Wounds never touch mutations** — they are intrinsic (§3). Only reabsorbing does, and by
+default reabsorbing a developed slime destroys its genes, so you dissolve spares and your
+veterans accrete. The **Rendering Vat** (endgame materials, two tiers: 50% then 100% recovery)
+is what reverses that, and it is a change in *how you relate to the roster* rather than a
+number: after it, dissolving a veteran to re-house its mutagens in a Royal becomes correct.
+The Convalescence Pool's slot pressure and the population cap are what keep the pre-Vat game
+from turning into pure hoarding.
+
+One tension to watch: the optimal play still drifts toward a small stable of perfected Royals.
+Population cap and Pool rotation push back. If the roster ever stops turning over, look here
+first.
 
 ---
 
@@ -367,13 +386,19 @@ procession along a road rather than one monster holding ground.
    `enraged` all have appliers, and monster `slow`/`buff` do their jobs.
 5. ~~`curious` and `ancient` unimplemented; `primordial` partial.~~ `curious` raises the
    travel-event rate, `primordial` is +10% to all stats and max HP, and `ancient` /
-   `alloyPotential` grant mutation slots that **grafting** can actually fill: a slime with an
-   open slot can take another unlocked mutation for biomass, priced by tier.
+   `alloyPotential` grant mutation slots that a **mutagen** can actually fill (§4).
 6. ~~Max HP frozen at spawn.~~ Derived from current firmness.
 7. ~~Exploration and intermission events never fired.~~ Both fire during travel.
-8. ~~Tower defense had no decisions in it.~~ Rebuilt as lanes and positions — see §7.3.
-9. ~~No test coverage on combat math.~~ 68 tests across the resolver, the expedition driver
-   and the defense.
+8. ~~Tower defense had no decisions in it.~~ Removed. Replaced by the caravan ambush (§7.3),
+   which asks one question — press or leave — and pays per kill so leaving is never a loss.
+9. ~~No test coverage on combat math.~~ 96 tests across the resolver, the expedition driver,
+   the caravan and the drop economy.
+10. ~~Mutations unlocked by a kill threshold, then free forever.~~ Replaced by mutagens (§4);
+    the kill tally survives as a pity floor.
+11. ~~Grafting as a second, parallel way to gain a mutation.~~ Removed. Applying a mutagen is
+    the only mechanism, and slimes now spawn blank.
+12. ~~Nine screens, split by system.~~ Six, split by subject — see §11c. The roster no longer
+    appears twice, and Inventory is a fold on the Hive rather than a screen.
 
 ### Open
 
@@ -508,6 +533,39 @@ either Settings or dev mode.
 
 ---
 
+## 11c. Screens
+
+Six screens, grouped by **what the screen is about** rather than by which system implemented
+it. The earlier layout had nine, split by system, and it showed: the roster appeared on two of
+them, the ranch had a whole screen for one component, and "Inventory" was a screen that only
+ever listed materials.
+
+| Screen | What it is | Holds |
+|---|---|---|
+| 👑 **The Hive** | the Queen and everything she owns | level & mana, abilities, buildings, Instincts (skill tree), Stores (materials) |
+| 🟢 **The Brood** | every slime, upright or mending | Forge, mutagens on hand, roster, slime detail, and the Pools |
+| 🗺️ **The Wilds** | where slimes are sent | zones, expedition parties, the arena |
+| 🎯 **The Road** | the one timed event | caravan ambush, its cooldown, catapults |
+| 📖 **Memory** | the record | Compendium: zones, guide, reference |
+| ⚙️ **Settings** | knobs | speed, verbose logs, tutorials, dev mode, save |
+
+Rules that produced this:
+
+- **A screen is a subject, not a system.** Convalescence Pools are not a fifth pillar of the
+  game; they are where wounded slimes go, so they live with the slimes. The skill tree is not
+  separate from the hive; it is what the Queen learns, so it folds into the hive.
+- **Nothing appears in two places.** The roster is on the Brood and nowhere else.
+- **Fold, don't paginate.** Secondary sections on a screen are `<details>` that state their
+  own status in the summary — "🌳 Instincts · 1 point to spend", "📦 Stores (4 kinds)" — and
+  open themselves when they want attention. A closed fold costs one line; a tab costs a
+  navigation.
+- **A timed thing stays top-level.** The Road is one component and could fold into the Wilds,
+  but it is the only screen with a clock, and burying a clock is how players miss it.
+
+Names are the hive's, not a UI's: the Brood, the Wilds, the Road, Instincts, Memory. Within a
+screen the same applies — you *draw out* biomass rather than withdraw it, slimes *mend* rather
+than heal, a mutagen *takes hold* rather than being equipped.
+
 ## 12. Design Principles
 
 - **The Queen never fights.** All player power is expressed through what she builds and
@@ -517,6 +575,8 @@ either Settings or dev mode.
 - **Effects should be loud.** Prefer a 10% chance of something absurd over a permanent 3%.
 - **Idle by default, active when it pays.** Expeditions and ranches run away from the
   keyboard; the daily caravan is the one place that rewards attention.
+- **A screen is a subject, not a system.** Group by what a thing *is about* — the Queen, the
+  slimes, the field — not by which module renders it.
 - **The interface states, the tutorial explains.** Anything that reads like a paragraph in a
   panel you visit daily belongs in a first-encounter popup and the Compendium instead.
 - **Simulation and presentation are separate.** Combat resolves as data; the arena is one
@@ -800,10 +860,11 @@ for systems met after the opening.
 
 ---
 
-## 16. Proposal — mutagens replace kill-count unlocks
+## 16. Mutagens replace kill-count unlocks — **BUILT**
 
-_Not built. Replaces the current "kill 100 of a monster, then that mutation is unlimited
-forever" with a scarce, consumable item applied to one specific slime._
+_Shipped. Kept as the rationale record; the resulting system is documented in §4._
+_Everything below describes what was decided and why; all of it landed, including the
+pity floor and both Rendering Vat tiers._
 
 ### Why this is better
 
