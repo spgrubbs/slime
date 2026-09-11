@@ -1,403 +1,377 @@
 // Skill Tree Data - Queen progression system
-// Skills are organized into three trees with branching paths
-// Each skill costs skill points (earned on level up) and may require prerequisite skills
-
+//
+// Three trees. Skills cost points earned on Queen levels and may require
+// prerequisites.
+//
+// THE RULE THIS TREE IS WRITTEN TO: a skill should change how something works,
+// not how big a number is. "+8% firmness" is not a decision — you take it when
+// you can afford it and never think about it again. "Materials survive a wipe"
+// changes how far you are willing to push an expedition.
+//
+// Flat bonuses survive in exactly one place: CAPACITY. Royal jelly, ranch
+// slots, mutation slots and ambush slots are quantities by nature, and a
+// capacity increase does change what you can field.
+//
 // Effect types:
-// - passive: Always active once purchased
-// - unlock: Unlocks a feature/ability
-// - mana: Unlocks a new mana ability
-// - bonus: Provides a percentage bonus
+// - passive: always active once purchased; the id is checked where it matters
+// - unlock:  opens a feature, building or zone
+// - pheromone: unlocks a mana ability
+// - bonus:   a flat number — capacity only, by the rule above
 
 export const SKILL_TREES = {
   expedition: {
     name: 'Ooze Outreach',
     icon: '🗺️',
     color: '#22d3ee',
-    description: 'Send your slimes farther, smarter, stronger',
+    description: 'How your slimes travel, hunt and come home',
     skills: {
-      // Root skill
       expeditionBasics: {
         id: 'expeditionBasics',
-        name: 'Slime Scouts',
-        icon: '🥾',
-        desc: 'Train slimes to venture beyond the hive',
+        name: 'Questing Instinct',
+        icon: '🗺️',
+        desc: 'Enables expeditions',
         cost: 0,
         requires: [],
         effect: { type: 'passive', desc: 'Enables expeditions' },
-        position: { x: 50, y: 10 },
-      },
-
-      // First tier
-      swampAccess: {
-        id: 'swampAccess',
-        name: 'Mucus Membrane',
-        icon: '🌿',
-        desc: 'A thicker skin: +8% max HP',
-        cost: 2,
-        requires: ['expeditionBasics'],
-        effect: { type: 'bonus', stat: 'maxHp', value: 8 },
-        position: { x: 50, y: 22 },
+        position: { x: 50, y: 8 },
       },
 
       scoutingParty: {
         id: 'scoutingParty',
         name: 'Sensory Tendrils',
         icon: '👁️',
-        desc: 'See monster stats before engaging',
+        desc: 'See a monster\'s stats before engaging',
         cost: 1,
         requires: ['expeditionBasics'],
         effect: { type: 'passive', desc: 'Show monster HP/DMG in zone select' },
-        position: { x: 25, y: 22 },
+        position: { x: 22, y: 20 },
       },
 
-      forageExpertise: {
-        id: 'forageExpertise',
-        name: 'Absorptive Coating',
-        icon: '🍄',
-        desc: '+15% biomass from expeditions',
-        cost: 1,
+      secondWind: {
+        id: 'secondWind',
+        name: 'Second Wind',
+        icon: '🌬️',
+        desc: 'Travel recovery also sheds one harmful status',
+        cost: 2,
         requires: ['expeditionBasics'],
-        effect: { type: 'bonus', stat: 'expeditionBiomass', value: 15 },
-        position: { x: 75, y: 22 },
+        effect: { type: 'passive', desc: 'Clears one debuff per travel leg' },
+        position: { x: 50, y: 20 },
       },
 
-      // Second tier
-      cavesAccess: {
-        id: 'cavesAccess',
-        name: 'Crystalline Adaptation',
-        icon: '💎',
-        desc: 'Lattice within the gel: +8% firmness',
+      salvage: {
+        id: 'salvage',
+        name: 'Salvage Rites',
+        icon: '📦',
+        desc: 'Materials a party was carrying survive a wipe',
         cost: 3,
-        requires: ['swampAccess'],
-        effect: { type: 'bonus', stat: 'firmness', value: 8 },
-        position: { x: 50, y: 34 },
+        requires: ['expeditionBasics'],
+        effect: { type: 'passive', desc: 'Carried materials are kept on a wipe' },
+        position: { x: 78, y: 20 },
+      },
+
+      vanguard: {
+        id: 'vanguard',
+        name: 'Vanguard',
+        icon: '⚡',
+        desc: 'Your party always acts first in the opening round',
+        cost: 3,
+        requires: ['secondWind'],
+        effect: { type: 'passive', desc: 'Party wins initiative on round 1' },
+        position: { x: 36, y: 33 },
+      },
+
+      dissection: {
+        id: 'dissection',
+        name: 'Careful Dissection',
+        icon: '🔪',
+        desc: 'Every kill yields at least one material',
+        cost: 3,
+        requires: ['salvage'],
+        effect: { type: 'passive', desc: 'Guarantees a material per kill' },
+        position: { x: 70, y: 33 },
       },
 
       swiftExpeditionSkill: {
         id: 'swiftExpeditionSkill',
         name: 'Quickslime Secretion',
         icon: '🏃',
-        desc: 'Unlock Swift Expedition ability',
+        desc: 'Unlock the Swift Expedition pheromone',
         cost: 2,
         requires: ['scoutingParty'],
         effect: { type: 'pheromone', ability: 'swiftExpedition' },
-        position: { x: 15, y: 34 },
-      },
-
-      materialScavenger: {
-        id: 'materialScavenger',
-        name: 'Sticky Retrieval',
-        icon: '📦',
-        desc: '+20% material drop rate',
-        cost: 2,
-        requires: ['forageExpertise'],
-        effect: { type: 'bonus', stat: 'materialDrop', value: 20 },
-        position: { x: 85, y: 34 },
+        position: { x: 14, y: 33 },
       },
 
       tacticalRetreat: {
         id: 'tacticalRetreat',
-        name: 'Emergency Liquefaction',
-        icon: '💧',
-        desc: 'Slimes escape with 1 HP instead of dying (once per expedition)',
-        cost: 2,
-        requires: ['scoutingParty'],
-        effect: { type: 'passive', desc: 'Death prevention (1x)' },
-        position: { x: 35, y: 34 },
+        name: 'Survival Reflex',
+        icon: '🛡️',
+        desc: 'Once per expedition, a slime survives a killing blow at 1 HP',
+        cost: 4,
+        requires: ['vanguard'],
+        effect: { type: 'passive', desc: 'One death prevented per expedition' },
+        position: { x: 36, y: 46 },
       },
 
-      // Third tier
-      ruinsAccess: {
-        id: 'ruinsAccess',
-        name: 'Thermal Resistance',
-        icon: '🔥',
-        desc: 'Heat-hardened: +10% damage reduction',
+      fieldTriage: {
+        id: 'fieldTriage',
+        name: 'Field Triage',
+        icon: '🩹',
+        desc: 'A slime that goes down keeps the biomass it was carrying',
         cost: 4,
-        requires: ['cavesAccess'],
-        effect: { type: 'bonus', stat: 'damageReduction', value: 10 },
-        position: { x: 50, y: 46 },
+        requires: ['dissection'],
+        effect: { type: 'passive', desc: 'Wounds no longer spill carried biomass' },
+        position: { x: 70, y: 46 },
       },
 
       sharedVigorSkill: {
         id: 'sharedVigorSkill',
-        name: 'Hivemind Pulse',
-        icon: '❤️‍🩹',
-        desc: 'Unlock Shared Vigor ability',
+        name: 'Hive Resonance',
+        icon: '💞',
+        desc: 'Unlock the Shared Vigor pheromone',
         cost: 3,
         requires: ['swiftExpeditionSkill'],
         effect: { type: 'pheromone', ability: 'sharedVigor' },
-        position: { x: 15, y: 46 },
+        position: { x: 14, y: 46 },
       },
 
-      rareHunter: {
-        id: 'rareHunter',
-        name: 'Predator Instinct',
-        icon: '⭐',
-        desc: 'Double rare monster spawn chance',
-        cost: 3,
-        requires: ['materialScavenger'],
-        effect: { type: 'bonus', stat: 'rareSpawn', value: 100 },
-        position: { x: 85, y: 46 },
+      trophyHunter: {
+        id: 'trophyHunter',
+        name: 'Trophy Hunter',
+        icon: '🏆',
+        desc: 'A rare monster always surrenders its mutagen',
+        cost: 4,
+        requires: ['tacticalRetreat'],
+        effect: { type: 'passive', desc: 'Rare kills guarantee a mutagen' },
+        position: { x: 50, y: 59 },
       },
 
-      // Fourth tier
-      peaksAccess: {
-        id: 'peaksAccess',
-        name: 'Altitude Gel',
-        icon: '⛰️',
-        desc: 'Thin-air buoyancy: +10% slipperiness',
-        cost: 5,
-        requires: ['ruinsAccess'],
-        effect: { type: 'bonus', stat: 'slipperiness', value: 10 },
-        position: { x: 50, y: 58 },
+      pathfinder: {
+        id: 'pathfinder',
+        name: 'Pathfinder',
+        icon: '🧭',
+        desc: 'Parties travel between fights without stopping',
+        cost: 4,
+        requires: ['fieldTriage'],
+        effect: { type: 'passive', desc: 'Removes the travel pause' },
+        position: { x: 76, y: 59 },
       },
 
       evolutionPulseSkill: {
         id: 'evolutionPulseSkill',
-        name: 'Mutagenic Burst',
-        icon: '⚡',
-        desc: 'Unlock Evolution Pulse ability',
+        name: 'Mutagenic Bloom',
+        icon: '🧬',
+        desc: 'Unlock the Evolution Pulse pheromone',
         cost: 4,
         requires: ['sharedVigorSkill'],
         effect: { type: 'pheromone', ability: 'evolutionPulse' },
-        position: { x: 15, y: 58 },
+        position: { x: 18, y: 59 },
       },
 
-      veteranBonuses: {
-        id: 'veteranBonuses',
-        name: 'Battle-Hardened Membrane',
-        icon: '🎖️',
-        desc: 'Slimes gain +1% stats per 10 kills',
-        cost: 4,
-        requires: ['rareHunter', 'tacticalRetreat'],
-        effect: { type: 'passive', desc: 'Kill count stat bonus' },
-        position: { x: 60, y: 58 },
-      },
-
-      // Fifth tier
-      voidAccess: {
-        id: 'voidAccess',
-        name: 'Void Membrane',
-        icon: '🕳️',
-        desc: 'Nothing sticks to nothing: +12% viscosity',
-        cost: 6,
-        requires: ['peaksAccess'],
-        effect: { type: 'bonus', stat: 'viscosity', value: 12 },
-        position: { x: 50, y: 70 },
-      },
-
-      infiniteEndurance: {
-        id: 'infiniteEndurance',
-        name: 'Endless Ooze',
-        icon: '♾️',
-        desc: 'Slimes knit themselves back together in the field, healing each round',
+      rally: {
+        id: 'rally',
+        name: 'Rally',
+        icon: '📣',
+        desc: 'When a slime falls, the survivors close ranks and heal',
         cost: 5,
-        requires: ['peaksAccess', 'evolutionPulseSkill'],
-        effect: { type: 'passive', passive: 'regeneration' },
-        position: { x: 25, y: 70 },
+        requires: ['trophyHunter'],
+        effect: { type: 'passive', desc: 'Survivors heal 25% when one goes down' },
+        position: { x: 40, y: 74 },
       },
 
-      // Capstone
-      expeditionMastery: {
-        id: 'expeditionMastery',
-        name: 'Apex Ooze',
-        icon: '🌟',
-        desc: '+25% all expedition rewards',
+      quarry: {
+        id: 'quarry',
+        name: 'Quarry Scent',
+        icon: '🩸',
+        desc: 'Rare monsters are drawn to your parties — they appear far more often',
+        cost: 5,
+        requires: ['pathfinder'],
+        effect: { type: 'bonus', stat: 'rareSpawn', value: 150 },
+        position: { x: 68, y: 74 },
+      },
+
+      relentless: {
+        id: 'relentless',
+        name: 'Relentless',
+        icon: '🔥',
+        desc: 'Five kills without a casualty grants the party a free round',
         cost: 6,
-        requires: ['voidAccess', 'veteranBonuses'],
-        effect: { type: 'bonus', stat: 'expeditionRewards', value: 25 },
-        position: { x: 50, y: 82 },
+        requires: ['rally', 'quarry'],
+        effect: { type: 'passive', desc: 'Kill streaks grant an extra round' },
+        position: { x: 54, y: 90 },
       },
     },
   },
 
-  economy: {
+  hive: {
     name: 'Hive Growth',
     icon: '🏛️',
-    color: '#f59e0b',
-    description: 'Expand the hive, multiply your resources',
+    color: '#a855f7',
+    description: 'What the hive can hold, build and take back',
     skills: {
-      // Root
       hiveFoundation: {
         id: 'hiveFoundation',
-        name: 'Core Chamber',
-        icon: '🏠',
-        desc: 'Establish the foundations of your hive',
+        name: 'Load-Bearing Ooze',
+        icon: '🏛️',
+        desc: 'Enables buildings',
         cost: 0,
         requires: [],
         effect: { type: 'passive', desc: 'Enables buildings' },
-        position: { x: 50, y: 10 },
-      },
-
-      // First tier
-      biomassEfficiency: {
-        id: 'biomassEfficiency',
-        name: 'Efficient Digestion',
-        icon: '🧬',
-        desc: '+10% biomass from all sources',
-        cost: 1,
-        requires: ['hiveFoundation'],
-        effect: { type: 'bonus', stat: 'biomassGain', value: 10 },
-        position: { x: 30, y: 22 },
+        position: { x: 50, y: 8 },
       },
 
       jellyProduction: {
         id: 'jellyProduction',
-        name: 'Jelly Glands',
+        name: 'Royal Jelly Glands',
         icon: '🍯',
-        desc: '+5 max Royal Jelly capacity',
+        desc: '+15 royal jelly — a bigger brood',
         cost: 1,
         requires: ['hiveFoundation'],
-        effect: { type: 'bonus', stat: 'maxJelly', value: 5 },
-        position: { x: 70, y: 22 },
+        effect: { type: 'bonus', stat: 'maxJelly', value: 15 },
+        position: { x: 24, y: 20 },
       },
 
-      // Second tier
       spawningVatUnlock: {
         id: 'spawningVatUnlock',
-        name: 'Spawning Vat Blueprint',
+        name: 'Vat Cultivation',
         icon: '🧫',
-        desc: 'Unlock Spawning Vat (Enhanced slimes)',
+        desc: 'Unlock the Spawning Vat',
         cost: 2,
-        requires: ['biomassEfficiency'],
+        requires: ['hiveFoundation'],
         effect: { type: 'unlock', building: 'spawningVat' },
-        position: { x: 20, y: 34 },
+        position: { x: 50, y: 20 },
+      },
+
+      reclamation: {
+        id: 'reclamation',
+        name: 'Reclamation',
+        icon: '♻️',
+        desc: 'Reabsorbing a slime returns everything it cost, not a fraction',
+        cost: 2,
+        requires: ['hiveFoundation'],
+        effect: { type: 'passive', desc: 'Full biomass back on reabsorb' },
+        position: { x: 76, y: 20 },
       },
 
       researchLabUnlock: {
         id: 'researchLabUnlock',
-        name: 'Cerebral Node',
+        name: 'Culture Lab',
         icon: '🔬',
-        desc: 'Unlock Research Chamber',
+        desc: 'Unlock the Research Lab',
         cost: 2,
-        requires: ['biomassEfficiency'],
+        requires: ['spawningVatUnlock'],
         effect: { type: 'unlock', building: 'researchLab' },
-        position: { x: 40, y: 34 },
+        position: { x: 38, y: 33 },
       },
 
       ranchBasics: {
         id: 'ranchBasics',
         name: 'Cultivation Pools',
-        icon: '🌱',
-        desc: 'Unlock the Ranch system',
+        icon: '🏠',
+        desc: 'Unlock ranches and the Convalescence Pool',
         cost: 2,
-        requires: ['jellyProduction'],
+        requires: ['spawningVatUnlock'],
         effect: { type: 'unlock', feature: 'ranch' },
-        position: { x: 60, y: 34 },
+        position: { x: 62, y: 33 },
       },
 
       bountifulHarvestSkill: {
         id: 'bountifulHarvestSkill',
-        name: 'Harvest Secretion',
+        name: 'Gorging Bloom',
         icon: '🌾',
-        desc: 'Unlock Bountiful Harvest ability',
+        desc: 'Unlock the Bountiful Harvest pheromone',
         cost: 2,
         requires: ['jellyProduction'],
         effect: { type: 'pheromone', ability: 'bountifulHarvest' },
-        position: { x: 80, y: 34 },
+        position: { x: 14, y: 33 },
       },
 
-      // Third tier
       royalHatcheryUnlock: {
         id: 'royalHatcheryUnlock',
-        name: 'Royal Hatchery Blueprint',
+        name: 'Royal Brooding',
         icon: '🥚',
-        desc: 'Unlock Royal Hatchery (Elite slimes)',
+        desc: 'Unlock the Royal Hatchery',
         cost: 3,
-        requires: ['spawningVatUnlock'],
-        effect: { type: 'unlock', building: 'royalHatchery' },
-        position: { x: 20, y: 46 },
-      },
-
-      researchSpeed: {
-        id: 'researchSpeed',
-        name: 'Neural Acceleration',
-        icon: '⚗️',
-        desc: '+25% research speed',
-        cost: 2,
         requires: ['researchLabUnlock'],
-        effect: { type: 'bonus', stat: 'researchSpeed', value: 25 },
-        position: { x: 40, y: 46 },
+        effect: { type: 'unlock', building: 'royalHatchery' },
+        position: { x: 38, y: 46 },
       },
 
       ranchExpansion: {
         id: 'ranchExpansion',
-        name: 'Expanded Pools',
-        icon: '🏡',
-        desc: '+2 ranch building slots',
+        name: 'Deeper Pools',
+        icon: '🌊',
+        desc: '+2 slots in every ranch and pool',
         cost: 3,
         requires: ['ranchBasics'],
         effect: { type: 'bonus', stat: 'ranchSlots', value: 2 },
-        position: { x: 60, y: 46 },
+        position: { x: 62, y: 46 },
+      },
+
+      fieldDressing: {
+        id: 'fieldDressing',
+        name: 'Field Dressing',
+        icon: '🧵',
+        desc: 'Wounded slimes mend slowly even outside a Convalescence Pool',
+        cost: 3,
+        requires: ['ranchExpansion'],
+        effect: { type: 'passive', desc: 'Wounds heal at half rate with no slot' },
+        position: { x: 78, y: 59 },
       },
 
       nurturingAuraSkill: {
         id: 'nurturingAuraSkill',
-        name: 'Nurturing Mist',
-        icon: '💚',
-        desc: 'Unlock Nurturing Aura ability',
+        name: 'Brooding Musk',
+        icon: '💗',
+        desc: 'Unlock the Nurturing Aura pheromone',
         cost: 3,
         requires: ['bountifulHarvestSkill'],
         effect: { type: 'pheromone', ability: 'nurturingAura' },
-        position: { x: 80, y: 46 },
+        position: { x: 14, y: 46 },
       },
 
-      // Fourth tier
       primordialChamberUnlock: {
         id: 'primordialChamberUnlock',
-        name: 'Primordial Chamber Blueprint',
+        name: 'Primordial Depths',
         icon: '👑',
-        desc: 'Unlock Primordial Chamber (Royal slimes)',
+        desc: 'Unlock the Primordial Chamber',
         cost: 5,
         requires: ['royalHatcheryUnlock'],
         effect: { type: 'unlock', building: 'primordialChamber' },
-        position: { x: 20, y: 58 },
+        position: { x: 38, y: 59 },
       },
 
-      buildingDiscount: {
-        id: 'buildingDiscount',
-        name: 'Organic Architecture',
-        icon: '🔨',
-        desc: '-20% building costs',
-        cost: 3,
-        requires: ['researchSpeed'],
-        effect: { type: 'bonus', stat: 'buildingCost', value: -20 },
-        position: { x: 40, y: 58 },
-      },
-
-      premiumCreatures: {
-        id: 'premiumCreatures',
-        name: 'Enriched Cultivation',
-        icon: '✨',
-        desc: 'Ranch buildings give +50% resources',
-        cost: 4,
-        requires: ['ranchExpansion', 'nurturingAuraSkill'],
-        effect: { type: 'bonus', stat: 'ranchYield', value: 50 },
-        position: { x: 70, y: 58 },
-      },
-
-      // Fifth tier
       slimePitUnlock: {
         id: 'slimePitUnlock',
-        name: 'Slime Pit Blueprint',
+        name: 'The Pit',
         icon: '🕳️',
-        desc: 'Unlock Slime Pit (+10 jelly cap each)',
+        desc: 'Unlock the Slime Pit',
         cost: 4,
-        requires: ['primordialChamberUnlock', 'buildingDiscount'],
+        requires: ['primordialChamberUnlock'],
         effect: { type: 'unlock', building: 'slimePit' },
-        position: { x: 30, y: 70 },
+        position: { x: 30, y: 74 },
       },
 
-      // Capstone
+      dismantle: {
+        id: 'dismantle',
+        name: 'Dismantling',
+        icon: '🔨',
+        desc: 'Buildings can be torn down for everything they cost',
+        cost: 4,
+        requires: ['fieldDressing'],
+        effect: { type: 'passive', desc: 'Full refund on dismantling a building' },
+        position: { x: 66, y: 74 },
+      },
+
       economyMastery: {
         id: 'economyMastery',
-        name: 'Hive Overmind',
-        icon: '💰',
-        desc: '+15% all resource gains',
+        name: 'The Deep Hive',
+        icon: '🏰',
+        desc: '+30 royal jelly and +2 more pool slots',
         cost: 6,
-        requires: ['slimePitUnlock', 'premiumCreatures'],
-        effect: { type: 'bonus', stat: 'allResources', value: 15 },
-        position: { x: 50, y: 82 },
+        requires: ['slimePitUnlock', 'dismantle'],
+        effect: { type: 'bonus', stat: 'maxJelly', value: 30, also: { ranchSlots: 2 } },
+        position: { x: 48, y: 90 },
       },
     },
   },
@@ -406,250 +380,187 @@ export const SKILL_TREES = {
     name: 'Slime Combat',
     icon: '⚔️',
     color: '#ef4444',
-    description: 'Harden your slimes for battle',
+    description: 'How your slimes fight, not how hard they hit',
     skills: {
-      // Root
       combatTraining: {
         id: 'combatTraining',
-        name: 'Combat Instincts',
-        icon: '🎯',
-        desc: 'Awaken the predator within your slimes',
+        name: 'Killing Instinct',
+        icon: '⚔️',
+        desc: 'Enables combat training',
         cost: 0,
         requires: [],
         effect: { type: 'passive', desc: 'Enables combat' },
-        position: { x: 50, y: 10 },
+        position: { x: 50, y: 8 },
       },
 
-      // First tier - three branches
-      offensiveFocus: {
-        id: 'offensiveFocus',
-        name: 'Hardened Core',
-        icon: '💪',
-        desc: '+10% Firmness for all slimes',
-        cost: 1,
-        requires: ['combatTraining'],
-        effect: { type: 'bonus', stat: 'firmness', value: 10 },
-        position: { x: 25, y: 22 },
-      },
-
-      defensiveFocus: {
-        id: 'defensiveFocus',
-        name: 'Resilient Gel',
+      secondSkin: {
+        id: 'secondSkin',
+        name: 'Second Skin',
         icon: '🛡️',
-        desc: '+10% max HP for all slimes',
+        desc: 'The first harmful status each fight slides off',
         cost: 1,
         requires: ['combatTraining'],
-        effect: { type: 'bonus', stat: 'maxHp', value: 10 },
-        position: { x: 50, y: 22 },
+        effect: { type: 'passive', desc: 'Blocks the first debuff per fight' },
+        position: { x: 24, y: 20 },
       },
 
-      utilityFocus: {
-        id: 'utilityFocus',
-        name: 'Thickened Viscosity',
-        icon: '🌀',
-        desc: '+10% Viscosity for all slimes',
-        cost: 1,
+      opportunist: {
+        id: 'opportunist',
+        name: 'Opportunist',
+        icon: '🎯',
+        desc: 'The slime that lands a killing blow strikes again immediately',
+        cost: 2,
         requires: ['combatTraining'],
-        effect: { type: 'bonus', stat: 'viscosity', value: 10 },
-        position: { x: 75, y: 22 },
+        effect: { type: 'passive', desc: 'Killing blow grants an extra action' },
+        position: { x: 50, y: 20 },
       },
 
-      // Second tier
-      criticalStrikes: {
-        id: 'criticalStrikes',
-        name: 'Piercing Pseudopods',
-        icon: '💥',
-        desc: '+5% critical hit chance',
+      adaptiveCarapace: {
+        id: 'adaptiveCarapace',
+        name: 'Adaptive Carapace',
+        icon: '🔰',
+        desc: 'Being hit by an element hardens you against it for the fight',
         cost: 2,
-        requires: ['offensiveFocus'],
-        effect: { type: 'bonus', stat: 'critChance', value: 5 },
-        position: { x: 15, y: 34 },
+        requires: ['combatTraining'],
+        effect: { type: 'passive', desc: 'Stacking resistance to repeated elements' },
+        position: { x: 76, y: 20 },
       },
 
-      brutalForce: {
-        id: 'brutalForce',
-        name: 'Crushing Mass',
-        icon: '🔥',
-        desc: '+15% damage vs monsters with more HP',
-        cost: 2,
-        requires: ['offensiveFocus'],
-        effect: { type: 'bonus', stat: 'damageVsHighHp', value: 15 },
-        position: { x: 35, y: 34 },
+      contagion: {
+        id: 'contagion',
+        name: 'Contagion',
+        icon: '🦠',
+        desc: 'Statuses on a dying monster carry to whatever comes next',
+        cost: 3,
+        requires: ['secondSkin'],
+        effect: { type: 'passive', desc: 'Debuffs persist across encounters' },
+        position: { x: 24, y: 34 },
       },
 
-      toughHide: {
-        id: 'toughHide',
-        name: 'Rubbery Membrane',
-        icon: '🧱',
-        desc: 'Reduce incoming damage by 2 (min 1)',
-        cost: 2,
-        requires: ['defensiveFocus'],
-        effect: { type: 'bonus', stat: 'damageReduction', value: 2 },
+      focusedVenom: {
+        id: 'focusedVenom',
+        name: 'Focused Venom',
+        icon: '🧪',
+        desc: 'Your damage-over-time effects last twice as long',
+        cost: 3,
+        requires: ['opportunist'],
+        effect: { type: 'passive', desc: 'Doubles poison, burn and bleed duration' },
         position: { x: 50, y: 34 },
       },
 
-      elementalAffinity: {
-        id: 'elementalAffinity',
-        name: 'Elemental Absorption',
-        icon: '🔮',
-        desc: '+25% elemental damage bonuses',
-        cost: 2,
-        requires: ['utilityFocus'],
-        effect: { type: 'bonus', stat: 'elementalDamage', value: 25 },
-        position: { x: 65, y: 34 },
+      elementalCycling: {
+        id: 'elementalCycling',
+        name: 'Elemental Cycling',
+        icon: '🌀',
+        desc: 'A slime striking an element it beats also strips that element\'s resistance',
+        cost: 3,
+        requires: ['adaptiveCarapace'],
+        effect: { type: 'passive', desc: 'Advantageous hits ignore resistance' },
+        position: { x: 76, y: 34 },
       },
 
-      statusMastery: {
-        id: 'statusMastery',
-        name: 'Toxic Secretions',
-        icon: '☠️',
-        desc: '+20% status effect chance',
-        cost: 2,
-        requires: ['utilityFocus'],
-        effect: { type: 'bonus', stat: 'statusChance', value: 20 },
-        position: { x: 85, y: 34 },
-      },
-
-      // Third tier
       spawnBoostSkill: {
         id: 'spawnBoostSkill',
-        name: 'Primal Ooze',
-        icon: '🌟',
-        desc: 'Unlock Primal Blessing ability',
-        cost: 3,
-        requires: ['criticalStrikes'],
-        effect: { type: 'pheromone', ability: 'spawnBoost' },
-        position: { x: 15, y: 46 },
-      },
-
-      executioner: {
-        id: 'executioner',
-        name: 'Finishing Surge',
+        name: 'Rapid Division',
         icon: '⚡',
-        desc: '+30% damage to monsters below 25% HP',
+        desc: 'Unlock the Spawn Boost pheromone',
         cost: 3,
-        requires: ['brutalForce'],
-        effect: { type: 'bonus', stat: 'executeDamage', value: 30 },
-        position: { x: 35, y: 46 },
+        requires: ['contagion'],
+        effect: { type: 'pheromone', ability: 'spawnBoost' },
+        position: { x: 14, y: 48 },
       },
 
       regeneration: {
         id: 'regeneration',
-        name: 'Regenerative Gel',
+        name: 'Knitting Flesh',
         icon: '💚',
-        desc: 'Slimes heal 1 HP per battle tick',
+        desc: 'Slimes mend a little at the end of every round',
         cost: 3,
-        requires: ['toughHide'],
-        effect: { type: 'passive', desc: 'Passive healing' },
-        position: { x: 50, y: 46 },
+        requires: ['focusedVenom'],
+        effect: { type: 'passive', desc: 'Passive healing each round' },
+        position: { x: 40, y: 48 },
       },
 
-      mutationSynergy: {
-        id: 'mutationSynergy',
-        name: 'Mutation Resonance',
-        icon: '🧬',
-        desc: '+25% mutation passive effects',
-        cost: 3,
-        requires: ['elementalAffinity', 'statusMastery'],
-        effect: { type: 'bonus', stat: 'mutationPower', value: 25 },
-        position: { x: 75, y: 46 },
-      },
-
-      // Fourth tier
-      berserkMode: {
-        id: 'berserkMode',
-        name: 'Feral Ooze',
-        icon: '😤',
-        desc: '+50% damage when below 30% HP',
-        cost: 4,
-        requires: ['executioner', 'spawnBoostSkill'],
-        effect: { type: 'bonus', stat: 'lowHpDamage', value: 50 },
-        position: { x: 25, y: 58 },
-      },
-
-      lastStand: {
-        id: 'lastStand',
-        name: 'Desperate Coagulation',
-        icon: '🏰',
-        desc: 'Take 50% less damage when below 20% HP',
-        cost: 4,
-        requires: ['regeneration'],
-        effect: { type: 'bonus', stat: 'lowHpDefense', value: 50 },
-        position: { x: 50, y: 58 },
-      },
-
-      decoySkill: {
-        id: 'decoySkill',
-        name: 'Decoy Blob',
-        icon: '🎭',
-        desc: 'Unlock Slime Decoy ability',
-        cost: 3,
-        requires: ['mutationSynergy'],
-        effect: { type: 'pheromone', ability: 'decoy' },
-        position: { x: 75, y: 58 },
-      },
-
-      // Fifth tier
-      towerDefenseSlots: {
-        id: 'towerDefenseSlots',
+      ambushSlots: {
+        id: 'ambushSlots',
         name: 'Raiding Party',
         icon: '🎯',
         desc: '+2 slimes in the caravan ambush squad',
         cost: 4,
-        requires: ['berserkMode', 'lastStand'],
+        requires: ['elementalCycling'],
         effect: { type: 'bonus', stat: 'defenseSlots', value: 2 },
-        position: { x: 35, y: 70 },
-      },
-
-      extraMutationSlot: {
-        id: 'extraMutationSlot',
-        name: 'Mutation Overflow',
-        icon: '➕',
-        desc: '+1 mutation slot for all slimes',
-        cost: 5,
-        requires: ['mutationSynergy', 'decoySkill'],
-        effect: { type: 'bonus', stat: 'mutationSlots', value: 1 },
-        position: { x: 65, y: 70 },
-      },
-
-      renderingVat: {
-        id: 'renderingVat',
-        name: 'Rendering',
-        icon: '⚗️',
-        desc: 'Unlocks the Rendering Vat — reclaim mutagens from a dissolved slime',
-        cost: 6,
-        requires: ['combatMastery'],
-        effect: { type: 'unlock', building: 'renderingVat' },
-        position: { x: 50, y: 94 },
+        position: { x: 76, y: 48 },
       },
 
       siegeEngineering: {
         id: 'siegeEngineering',
         name: 'Siege Engineering',
         icon: '🪃',
-        desc: 'Unlocks the Slime Catapult — a road emplacement that fires on caravans every round',
+        desc: 'Unlock Slime Catapults on the road',
         cost: 4,
-        requires: ['towerDefenseSlots'],
+        requires: ['ambushSlots'],
         effect: { type: 'unlock', building: 'slimeCatapult' },
-        position: { x: 20, y: 82 },
+        position: { x: 84, y: 62 },
       },
 
-      // Capstone
+      decoySkill: {
+        id: 'decoySkill',
+        name: 'Sacrificial Bud',
+        icon: '🎭',
+        desc: 'Unlock the Decoy pheromone',
+        cost: 3,
+        requires: ['spawnBoostSkill'],
+        effect: { type: 'pheromone', ability: 'decoy' },
+        position: { x: 14, y: 62 },
+      },
+
+      lastStand: {
+        id: 'lastStand',
+        name: 'Last Stand',
+        icon: '🔥',
+        desc: 'The final slime standing acts twice each round',
+        cost: 4,
+        requires: ['regeneration'],
+        effect: { type: 'passive', desc: 'Sole survivor gains an extra action' },
+        position: { x: 40, y: 62 },
+      },
+
+      extraMutationSlot: {
+        id: 'extraMutationSlot',
+        name: 'Unstable Genome',
+        icon: '🧬',
+        desc: '+1 mutation slot on every slime',
+        cost: 5,
+        requires: ['lastStand'],
+        effect: { type: 'bonus', stat: 'mutationSlots', value: 1 },
+        position: { x: 40, y: 76 },
+      },
+
+      renderingVat: {
+        id: 'renderingVat',
+        name: 'Rendering Vat',
+        icon: '⚗️',
+        desc: 'Unlock the Rendering Vat — recover mutagens from a dissolved slime',
+        cost: 6,
+        requires: ['extraMutationSlot'],
+        effect: { type: 'unlock', building: 'renderingVat' },
+        position: { x: 30, y: 90 },
+      },
+
       combatMastery: {
         id: 'combatMastery',
         name: 'Apex Predator',
-        icon: '🏆',
-        desc: '+10% all combat stats',
+        icon: '👑',
+        desc: 'Mutation passives trigger twice as often',
         cost: 6,
-        requires: ['towerDefenseSlots', 'extraMutationSlot'],
-        effect: { type: 'bonus', stat: 'allCombat', value: 10 },
-        position: { x: 50, y: 82 },
+        requires: ['extraMutationSlot', 'siegeEngineering'],
+        effect: { type: 'passive', desc: 'Doubles mutation proc chances' },
+        position: { x: 62, y: 90 },
       },
     },
   },
 };
 
-// Calculate skill points needed to reach a level
 export const getSkillPointsForLevel = (level) => level - 1;
 
 // Calculate total skill points earned at a given level
@@ -682,7 +593,6 @@ export const getSkillEffects = (purchasedSkills) => {
     unlocks: [],
     pheromones: [],
     passives: [],
-    unlockedZones: ['forest'], // Forest always unlocked
     unlockedBuildings: [],
     unlockedFeatures: [],
   };
@@ -694,10 +604,15 @@ export const getSkillEffects = (purchasedSkills) => {
         switch (eff.type) {
           case 'bonus':
             effects.bonuses[eff.stat] = (effects.bonuses[eff.stat] || 0) + eff.value;
+            // A capstone may raise more than one capacity at once.
+            if (eff.also) {
+              for (const [k, v] of Object.entries(eff.also)) {
+                effects.bonuses[k] = (effects.bonuses[k] || 0) + v;
+              }
+            }
             break;
           case 'unlock':
             effects.unlocks.push(eff);
-            if (eff.zone) effects.unlockedZones.push(eff.zone);
             if (eff.building) effects.unlockedBuildings.push(eff.building);
             if (eff.feature) effects.unlockedFeatures.push(eff.feature);
             break;
@@ -716,17 +631,6 @@ export const getSkillEffects = (purchasedSkills) => {
 };
 
 // Helper to check if a zone is unlocked
-/**
- * @deprecated Zones are gated by Tendrils now (buildingData.zoneReached), which
- * are bought with Warden Seals. Kept only so old saves can still be read.
- */
-export const isZoneUnlocked = (zoneId, purchasedSkills) => {
-  if (zoneId === 'forest') return true; // Always unlocked
-  const effects = getSkillEffects(purchasedSkills);
-  return effects.unlockedZones.includes(zoneId);
-};
-
-// Helper to check if a building is unlocked
 export const isBuildingUnlocked = (buildingId, purchasedSkills) => {
   // Some buildings don't need skill unlocks (research items)
   const skillGatedBuildings = ['spawningVat', 'royalHatchery', 'primordialChamber', 'slimePit', 'researchLab', 'slimeCatapult', 'renderingVat'];

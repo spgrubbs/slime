@@ -23,7 +23,7 @@ import { WARDENS, wardenTypeId, prerequisiteZone, ZONE_ORDER, ALL_SEALS, ALL_HEA
 import { caravanDay, MAX_CARAVAN_TIER } from './data/caravanData.js';
 import { RANCH_TYPES, RANCH_EVENTS, RANCH_UPGRADE_BONUSES, MAX_RANCH_LEVEL, RANCH_MAX_ACCUMULATION_TIME } from './data/ranchData.js';
 import { HIVE_ABILITIES, PRISM_SHOP, MANA_UPDATE_INTERVAL, MANA_PER_SLIME_PER_HOUR } from './data/hiveData.js';
-import { SKILL_TREES, SKILL_POINTS_PER_LEVEL, getSkillEffects, isZoneUnlocked, isBuildingUnlocked, isPheromoneUnlocked, isFeatureUnlocked } from './data/skillTreeData.js';
+import { SKILL_TREES, SKILL_POINTS_PER_LEVEL, getSkillEffects, isBuildingUnlocked, isPheromoneUnlocked, isFeatureUnlocked } from './data/skillTreeData.js';
 
 // Utility imports
 import { genName, genId, formatTime, calculateElementalDamage, createDefaultElements, canGainElement, calculateElementGain } from './utils/helpers.js';
@@ -323,7 +323,8 @@ export default function HiveQueenGame() {
     damageVsHighHp: 1 + (skillBonuses.damageVsHighHp || 0) / 100, // Damage vs high HP targets
     lowHpDamage: 1 + (skillBonuses.lowHpDamage || 0) / 100, // Damage when low HP
     lowHpDefense: (skillBonuses.lowHpDefense || 0) / 100, // Damage reduction when low HP
-    mutationPower: 1 + (skillBonuses.mutationPower || 0) / 100, // Mutation passive strength
+    // Apex Predator is the one skill that scales mutations, and it doubles them.
+    mutationPower: (skillEffects.passives.includes('combatMastery') ? 2 : 1),
     expeditionBiomass: 1 + bonusOf('expeditionBiomass') / 100,
     materialDrop: 1 + bonusOf('materialDrop') / 100,
     rareSpawn: 1 + (skillBonuses.rareSpawn || 0) / 100,
@@ -704,9 +705,13 @@ export default function HiveQueenGame() {
    * again until it has recovered in a Convalescence Pool. It keeps its jelly
    * slot the whole time, so a bad run clogs the hive's capacity.
    */
-  const woundSlime = useCallback((id) => {
+  // Field Triage (skill) keeps the carried biomass; without it a wound spills
+  // everything the slime was holding, which is the whole risk of carrying it.
+  const woundSlime = useCallback((id, keepBiomass = false) => {
     setSlimes(list => list.map(sl => (
-      sl.id === id ? { ...sl, wounded: true, woundedAt: Date.now(), biomass: 0 } : sl
+      sl.id === id
+        ? { ...sl, wounded: true, woundedAt: Date.now(), biomass: keepBiomass ? sl.biomass : 0 }
+        : sl
     )));
   }, []);
 
@@ -781,7 +786,8 @@ export default function HiveQueenGame() {
     const sl = slimes.find(s => s.id === id);
     if (!sl || Object.values(exps).some(e => (e.slimes || []).some(s => s.id === id))) { log('Cannot reabsorb!'); return; }
     const held = Math.floor(sl.biomass || 0);
-    const body = (SLIME_TIERS[sl.tier]?.jellyCost || 5) * 10;
+    const body = (SLIME_TIERS[sl.tier]?.jellyCost || 5) * 10
+      * (hasPassive('reclamation') ? 2 : 1);
     setBio(p => p + held + body);
 
     // Dissolving a developed slime destroys its genework until the Rendering
@@ -1326,6 +1332,36 @@ export default function HiveQueenGame() {
     log(lv ? `${b.name} — ${lv.title}. ${lv.desc}.` : `Built ${b.name}!`);
   };
 
+  /**
+   * Dismantling (skill): tear a building back down for everything it cost.
+   * Refunds the level actually being removed, which matters for Tendrils — each
+   * of their levels has its own price. Tendril level 1 is never refundable:
+   * giving back a Warden Seal would let a player un-reach a zone they have
+   * already passed through, and the spine only runs one way.
+   */
+  const dismantle = (id) => {
+    if (!hasPassive('dismantle')) return;
+    const b = BUILDINGS[id];
+    const level = builds[id] || 0;
+    if (!b || level <= 0) return;
+    if (b.category === 'tendril' && level <= 1) { log('The hive will not withdraw a tendril.'); return; }
+
+    const cost = nextLevelCost(id, level - 1) || {};
+    const biomassBack = Math.floor((cost.biomass || 0) * getBuildingDiscount());
+    const matsBack = cost.mats || (typeof cost === 'object' && !cost.biomass ? cost : {});
+
+    if (biomassBack > 0) setBio(p => p + biomassBack);
+    if (Object.keys(matsBack).length) {
+      setMats(p => {
+        const n = { ...p };
+        Object.entries(matsBack).forEach(([m, c]) => { n[m] = (n[m] || 0) + c; });
+        return n;
+      });
+    }
+    setBuilds(p => ({ ...p, [id]: level - 1 }));
+    log(`🔨 ${b.name} dismantled — everything it cost comes back.`);
+  };
+
   // ── Caravan ambush ────────────────────────────────────────────────────────
   // A daily damage race on the same round resolver. The only decision is who
   // goes; everything after that you can walk away from. See combat/caravan.js.
@@ -1628,7 +1664,7 @@ export default function HiveQueenGame() {
             pending.forEach(se => {
               switch (se.type) {
                 case 'slimeDown':
-                  woundSlime(se.id);
+                  woundSlime(se.id, se.keepBiomass);
                   break;
                 case 'bioReclaim':
                   setBio(b => b + se.amount);
@@ -1652,6 +1688,14 @@ export default function HiveQueenGame() {
                   stopExp(se.zone);
                   break;
                 case 'expWipe':
+                  if (se.salvage && Object.keys(se.salvage).length) {
+                    setMats(m => {
+                      const n = { ...m };
+                      Object.entries(se.salvage).forEach(([mat, ct]) => { n[mat] = (n[mat] || 0) + ct; });
+                      return n;
+                    });
+                    log(`📦 Salvage rites recover ${Object.values(se.salvage).reduce((a, b) => a + b, 0)} material(s).`);
+                  }
                   setExps(cur => { const n = { ...cur }; delete n[se.zone]; return n; });
                   break;
                 default:
@@ -1722,6 +1766,26 @@ export default function HiveQueenGame() {
   ].filter(Boolean) : null;
 
   const onAmbush = new Set((ambush?.slimes || []).map(c => c.id));
+  // Field Dressing (skill): a wounded slime with no pool slot still mends, at
+  // half speed. Without it, a wound is dead weight until a slot frees up.
+  useEffect(() => {
+    if (!gameLoaded || !hasPassive('fieldDressing')) return;
+    const iv = setInterval(() => {
+      const baseline = (RANCH_TYPES?.convalescence?.cycleTime || 86400) * 2 * 1000;
+      setSlimes(list => {
+        let changed = false;
+        const next = list.map(sl => {
+          if (!sl.wounded || !sl.woundedAt) return sl;
+          if (Date.now() - sl.woundedAt < baseline) return sl;
+          changed = true;
+          return { ...sl, wounded: false, woundedAt: null };
+        });
+        return changed ? next : list;
+      });
+    }, 5000);
+    return () => clearInterval(iv);
+  }, [gameLoaded, skillEffects]);
+
   const assignedToRanch = new Set(
     Object.values(ranchAssignments).flat()
       .map(a => (typeof a === 'object' ? a?.slimeId : a))
@@ -1988,6 +2052,14 @@ export default function HiveQueenGame() {
                             )}
                           </div>
                           {!isResearch && !b.levels && <span style={{ marginLeft: 'auto', color: '#4ade80', fontSize: 18 }}>x{builds[k] || 0}</span>}
+                          {hasPassive('dismantle') && !isResearch && lvl > 0
+                            && !(b.category === 'tendril' && lvl <= 1) && (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); dismantle(k); }}
+                              title="Dismantle for a full refund"
+                              style={{ marginLeft: 8, background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.4)', borderRadius: 6, color: '#fca5a5', cursor: 'pointer', fontSize: 11, padding: '3px 8px' }}
+                            >🔨</button>
+                          )}
                         </div>
 
                         {isResearch ? (
@@ -2261,6 +2333,33 @@ export default function HiveQueenGame() {
               verboseLogs={verboseLogs}
               setVerboseLogs={setVerboseLogs}
             />
+            {/* Sensory Tendrils: what actually lives here, and how hard it hits. */}
+            {hasPassive('scoutingParty') && !exps[selZone] && (
+              <div style={{ marginTop: 12, background: 'rgba(34,211,238,0.08)', border: '1px solid rgba(34,211,238,0.25)', borderRadius: 10, padding: 10 }}>
+                <div style={{ fontSize: 12, fontWeight: 'bold', color: '#22d3ee', marginBottom: 6 }}>
+                  👁️ Sensory Tendrils
+                  <span style={{ fontWeight: 'normal', opacity: 0.65, marginLeft: 6 }}>
+                    expects ~{ZONES[selZone].recommendedStats} in each stat
+                  </span>
+                </div>
+                <div style={{ display: 'grid', gap: 4 }}>
+                  {ZONES[selZone].monsters.map(mid => {
+                    const m = MONSTER_TYPES[mid];
+                    if (!m) return null;
+                    return (
+                      <div key={mid} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11 }}>
+                        <span>{m.icon}</span>
+                        <span style={{ flex: 1, opacity: m.rare ? 1 : 0.85, color: m.rare ? '#fbbf24' : undefined }}>
+                          {m.name}{m.rare && ' ✦'}
+                        </span>
+                        <span style={{ opacity: 0.7 }}>❤️ {m.hp}</span>
+                        <span style={{ opacity: 0.7 }}>⚔️ {m.dmg}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
             {exps[selZone] ? (
               <button onClick={() => stopExp(selZone)} style={{ width: '100%', marginTop: 15, padding: 12, background: 'linear-gradient(135deg, #ef4444, #f59e0b)', border: 'none', borderRadius: 8, color: '#fff', fontWeight: 'bold', cursor: 'pointer' }}>🛑 Recall</button>
             ) : (

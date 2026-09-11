@@ -410,8 +410,11 @@ procession along a road rather than one monster holding ground.
 13. ~~Zones gated by a skill point.~~ Gated by the previous zone's Warden — see §17.
 14. ~~No fight in the game worth optimising for.~~ Six Wardens, each unbeatable by the party
     that clears its zone.
-15. ~~Fights over in two rounds.~~ Front-loaded HP/damage pass; the game now runs 5-6.5
-    rounds a fight everywhere.
+15. ~~Fights over in two rounds.~~ HP raised, damage cut; the game now runs 6-9 rounds.
+16. ~~Every expedition wiped inside two minutes.~~ Slimes recover on the road, so an
+    at-level zone is sustainable for hours and an over-level one bleeds.
+17. ~~Bosses were stat checks.~~ Every Warden has a rule with a counter — see §17.
+18. ~~The skill tree was 57% flat percentages.~~ 11%, and all of those are capacity — §18.
 
 ### Open
 
@@ -915,26 +918,102 @@ at all. Old saves are migrated: any zone a skill had already opened gets its Ten
 The five skill nodes that used to unlock zones keep their place in the tree (other skills
 require them) and pay a stat bonus instead.
 
-### Balance: fight length
+### The Wardens' rules
 
-Separately, the whole game was too fast at the front. Measured at each zone's
-`recommendedStats`, the forest ran **2.2 rounds at 2% party damage** — over before the arena
-could show a single behaviour, and far too short for any build to express itself.
+Each Warden has a rule that beats the obvious approach, and an answer the player
+can already reach — from that zone's own drops or a shallower one's. Provoking a
+Warden costs ~90-150 kills in its zone, so its mutagens are in hand by then.
 
-The correction is front-loaded and tapers to nothing, because caves-and-deeper were already in
-band at 4.7–5.7 rounds and 28–45% damage:
+| Zone | Rule | The answer |
+|---|---|---|
+| forest | **Thornskin** — returns a share of every hit | Vinewebs blocks outright; Sharp means fewer, harder hits |
+| swamp | **Fen Rot** — knits itself back each round | Nothing knits while it bleeds — Spiny, or any burn/poison |
+| caves | **Refraction** — critical hits are turned back | Drop the crit build; Firmness and health. Sharp is a liability |
+| ruins | **Everburning** — hits harder every round it stands | A stun halves the stacks — Ghastly Wail, Earthshaker |
+| peaks | **Stormlash** — cannot be blocked or phased, only dodged | Slipperiness; Permafrost blunts what lands |
+| volcano | **Null Field** — hardens against each element that hits it | Four different affinities take four times as long to teach |
+
+Measured at 1.5× the zone's recommendedStats, the build that answers the rule
+wins **66-83%**; the build that ignores it wins **0-31%**. Tests assert the gap.
+
+Three things this cost to get right, all worth keeping:
+
+- **A uniform rotation asks for nothing.** Null Field first "resisted everything
+  but the element it currently shows, rotating each round". That is
+  mathematically empty — four fire slimes and four mixed slimes take exactly the
+  same expected damage — so the mechanic rewarded nothing. Adaptive resistance
+  is non-linear, which is what makes diversity actually pay.
+- **Action economy is not negotiable.** The peaks Warden was going to scale its
+  AoE with party size, to reward sending fewer, stronger slimes. At equal
+  per-slime stats, four beat three beat two at *every* scaling value tried:
+  halving the party halves both damage and health, and no penalty offsets that.
+  The mechanic now asks for a different **defence**, not a different party size.
+- **A total counter is not a counter.** Clearing Everburning's stacks outright
+  let one stun mutation trivialise the fight — 46% wins even *under* the zone's
+  recommended stats. Halving them, with a floor that rises every two rounds,
+  keeps the answer meaningful without switching the fight off.
+
+### Balance: fight length, and why expeditions used to die
+
+Two problems, one fix.
+
+**Fights were over before anything could happen.** At each zone's
+`recommendedStats` the forest ran 2.2 rounds at 2% party damage — no build, no
+mutation and no arena behaviour gets to express itself in two rounds.
+
+**And every expedition wiped in one to two minutes.** Measured across all six
+zones, at every stat level: a party that runs "until recalled" and never heals
+always ends in a wipe, after 1-8 kills. An idle game whose idle activity lasts
+90 seconds is not an idle game. Nothing in the loop closed.
+
+So slimes now **reknit on the road**: `TRAVEL_REGEN` (28% of max HP per travel
+leg) is the dial that decides how long an expedition lasts, because a party
+survives exactly as long as it out-heals what a fight costs it.
+
+That makes monster HP and damage two separate levers with two separate jobs:
+
+| | raised by | controls |
+|---|---|---|
+| **HP** | 1.3-4.0× | how LONG a fight runs — crit, dodge and procs need rounds |
+| **Damage** | 0.35-1.0× | how much a fight COSTS — measured against travel recovery |
+
+Damage came **down** in every zone past the second, because the old numbers cost
+a party 40%+ of its health per fight and nothing at that rate is sustainable at
+any regen. Fights now run **6-9 rounds** and cost **12-26%**.
 
 | Zone tier | HP × | Damage × |
 |---|---|---|
-| 1 | 3.0 | 2.0 |
-| 2 | 1.8 | 1.4 |
-| 3 | 1.3 | 1.1 |
-| 4 | 1.1 | 1.0 |
-| 5–6 | 1.0 | 1.0 |
+| 1 | 4.0 | 1.0 |
+| 2 | 2.5 | 0.8 |
+| 3 | 1.8 | 0.45 |
+| 4 | 1.6 | 0.40 |
+| 5 | 1.4 | 0.40 |
+| 6 | 1.3 | 0.35 |
 
-The whole game now sits at roughly **5–6.5 rounds** a fight, and the forest went from 2% to
-18% party damage. A flat doubling was the obvious move and the wrong one: it would have put
-the peaks at 11.4 rounds and a 56% win rate, breaking the part of the curve that worked.
+The resulting endurance curve is the design, and it reads cleanly:
+
+| Party | Result |
+|---|---|
+| below `recommendedStats` | bleeds out in 1-37 minutes |
+| at `recommendedStats` | forest and swamp run indefinitely; caves, ruins, peaks and volcano run 20 min - 4.4 h |
+| 1.5× | indefinite everywhere |
+
+Two further findings:
+
+- **A flat doubling was the obvious move and the wrong one.** It would have put
+  the peaks at 11.4 rounds and a 56% win rate, breaking the only part of the
+  curve that already worked.
+- **Within a zone, cost tracks fight LENGTH**, so a monster twice as tanky as its
+  neighbours is a damage spike rather than flavour. `boulderTroll` ran 14.6
+  rounds at 31% of party health where its zone averaged 8 rounds at 20%. Monster
+  HP is now clamped to ±15% of its zone's mean: monsters differ in how they
+  fight, not in how long they take.
+
+And `boulderTroll` itself was the seed of a Warden mechanic. It carried
+`ability: 'heal'` with flavour text promising "prolonged fights are dangerous",
+and there was no answer to it — so **regeneration is now suppressed by any
+damage-over-time**, everywhere. A wall became a puzzle, and the same rule is
+what the Mire Warden is built on.
 
 ### The arena
 
@@ -944,3 +1023,65 @@ something else. They now enter from a random edge (in from the right, or over th
 from the near slope) and walk to a post of their own. Motions are also retired when a
 combatant leaves the field: enemy ids are derived from the monster type, so without that a
 second Young Wolf inherited the dead one's position and skipped its entrance entirely.
+
+
+---
+
+## 18. The skill tree — rules, not numbers
+
+**The rule this tree is written to: a skill should change how something works,
+not how big a number is.**
+
+"+8% firmness" is not a decision. You take it when you can afford it and never
+think about it again, and it makes every build converge on the same one. The old
+tree was **57% flat bonuses** (31 of 54 skills), plus five nodes that unlocked
+zones — a job Tendrils took over in §17.
+
+It is now **47 skills, 5 of them numbers (11%)**, and all five are *capacity*:
+royal jelly, pool slots, mutation slots, ambush slots, rare spawn rate. A
+capacity is legitimately a quantity, and raising one changes what you can field.
+
+Everything else is a rule. A sample of what replaced the bonuses:
+
+| Skill | What it changes |
+|---|---|
+| **Second Wind** | Travel recovery also sheds one harmful status |
+| **Salvage Rites** | Materials a party was carrying survive a wipe |
+| **Vanguard** | Your party always acts first in the opening round |
+| **Careful Dissection** | Every kill yields at least one material |
+| **Field Triage** | A slime that goes down keeps the biomass it carried |
+| **Pathfinder** | Travel between fights costs no time |
+| **Rally** | When a slime falls, the survivors heal 25% |
+| **Relentless** | Five kills without a casualty grants a free round |
+| **Reclamation** | Reabsorbing returns a slime's full cost |
+| **Dismantling** | Buildings can be torn down for everything they cost |
+| **Field Dressing** | Wounds mend slowly even without a pool slot |
+| **Second Skin** | The first harmful status each fight slides off |
+| **Opportunist** | A slime's opening strike of a fight always crits |
+| **Adaptive Carapace** | Being hit by an element hardens you against it |
+| **Contagion** | Statuses on a dying monster carry to the next one |
+| **Focused Venom** | Your damage-over-time effects last twice as long |
+| **Last Stand** | The final slime standing acts twice a round |
+| **Apex Predator** | Mutation passives trigger twice as often |
+
+Two rules that did not survive contact, both worth recording:
+
+- **Opportunist was originally "a killing blow grants another action".** It could
+  never fire: expeditions face one monster at a time, so the extra action had
+  nothing left to hit. It is now the opening strike — which also makes it a
+  *liability* into the Geode Warden, and that anti-synergy is a feature.
+- **Endless Hunger promised "expeditions run until recalled".** That is simply
+  how expeditions work now. A skill point spent on the status quo is worse than
+  no skill at all; it became Quarry Scent (rare spawns) instead.
+
+There is a test asserting every passive skill id is actually **read** somewhere
+in the codebase. This repo has already shipped a whole content layer that
+silently did nothing — all 30 mutation passives — and a skill point spent on a
+passive nothing checks is that same bug wearing a different hat.
+
+### Saves
+
+There is no migration layer. The game is in active design and its state shape
+changes most passes; the translator that used to live in `saveSystem.js` carried
+a dozen retired systems and was more code than the systems it propped up. A save
+that predates the current shape is filled in from defaults.

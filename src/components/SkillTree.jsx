@@ -1,6 +1,24 @@
 import React, { useState, useMemo } from 'react';
 import { SKILL_TREES, canPurchaseSkill, getSkillEffects, SKILL_POINTS_PER_LEVEL } from '../data/skillTreeData.js';
 
+// The bonuses that survive in the tree are all capacities, so they read as
+// counts rather than percentages — "+15 Royal Jelly", not "+15% maxJelly".
+const CAPACITY_LABELS = {
+  maxJelly: 'Royal Jelly',
+  ranchSlots: 'Pool slots',
+  mutationSlots: 'Mutation slots',
+  defenseSlots: 'Ambush slots',
+  rareSpawn: '% rare spawns',
+};
+
+/** A purchased skill's display name, by id, across all three trees. */
+const skillName = (id) => {
+  for (const tree of Object.values(SKILL_TREES)) {
+    if (tree.skills[id]) return tree.skills[id].name;
+  }
+  return id;
+};
+
 const SkillTree = ({ queenLevel, purchasedSkills, onPurchaseSkill, availablePoints }) => {
   const [activeTree, setActiveTree] = useState('expedition');
   const [hoveredSkill, setHoveredSkill] = useState(null);
@@ -289,7 +307,7 @@ const SkillTree = ({ queenLevel, purchasedSkills, onPurchaseSkill, availablePoin
                 fontSize: 11,
                 color: '#4ade80'
               }}>
-                {stat}: {value > 0 ? '+' : ''}{value}%
+                {CAPACITY_LABELS[stat] || stat}: {value > 0 ? '+' : ''}{value}
               </span>
             ))}
             {effects.pheromones.map(ability => (
@@ -311,7 +329,7 @@ const SkillTree = ({ queenLevel, purchasedSkills, onPurchaseSkill, availablePoin
                 fontSize: 11,
                 color: '#22d3ee'
               }}>
-                ⚡ {passive}
+                ⚡ {skillName(passive)}
               </span>
             ))}
           </div>

@@ -13,6 +13,7 @@ import {
   MONSTER_TYPES, MONSTER_ABILITIES, materialDropChance, mutagenDropChance,
 } from '../data/monsterData.js';
 import { WARDEN_TYPES } from '../data/wardenData.js';
+import { hasDot, WARDEN_MECHANICS, DOT_STATUSES } from './wardenMechanics.js';
 import { calculateElementalDamage } from '../utils/helpers.js';
 import { runHooks } from './hooks.js';
 import { computeStats, computeMaxHp, buildEffectList } from './stats.js';
@@ -79,7 +80,10 @@ export function makeEnemyCombatant(type, { hpMultiplier = 1, isBoss = false } = 
     stats: { firmness: md.dmg, slipperiness: tier, viscosity: tier },
     tempStats: { firmness: 0, slipperiness: 0, viscosity: 0 },
     primaryElement: md.element || null,
-    effects: [],
+    effects: md.mechanic
+      ? [{ source: 'warden', id: md.mechanic, def: WARDEN_MECHANICS[md.mechanic] || {} }]
+      : [],
+    ignoresAvoidance: !!WARDEN_MECHANICS[md.mechanic]?.ignoresAvoidance,
     status: [],
     flags: {},
     dead: false,
@@ -149,8 +153,25 @@ function applyStatus(target, type, ctx, records, sourceLabel = '') {
 
   if (target.statusImmune) return false;
 
-  const ev = { self: target, type, dur: def.dur, blocked: false, label: '' };
+  // Second Skin: the first debuff of a fight never lands.
+  const def0 = statusDef(type);
+  if (def0.harmful !== false && target.side === 'slime'
+      && ctx.passives?.includes('secondSkin') && !target.flags.usedSecondSkin) {
+    target.flags.usedSecondSkin = true;
+    records.push({ kind: 'effect', log: {
+      m: `${target.name}'s second skin sheds the ${def0.name}. 🛡️`, c: C.good,
+      v: 'Second Skin — first harmful status per fight is blocked' } });
+    return false;
+  }
+
+  const ev = { self: target, type, dur: def.dur, blocked: false, label: '', log: [] };
+  // Focused Venom doubles how long the party's rot, burn and bleed hold.
+  if (target.side === 'enemy' && ctx.passives?.includes('focusedVenom')
+      && DOT_STATUSES.has(type)) {
+    ev.dur *= 2;
+  }
   runHooks(target, 'onStatusReceive', ev, ctx.mutationPower);
+  ev.log.forEach(l => records.push({ kind: 'ability', log: l }));
   if (ev.blocked || ev.dur <= 0) return false;
 
   // `appliedRound` stops a status from decaying at the end of the round it
@@ -183,9 +204,14 @@ function applyStatus(target, type, ctx, records, sourceLabel = '') {
 // ── Turn order ───────────────────────────────────────────────────────────────
 
 /** Living combatants, fastest first. Ties break on id so runs are repeatable. */
-export function turnOrder(world) {
+export function turnOrder(world, ctx = {}) {
   const all = [...world.slimes.filter(s => !s.dead), ...(world.enemy && !world.enemy.dead ? [world.enemy] : [])];
+  // Vanguard: the party opens every fight, whatever the speed numbers say.
+  const vanguard = ctx.passives?.includes('vanguard') && (world.round || 0) <= 1;
   return all.sort((a, b) => {
+    if (vanguard && (a.side === 'slime') !== (b.side === 'slime')) {
+      return a.side === 'slime' ? -1 : 1;
+    }
     const d = effectiveStats(b).slipperiness - effectiveStats(a).slipperiness;
     return d !== 0 ? d : String(a.id).localeCompare(String(b.id));
   });
@@ -221,6 +247,17 @@ function resolveAttack(attacker, defender, world, ctx, records, opts = {}) {
   };
   runHooks(attacker, 'onBeforeAttack', beforeEv, ctx.mutationPower);
 
+  // Opportunist: a slime's first swing of a fight is always a critical. A
+  // "killing blow grants another action" version was tried first and could
+  // never fire — expeditions face one monster at a time, so the extra action
+  // had nothing left to hit.
+  if (attacker.side === 'slime' && ctx.passives?.includes('opportunist')
+      && !attacker.flags.usedOpportunist) {
+    attacker.flags.usedOpportunist = true;
+    beforeEv.autoCrit = true;
+    trace.note('🎯 Opportunist — opening strike');
+  }
+
   // Statuses the attacker is carrying (weakened, enraged)
   const sMult = statusDamageMult(attacker);
   if (sMult !== 1) trace.mul('status', sMult);
@@ -245,6 +282,18 @@ function resolveAttack(attacker, defender, world, ctx, records, opts = {}) {
   // onBeforeAttack, so a dodgy attacker never makes its own swing easier to dodge.
   hitEv.chance.dodge += dodgeFromSlip(effectiveStats(defender).slipperiness);
   runHooks(defender, 'onHitChance', hitEv, ctx.mutationPower);
+
+  // Some attacks cannot be intercepted, only gotten out of the way of. The
+  // Storm Warden's lash is the one place block / phase / miss are worthless and
+  // raw slipperiness is the whole defence — see wardenMechanics.js.
+  if (attacker.ignoresAvoidance) {
+    if (hitEv.chance.block || hitEv.chance.phase || hitEv.chance.miss) {
+      trace.note('⚡ unblockable — only dodge applies');
+    }
+    hitEv.chance.block = 0;
+    hitEv.chance.phase = 0;
+    hitEv.chance.miss = 0;
+  }
 
   // Evasion is capped as a whole, so stacking dodge sources cannot make a slime
   // untouchable. The cap is shared across the sources proportionally.
@@ -328,7 +377,8 @@ function resolveAttack(attacker, defender, world, ctx, records, opts = {}) {
     const post = calculateElementalDamage(pre, attacker.primaryElement, defender.primaryElement);
     if (post !== pre) {
       const mult = post / pre;
-      if (mult < 1 && dealtEv.ignoreResist) {
+      if (mult < 1 && (dealtEv.ignoreResist
+          || (attacker.side === 'slime' && ctx.passives?.includes('elementalCycling')))) {
         trace.note('🕳️ resistance ignored');
       } else {
         trace.mul(mult > 1 ? 'element ⚡ strong' : 'element weak', mult);
@@ -338,10 +388,20 @@ function resolveAttack(attacker, defender, world, ctx, records, opts = {}) {
   }
 
   // ── 6. Defender-side mitigation ───────────────────────────────────────────
+  const takenEv = { attacker, defender, trace, rng, world, crit, reflect: 0, refract: 0 };
   if (!opts.trueDamage) {
-    const takenEv = { attacker, defender, trace, rng, world };
     runHooks(defender, 'onDamageTaken', takenEv, ctx.mutationPower);
+    // A refracted crit never lands as a crit: the multiplier is taken back off.
+    if (takenEv.refract > 0 && crit) trace.mul('refracted', 1 - takenEv.refract);
     if (defender.side === 'slime') {
+      // Adaptive Carapace: repeated punishment by one element stops working.
+      if (ctx.passives?.includes('adaptiveCarapace')) {
+        const el = attacker.primaryElement || 'none';
+        defender.flags.carapace = defender.flags.carapace || {};
+        const seen = defender.flags.carapace[el] || 0;
+        if (seen > 0) trace.mul(`🔰 Carapace (${el})`, 1 - Math.min(0.5, seen * 0.08));
+        defender.flags.carapace[el] = seen + 1;
+      }
       if (cb.damageReduction > 0) trace.add('Carapace', -cb.damageReduction);
       if (defender.hp < defender.maxHp * 0.2 && cb.lowHpDefense > 0) {
         trace.mul('Desperation', 1 - cb.lowHpDefense);
@@ -356,6 +416,15 @@ function resolveAttack(attacker, defender, world, ctx, records, opts = {}) {
     trace.set('💀 EXECUTE', dmg);
   }
   defender.hp -= dmg;
+
+  // Thorns-style returns: a share of what landed goes back to whoever swung.
+  if (takenEv.reflect > 0 && !attacker.dead) {
+    const back = Math.max(1, Math.floor(dmg * takenEv.reflect));
+    attacker.hp -= back;
+    records.push({ kind: 'reflect', actorId: defender.id, targetId: attacker.id, dmg: back,
+      log: { m: `🌵 ${attacker.name} is torn on ${defender.name} for ${back}`, c: C.bad,
+             v: `${Math.round(takenEv.reflect * 100)}% of ${dmg} returned` } });
+  }
 
   // Status procs roll BEFORE the hit is logged so their rolls — landed or not —
   // appear in that hit's trace. The statuses themselves are applied after, so
@@ -413,6 +482,15 @@ function resolveEnemyTurn(enemy, world, ctx, records, aura) {
   if (ability && ctx.rng() < ability.chance) {
     switch (ability.effect) {
       case 'selfHeal': {
+        // A monster that heals faster than you can hurt it is not a fight, it is
+        // a wall — unless there is an answer. Any damage-over-time stops it, so
+        // Spiny, Pyrolyze or a poison turns a wall into a puzzle.
+        if (hasDot(enemy)) {
+          records.push({ kind: 'ability', actorId: enemy.id, actorName: enemy.name,
+            log: { m: `${enemy.name} tries to knit, but the rot holds. 🩸`, c: C.good,
+                   v: 'selfHeal suppressed by a damage-over-time status' } });
+          return;
+        }
         const heal = Math.floor(enemy.maxHp * ability.healPercent);
         enemy.hp = Math.min(enemy.maxHp, enemy.hp + heal);
         records.push({
@@ -526,7 +604,29 @@ function checkDeaths(world, ctx, records, sideEffects) {
       kind: 'death', actorId: s.id, actorName: s.name,
       log: { m: `${s.name} fell! 💔`, c: C.death, v: `${s.name} removed from the party` },
     });
-    sideEffects.push({ type: 'slimeDown', id: s.id });
+    // Field Triage: what it was carrying comes home even though it does not.
+    sideEffects.push({
+      type: 'slimeDown', id: s.id,
+      keepBiomass: !!ctx.passives?.includes('fieldTriage'),
+    });
+
+    // Rally: the rest close ranks over the body.
+    if (ctx.passives?.includes('rally')) {
+      const living = world.slimes.filter(sl => !sl.dead && sl.hp > 0);
+      let healed = 0;
+      living.forEach(sl => {
+        const amount = Math.min(sl.maxHp - sl.hp, Math.ceil(sl.maxHp * 0.25));
+        sl.hp += amount; healed += amount;
+      });
+      if (healed > 0) {
+        records.push({ kind: 'effect', log: {
+          m: `The party closes ranks over ${s.name}. 📣 +${healed}`, c: C.good,
+          v: 'Rally — survivors recover 25% when one falls' } });
+      }
+    }
+
+    // Relentless counts an unbroken run of kills; a casualty breaks it.
+    world.killStreak = 0;
 
     const reclaimer = ctx.builds?.biomassReclaimer || 0;
     if (reclaimer > 0 && s.ref?.biomass > 0) {
@@ -630,6 +730,13 @@ export function resolveKill(world, ctx, records, sideEffects, zoneDef) {
   // The monster's own mutagen. Rare, and the only way a slime ever gains a
   // mutation — the host applies a pity floor on top of this roll.
   if (md.mutation) {
+    // Trophy Hunter: a rare monster never keeps its mutagen.
+    if (md.rare && ctx.passives?.includes('trophyHunter')) {
+      sideEffects.push({ type: 'mutagen', mutation: md.mutation });
+      records.push({ kind: 'reward', log: { m: `🏆 The ${md.name} yields its mutagen.`, c: '#a855f7',
+        v: 'Trophy Hunter — rare kills always drop' } });
+      return;
+    }
     const chance = Math.min(0.95, mutagenDropChance(md) * ev.matMult);
     const roll = ctx.rng();
     if (roll < chance) {
@@ -644,10 +751,12 @@ export function resolveKill(world, ctx, records, sideEffects, zoneDef) {
 
   // Each material rolls on its own, at a rate set by what it gates. Lucky
   // slimes and drop skills raise every rate together.
+  let droppedAny = false;
   (md.mats || []).forEach(mat => {
     const chance = Math.min(0.95, (materialDropChance(mat, md) + ev.matChance) * ev.matMult);
     const roll = ctx.rng();
     if (roll >= chance) return;
+    droppedAny = true;
     sideEffects.push({ type: 'material', mat });
     records.push({
       kind: 'reward',
@@ -655,6 +764,14 @@ export function resolveKill(world, ctx, records, sideEffects, zoneDef) {
              v: `roll ${(roll * 100).toFixed(1)}% vs ${(chance * 100).toFixed(1)}%` },
     });
   });
+
+  // Careful Dissection: nothing is ever butchered for nothing.
+  if (!droppedAny && ctx.passives?.includes('dissection') && (md.mats || []).length) {
+    const mat = md.mats[Math.floor(ctx.rng() * md.mats.length)];
+    sideEffects.push({ type: 'material', mat });
+    records.push({ kind: 'reward', log: { m: `Salvaged ${mat} from the carcass. 🔪`, c: C.crit,
+      v: 'Careful Dissection — a kill always yields something' } });
+  }
   return total;
 }
 
@@ -681,6 +798,13 @@ export function resolveRound(world, ctx = {}) {
 
   world.round = (world.round || 0) + 1;
   c.round = world.round;
+
+  // Relentless: five kills without losing anyone and the party gets a round
+  // the enemy does not act in.
+  const freeRound = c.passives?.includes('relentless')
+    && (world.killStreak || 0) > 0 && (world.killStreak || 0) % 5 === 0
+    && world.freeRoundAt !== world.killStreak;
+  if (freeRound) world.freeRoundAt = world.killStreak;
   const aura = partyAura(world, c);
 
   // ── Phase 1: round start — DOTs, regen, cleanse ───────────────────────────
@@ -726,8 +850,14 @@ export function resolveRound(world, ctx = {}) {
   if (world.enemy && world.enemy.hp <= 0) world.enemy.dead = true;
 
   // ── Phase 2: turns ────────────────────────────────────────────────────────
-  for (const actor of turnOrder(world)) {
+  for (const actor of turnOrder(world, c)) {
     if (actor.dead || actor.hp <= 0) continue;
+    if (freeRound && actor.side === 'enemy') {
+      records.push({ kind: 'effect', log: {
+        m: `${actor.name} cannot keep up with the swarm! 🔥`, c: C.good,
+        v: `Relentless — ${world.killStreak} kills without a casualty` } });
+      continue;
+    }
     if (!world.enemy || world.enemy.dead) break;
     if (world.slimes.every(s => s.dead)) break;
 
@@ -743,8 +873,14 @@ export function resolveRound(world, ctx = {}) {
     }
 
     if (actor.side === 'slime') {
-      resolveAttack(actor, world.enemy, world, c, records, { aura });
-      if (world.enemy.hp <= 0) world.enemy.dead = true;
+      // Last Stand: the final slime standing swings twice.
+      const alone = world.slimes.filter(sl => !sl.dead).length === 1;
+      const swings = 1 + (alone && c.passives?.includes('lastStand') ? 1 : 0);
+      for (let i = 0; i < swings; i++) {
+        if (!world.enemy || world.enemy.dead) break;
+        resolveAttack(actor, world.enemy, world, c, records, { aura });
+        if (world.enemy.hp <= 0) world.enemy.dead = true;
+      }
     } else {
       const actions = actor.actions || 1;
       for (let a = 0; a < actions; a++) {
