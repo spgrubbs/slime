@@ -75,3 +75,13 @@ export const ARENA_H = 120;
 export const ARENA_SLIME_X = 46;     // resting x for the slime line
 export const ARENA_ENEMY_X = 156;    // resting x for the enemy
 export const ARENA_LUNGE = 26;       // world units an attacker lunges forward
+
+/**
+ * Fraction of max HP each slime recovers during one travel leg.
+ *
+ * This is the dial that decides how long an expedition lasts. A party survives
+ * exactly as long as it out-heals what a fight costs it, so an at-level zone
+ * (which costs less than this per fight) runs indefinitely, and an over-level
+ * one bleeds down at the difference. Tuned in docs/GAME_DESIGN.md §11.
+ */
+export const TRAVEL_REGEN = 0.28;
