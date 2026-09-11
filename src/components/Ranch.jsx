@@ -40,11 +40,18 @@ const Ranch = ({
   const [selectedRanch, setSelectedRanch] = useState(null);
   const [showAssignModal, setShowAssignModal] = useState(false);
 
-  // Get available slimes (not on expedition, not already assigned)
-  const getAvailableSlimes = () => {
+  /**
+   * Slimes that can be put into `ranchId`: not in the field, not already
+   * assigned, and on the right side of the wound line — the Convalescence Pool
+   * takes only the wounded, every other ranch takes only the healthy.
+   */
+  const getAvailableSlimes = (ranchId = selectedRanch) => {
+    const ranch = RANCH_TYPES[ranchId];
     return slimes.filter(s => {
-      if (Object.values(exps).some(e => e.party.some(p => p.id === s.id))) return false;
-      for (const [rid, assigned] of Object.entries(ranchAssignments)) {
+      if (ranch?.woundedOnly && !s.wounded) return false;
+      if (ranch && !ranch.woundedOnly && s.wounded) return false;
+      if (Object.values(exps).some(e => (e.slimes || []).some(c => c.id === s.id))) return false;
+      for (const [, assigned] of Object.entries(ranchAssignments)) {
         const ids = (assigned || []).map(a => typeof a === 'object' ? a.slimeId : a);
         if (ids.includes(s.id)) return false;
       }
@@ -82,6 +89,17 @@ const Ranch = ({
   const formatAccumulatedReward = (ranchId, slimeId) => {
     const ranch = RANCH_TYPES[ranchId];
     const acc = getSlimeAccumulated(slimeId, ranchId);
+    if (ranch.effect === 'recover') {
+      const entry = (ranchAssignments[ranchId] || [])
+        .find(a => (typeof a === 'object' ? a.slimeId : a) === slimeId);
+      const startedAt = (typeof entry === 'object' && entry?.startTime) || Date.now();
+      const level = ranchBuildings[ranchId]?.level || 1;
+      const cycleSec = ranch.cycleTime * (1 - Math.min(0.5, (level - 1) * RANCH_UPGRADE_BONUSES.cycleReduction));
+      const leftSec = Math.max(0, cycleSec - (Date.now() - startedAt) / 1000);
+      const h = Math.floor(leftSec / 3600);
+      const m = Math.floor((leftSec % 3600) / 60);
+      return leftSec <= 0 ? 'ready' : `${h}h ${m}m left`;
+    }
     if (ranch.effect === 'biomass' && acc.biomass > 0) {
       return `+${Math.floor(acc.biomass)} biomass`;
     } else if (ranch.effect === 'element' && acc.element > 0) {
@@ -177,6 +195,7 @@ const Ranch = ({
                 {ranch.effect === 'element' && <span>Effect: {ELEMENTS[ranch.element]?.icon} +{ranch.effectValue}% {ELEMENTS[ranch.element]?.name} affinity per cycle</span>}
                 {ranch.effect === 'stats' && <span>Effect: +{ranch.effectValue} random stat points per cycle</span>}
                 {ranch.effect === 'trait' && ranch.grantsTrait === 'void' && <span>Effect: Grants Void trait (removes elements)</span>}
+                {ranch.effect === 'recover' && <span>Effect: mends one wounded slime per slot</span>}
                 {ranch.effect === 'trait' && ranch.traitPool && <span>Effect: {(ranch.effectValue * 100).toFixed(0)}% chance for rare trait per cycle</span>}
               </div>
 

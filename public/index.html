@@ -2,12 +2,50 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- viewport-fit=cover lets the page paint under the notch and gesture bar;
+         the safe-area insets below put the content back inside them. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
     <meta name="theme-color" content="#1a1a2e" />
+    <meta name="description" content="A slime-breeding idle game. Spawn, mutate, and send your brood into the wilds." />
+
+    <!-- Installed-app behaviour -->
+    <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Hive Queen" />
+    <link rel="icon" href="%PUBLIC_URL%/favicon.png" />
+    <link rel="apple-touch-icon" href="%PUBLIC_URL%/icons/apple-touch-icon.png" />
+
     <title>Hive Queen</title>
     <style>
       * { margin: 0; padding: 0; box-sizing: border-box; }
-      body { background: #1a1a2e; }
+
+      html, body {
+        background: #1a1a2e;
+        /* No pull-to-refresh and no rubber-banding: this is a game, and a
+           downward swipe on the roster should scroll it, not reload the app. */
+        overscroll-behavior: none;
+        height: 100%;
+      }
+
+      body {
+        /* Keep content clear of the notch and the gesture bar. */
+        padding: env(safe-area-inset-top) env(safe-area-inset-right)
+                 env(safe-area-inset-bottom) env(safe-area-inset-left);
+        -webkit-tap-highlight-color: transparent;
+        -webkit-text-size-adjust: 100%;
+      }
+
+      /* A long-press on a button should feel like a button, not like selecting
+         text. Inputs keep selection, obviously. */
+      body :not(input):not(textarea) {
+        -webkit-user-select: none;
+        user-select: none;
+      }
+      input, textarea { -webkit-user-select: text; user-select: text; }
+
+      #root { min-height: 100%; }
     </style>
   </head>
   <body>

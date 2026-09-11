@@ -5,135 +5,89 @@ import { BASE_SLIME_COST, TRAIT_JELLY_COST, ELEMENTS } from '../data/gameConstan
 import { genName } from '../utils/helpers.js';
 import SlimeSprite from './SlimeSprite.jsx';
 
-const SlimeForge = ({ unlockedMutations, biomass, freeJelly, tiers, onSpawn, extraMutationSlots = 0, slotsFromSelection }) => {
+const SlimeForge = ({ biomass, freeJelly, tiers, onSpawn }) => {
   const [tier, setTier] = useState('basic');
-  const [selMutations, setSelMutations] = useState([]);
   const [name, setName] = useState(genName());
 
   const td = SLIME_TIERS[tier];
-  // Alloy Potential pays for itself: selecting it opens the slots it grants.
-  const grantedSlots = slotsFromSelection ? slotsFromSelection(selMutations) : 0;
-  const maxM = td.traitSlots + extraMutationSlots + grantedSlots;
-  const bioCost = BASE_SLIME_COST + selMutations.length * 5;
-  const jellyCost = td.jellyCost + selMutations.length * TRAIT_JELLY_COST;
-
-  const toggle = (id) => {
-    if (selMutations.includes(id)) setSelMutations(selMutations.filter(m => m !== id));
-    else if (selMutations.length < maxM) setSelMutations([...selMutations, id]);
-  };
+  const bioCost = BASE_SLIME_COST;
+  const jellyCost = td.jellyCost;
+  const canSpawn = biomass >= bioCost && freeJelly >= jellyCost;
 
   const spawn = () => {
-    if (biomass >= bioCost && freeJelly >= jellyCost) {
-      onSpawn(tier, selMutations, name, jellyCost);
-      setSelMutations([]);
-      setName(genName());
-    }
+    if (!canSpawn) return;
+    onSpawn(tier, name, jellyCost);
+    setName(genName());
   };
 
-  const stats = { firmness: Math.floor(5 * td.statMultiplier), slipperiness: Math.floor(5 * td.statMultiplier), viscosity: Math.floor(5 * td.statMultiplier) };
-  selMutations.forEach(id => { const m = MUTATION_LIBRARY[id]; if (m) stats[m.stat] += m.bonus; });
-
-  // Calculate element bonuses from selected mutations
-  const elementBonuses = {};
-  selMutations.forEach(id => {
-    const m = MUTATION_LIBRARY[id];
-    if (m?.elementBonus) {
-      Object.entries(m.elementBonus).forEach(([elem, bonus]) => {
-        elementBonuses[elem] = (elementBonuses[elem] || 0) + bonus;
-      });
-    }
-  });
-  const hasElementBonus = Object.keys(elementBonuses).length > 0;
-
   return (
-    <div style={{ background: 'rgba(0,0,0,0.2)', borderRadius: 10, padding: 15 }}>
-      <h3 style={{ margin: '0 0 15px', fontSize: 16 }}>🧪 Slime Forge</h3>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 15, marginBottom: 15, padding: 15, background: 'rgba(236,72,153,0.1)', borderRadius: 10 }}>
-        <SlimeSprite tier={tier} size={60} mutations={selMutations} />
+    <div style={{ background: 'rgba(0,0,0,0.3)', borderRadius: 10, padding: 15 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
+        <SlimeSprite tier={tier} size={50} />
         <div style={{ flex: 1 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-            <input type="text" value={name} onChange={e => setName(e.target.value)} style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: 5, padding: '5px 10px', color: '#fff', fontSize: 14, flex: 1 }} />
-            <button onClick={() => setName(genName())} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 5, padding: '5px 10px', cursor: 'pointer' }}>🎲</button>
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            style={{
+              width: '100%', background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.15)',
+              borderRadius: 6, color: '#fff', padding: '7px 10px', fontSize: 14, fontWeight: 'bold',
+            }}
+          />
+          <div style={{ display: 'flex', gap: 8, marginTop: 6, alignItems: 'center' }}>
+            <button
+              onClick={() => setName(genName())}
+              style={{ fontSize: 11, padding: '3px 9px', borderRadius: 5, cursor: 'pointer', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', color: '#aaa' }}
+            >
+              🎲
+            </button>
+            <span style={{ fontSize: 11, opacity: 0.6 }}>
+              {td.name} · {td.traitSlots} mutation slot{td.traitSlots === 1 ? '' : 's'}
+            </span>
           </div>
-          <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 6 }}>{td.name} • {selMutations.length}/{maxM} mutations</div>
-          <div style={{ display: 'flex', gap: 10, fontSize: 11 }}>
-            {Object.entries(STAT_INFO).map(([k,v]) => <span key={k} style={{ color: v.color }}>{v.icon}{stats[k]}</span>)}
-          </div>
-          {hasElementBonus && (
-            <div style={{ display: 'flex', gap: 6, fontSize: 10, marginTop: 4 }}>
-              {Object.entries(elementBonuses).map(([elem, bonus]) => (
-                <span key={elem} style={{ color: ELEMENTS[elem]?.color, background: `${ELEMENTS[elem]?.color}22`, padding: '2px 6px', borderRadius: 4 }}>
-                  {ELEMENTS[elem]?.icon}+{bonus}%
-                </span>
-              ))}
-            </div>
-          )}
         </div>
       </div>
-      <div style={{ marginBottom: 15 }}>
-        <div style={{ fontSize: 12, marginBottom: 8, opacity: 0.7 }}>Tier</div>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          {Object.entries(SLIME_TIERS).map(([k,t]) => {
-            const ok = tiers.includes(k);
-            return (
-              <button key={k} onClick={() => { if(ok){setTier(k);setSelMutations([]);} }} style={{ display:'flex',alignItems:'center',gap:6,padding:'8px 12px',background:tier===k?'rgba(255,255,255,0.2)':'rgba(0,0,0,0.3)',border:`2px solid ${tier===k?t.color:'transparent'}`,borderRadius:8,color:'#fff',cursor:ok?'pointer':'not-allowed',opacity:ok?1:0.4,fontSize:12 }}>
-                <div style={{ width:16,height:12,backgroundColor:t.color,borderRadius:'50% 50% 50% 50% / 60% 60% 40% 40%' }} />
-                {t.name} <span style={{color:'#f59e0b',fontSize:10}}>🍯{t.jellyCost}+</span>
-              </button>
-            );
-          })}
-        </div>
+
+      <div style={{ display: 'flex', gap: 6, marginBottom: 14, flexWrap: 'wrap' }}>
+        {Object.entries(SLIME_TIERS).map(([k, t]) => {
+          const ok = tiers.includes(k);
+          return (
+            <button
+              key={k}
+              onClick={() => ok && setTier(k)}
+              disabled={!ok}
+              style={{
+                flex: '1 1 70px', padding: 8, borderRadius: 8, cursor: ok ? 'pointer' : 'not-allowed',
+                background: tier === k ? `${t.color}33` : 'rgba(0,0,0,0.3)',
+                border: `2px solid ${tier === k ? t.color : 'transparent'}`,
+                color: '#fff', fontSize: 10, opacity: ok ? 1 : 0.4,
+              }}
+            >
+              <div style={{ fontSize: 13 }}>{ok ? '🟢' : '🔒'}</div>
+              <div style={{ fontWeight: tier === k ? 'bold' : 'normal' }}>{t.name}</div>
+              <div style={{ opacity: 0.7 }}>🍯{t.jellyCost}</div>
+            </button>
+          );
+        })}
       </div>
-      <div style={{ marginBottom: 15 }}>
-        <div style={{ fontSize: 12, marginBottom: 8, opacity: 0.7 }}>Mutations ({selMutations.length}/{maxM}) • +{TRAIT_JELLY_COST}🍯 each</div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 8, maxHeight: 250, overflowY: 'auto' }}>
-          {unlockedMutations.map((id) => {
-            const m = MUTATION_LIBRARY[id];
-            if (!m) return null;
-            const sel = selMutations.includes(id);
-            const can = sel || selMutations.length < maxM;
-            // Get passive description - handle both function and string formats
-            const passiveText = typeof m.passiveDesc === 'function'
-              ? m.passiveDesc(stats.viscosity || 5)
-              : m.passiveDesc;
-            return (
-              <button key={id} onClick={() => can && toggle(id)} style={{ display:'flex',flexDirection:'column',alignItems:'flex-start',padding:10,background:sel?'rgba(168,85,247,0.25)':'rgba(0,0,0,0.3)',border:`2px solid ${sel?'#a855f7':'transparent'}`,borderRadius:8,color:'#fff',cursor:can?'pointer':'not-allowed',opacity:can?1:0.5,textAlign:'left' }}>
-                <div style={{ display:'flex',alignItems:'center',gap:6,marginBottom:6,width:'100%' }}>
-                  <span style={{fontSize:18}}>{m.icon}</span>
-                  <span style={{fontSize:12,fontWeight:'bold'}}>{m.name}</span>
-                  {sel && <span style={{marginLeft:'auto',fontSize:10,color:'#4ade80'}}>✓</span>}
-                </div>
-                <div style={{fontSize:10,color:'#4ade80',marginBottom:4}}>+{m.bonus} {STAT_INFO[m.stat]?.name}</div>
-                <div style={{fontSize:10,color:'#c084fc',marginBottom:4,lineHeight:1.3}}>{passiveText}</div>
-                {m.viscScale && (
-                  <div style={{fontSize:9,opacity:0.6,marginBottom:2}}>
-                    Formula: {m.baseValue || m.baseChance || 0} + {m.viscScale} × VISC
-                  </div>
-                )}
-                {m.elementBonus && (
-                  <div style={{fontSize:9,marginTop:2,display:'flex',gap:4}}>
-                    {Object.entries(m.elementBonus).map(([elem, bonus]) => (
-                      <span key={elem} style={{color: ELEMENTS[elem]?.color, background:`${ELEMENTS[elem]?.color}22`, padding:'1px 4px', borderRadius:3}}>
-                        {ELEMENTS[elem]?.icon}+{bonus}%
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </button>
-            );
-          })}
-          {!unlockedMutations.length && <div style={{opacity:0.5,fontStyle:'italic',fontSize:12,gridColumn:'1/-1'}}>No mutations unlocked. Defeat 100 of any monster type!</div>}
-        </div>
+
+      <div style={{ display: 'flex', gap: 10, fontSize: 11, marginBottom: 12 }}>
+        {Object.entries(STAT_INFO).map(([k, v]) => (
+          <span key={k} style={{ color: v.color }}>
+            {v.icon} {Math.floor(5 * td.statMultiplier)}
+          </span>
+        ))}
       </div>
-      <div style={{ display:'flex',justifyContent:'space-between',padding:'10px 15px',background:'rgba(0,0,0,0.2)',borderRadius:8,marginBottom:10,fontSize:13 }}>
-        <span>Cost:</span>
-        <div style={{display:'flex',gap:15}}>
-          <span style={{color:biomass>=bioCost?'#4ade80':'#ef4444'}}>🧬{bioCost}</span>
-          <span style={{color:freeJelly>=jellyCost?'#f59e0b':'#ef4444'}}>🍯{jellyCost}</span>
-        </div>
-      </div>
-      <button onClick={spawn} disabled={biomass<bioCost||freeJelly<jellyCost} style={{ width:'100%',padding:12,background:biomass>=bioCost&&freeJelly>=jellyCost?'linear-gradient(135deg,#ec4899,#a855f7)':'rgba(100,100,100,0.5)',border:'none',borderRadius:8,color:'#fff',fontWeight:'bold',cursor:biomass>=bioCost&&freeJelly>=jellyCost?'pointer':'not-allowed',fontSize:14 }}>
-        ✨ Spawn Slime
+
+      <button
+        onClick={spawn}
+        disabled={!canSpawn}
+        style={{
+          width: '100%', padding: 12, borderRadius: 8, border: 'none', fontWeight: 'bold',
+          color: '#fff', cursor: canSpawn ? 'pointer' : 'not-allowed',
+          background: canSpawn ? 'linear-gradient(135deg, #4ade80, #22d3ee)' : 'rgba(100,100,100,0.5)',
+        }}
+      >
+        {canSpawn ? `🥚 Spawn — 🧬${bioCost} · 🍯${jellyCost}` : `Need 🧬${bioCost} · 🍯${jellyCost}`}
       </button>
     </div>
   );

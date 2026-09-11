@@ -3,7 +3,8 @@ import { PRISM_PACKAGES } from '../data/ranchData.js';
 import { PRISM_SHOP } from '../data/hiveData.js';
 import SlimeSprite from './SlimeSprite.jsx';
 
-const SettingsTab = ({ onSave, onDelete, lastSave, prisms, slimes, purchasePrismItem }) => {
+const SettingsTab = ({ onSave, onDelete, lastSave, prisms, slimes, purchasePrismItem,
+  tutorialsOn, setTutorialsOn, seenTutorials = [], resetTutorials, totalTutorials = 0 }) => {
   const [showConfirm, setShowConfirm] = useState(false);
   const [showPurchaseMessage, setShowPurchaseMessage] = useState(false);
   const [selectedShopItem, setSelectedShopItem] = useState(null);
@@ -183,6 +184,37 @@ const SettingsTab = ({ onSave, onDelete, lastSave, prisms, slimes, purchasePrism
             </div>
           </div>
         )}
+      </div>
+
+      {/* Tutorials */}
+      <div style={{ background: 'rgba(0,0,0,0.3)', borderRadius: 10, padding: 15, marginBottom: 15 }}>
+        <div style={{ fontSize: 14, fontWeight: 'bold', marginBottom: 10 }}>📖 Tutorials</div>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', marginBottom: 12 }}>
+          <input
+            type="checkbox"
+            checked={!!tutorialsOn}
+            onChange={(e) => setTutorialsOn?.(e.target.checked)}
+            style={{ width: 16, height: 16, cursor: 'pointer' }}
+          />
+          <span style={{ fontSize: 12 }}>Explain each system the first time I meet it</span>
+        </label>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 11, opacity: 0.65 }}>
+            {seenTutorials.length}/{totalTutorials} seen — all of them stay in the Compendium
+          </span>
+          <button
+            onClick={resetTutorials}
+            disabled={!seenTutorials.length}
+            style={{
+              padding: '5px 12px', fontSize: 11, borderRadius: 5,
+              cursor: seenTutorials.length ? 'pointer' : 'not-allowed',
+              background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.18)',
+              color: seenTutorials.length ? '#e0e0e0' : '#666',
+            }}
+          >
+            Show them again
+          </button>
+        </div>
       </div>
 
       {/* Save System */}

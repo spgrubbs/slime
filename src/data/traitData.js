@@ -15,7 +15,6 @@ export const MUTATION_LIBRARY = {
     baseChance: 10,
     viscScale: 0.25,
     color: '#94a3b8',
-    requiredKills: 100,
     monster: 'youngWolf',
     elementBonus: null,
   },
@@ -29,7 +28,6 @@ export const MUTATION_LIBRARY = {
     baseValue: 5,
     viscScale: 0.5,
     color: '#22c55e',
-    requiredKills: 100,
     monster: 'venusSlimetrap',
     elementBonus: { nature: 5 },
   },
@@ -43,7 +41,6 @@ export const MUTATION_LIBRARY = {
     baseValue: 5,
     viscScale: 0.1,
     color: '#a16207',
-    requiredKills: 100,
     monster: 'pebblet',
     elementBonus: { earth: 5 },
   },
@@ -57,7 +54,6 @@ export const MUTATION_LIBRARY = {
     baseChance: 10,
     viscScale: 0.25,
     color: '#65a30d',
-    requiredKills: 100,
     monster: 'vineSpider',
     elementBonus: { nature: 3 },
   },
@@ -71,7 +67,6 @@ export const MUTATION_LIBRARY = {
     baseValue: 1,
     viscScale: 2,
     color: '#4ade80',
-    requiredKills: 200, // Rare monster
     monster: 'lifeFairy',
     elementBonus: { nature: 8 },
   },
@@ -87,7 +82,6 @@ export const MUTATION_LIBRARY = {
     baseChance: 10,
     viscScale: 0.4,
     color: '#ef4444',
-    requiredKills: 100,
     monster: 'serratedCarp',
     elementBonus: { water: 3 },
   },
@@ -101,7 +95,6 @@ export const MUTATION_LIBRARY = {
     baseValue: 5,
     viscScale: 0.3,
     color: '#3b82f6',
-    requiredKills: 100,
     monster: 'antSeaLion',
     elementBonus: { water: 5 },
   },
@@ -115,7 +108,6 @@ export const MUTATION_LIBRARY = {
     baseChance: 25,
     viscScale: 0.4,
     color: '#06b6d4',
-    requiredKills: 100,
     monster: 'swampStrider',
     elementBonus: { water: 3 },
   },
@@ -129,7 +121,6 @@ export const MUTATION_LIBRARY = {
     baseChance: 10,
     viscScale: 0.5,
     color: '#8b5cf6',
-    requiredKills: 100,
     monster: 'wilOWisp',
     elementBonus: { fire: 3 },
   },
@@ -143,7 +134,6 @@ export const MUTATION_LIBRARY = {
     baseChance: 1,
     viscScale: 0.15,
     color: '#fbbf24',
-    requiredKills: 300, // Rare
     monster: 'theSnail',
     elementBonus: null,
   },
@@ -159,7 +149,6 @@ export const MUTATION_LIBRARY = {
     baseChance: 10,
     viscScale: 0.2,
     color: '#dc2626',
-    requiredKills: 100,
     monster: 'vampireBat',
     elementBonus: null,
   },
@@ -173,7 +162,6 @@ export const MUTATION_LIBRARY = {
     baseChance: 25,
     viscScale: 0.5,
     color: '#a16207',
-    requiredKills: 100,
     monster: 'rockWorm',
     elementBonus: { earth: 5 },
   },
@@ -187,7 +175,6 @@ export const MUTATION_LIBRARY = {
     baseChance: 10,
     viscScale: 0.25,
     color: '#fcd34d',
-    requiredKills: 100,
     monster: 'coalSprite',
     elementBonus: { earth: 3 },
   },
@@ -201,7 +188,6 @@ export const MUTATION_LIBRARY = {
     baseValue: 10,
     viscScale: 0.5,
     color: '#6b7280',
-    requiredKills: 100,
     monster: 'stalagMite',
     elementBonus: { earth: 5 },
   },
@@ -215,7 +201,6 @@ export const MUTATION_LIBRARY = {
     baseValue: 25,
     viscScale: 0.2,
     color: '#3b82f6',
-    requiredKills: 300, // Rare
     monster: 'sapphireNewt',
     elementBonus: { water: 8 },
   },
@@ -231,7 +216,6 @@ export const MUTATION_LIBRARY = {
     baseValue: 2,
     viscScale: 0.3,
     color: '#22c55e',
-    requiredKills: 100,
     monster: 'embermander',
     elementBonus: { fire: 5 },
   },
@@ -245,7 +229,6 @@ export const MUTATION_LIBRARY = {
     special: 'extraSlots',
     extraSlots: 2,
     color: '#94a3b8',
-    requiredKills: 100,
     monster: 'animatedAlloy',
     elementBonus: { earth: 3 },
   },
@@ -259,7 +242,6 @@ export const MUTATION_LIBRARY = {
     baseChance: 15,
     viscScale: 0.3,
     color: '#f97316',
-    requiredKills: 100,
     monster: 'magmaOoze',
     elementBonus: { fire: 5 },
   },
@@ -273,7 +255,6 @@ export const MUTATION_LIBRARY = {
     baseChance: 15,
     viscScale: 0.3,
     color: '#6b7280',
-    requiredKills: 100,
     monster: 'burntSpirit',
     elementBonus: null,
   },
@@ -287,7 +268,6 @@ export const MUTATION_LIBRARY = {
     baseValue: 3,
     viscScale: 0.15,
     color: '#dc2626',
-    requiredKills: 400, // Rare
     monster: 'wyrm',
     elementBonus: { fire: 10 },
   },
@@ -303,7 +283,6 @@ export const MUTATION_LIBRARY = {
     baseValue: 15,
     viscScale: 0.3,
     color: '#fbbf24',
-    requiredKills: 100,
     monster: 'thunderHawk',
     elementBonus: null,
   },
@@ -317,7 +296,6 @@ export const MUTATION_LIBRARY = {
     baseChance: 10,
     viscScale: 0.3,
     color: '#a16207',
-    requiredKills: 100,
     monster: 'boulderTroll',
     elementBonus: { earth: 5 },
   },
@@ -331,7 +309,6 @@ export const MUTATION_LIBRARY = {
     baseValue: 15,
     viscScale: 0.3,
     color: '#3b82f6',
-    requiredKills: 100,
     monster: 'stormElemental',
     elementBonus: { water: 5 },
   },
@@ -345,7 +322,6 @@ export const MUTATION_LIBRARY = {
     baseChance: 12,
     viscScale: 0.3,
     color: '#06b6d4',
-    requiredKills: 100,
     monster: 'frostGiant',
     elementBonus: { water: 5 },
   },
@@ -359,7 +335,6 @@ export const MUTATION_LIBRARY = {
     baseValue: 10,
     viscScale: 0.25,
     color: '#8b5cf6',
-    requiredKills: 500, // Rare
     monster: 'thunderbird',
     elementBonus: null,
   },
@@ -375,7 +350,6 @@ export const MUTATION_LIBRARY = {
     baseValue: 2,
     viscScale: 0.2,
     color: '#4c1d95',
-    requiredKills: 100,
     monster: 'voidTendril',
     elementBonus: null,
   },
@@ -389,7 +363,6 @@ export const MUTATION_LIBRARY = {
     baseValue: 5,
     viscScale: 0.2,
     color: '#7c3aed',
-    requiredKills: 100,
     monster: 'abyssalWatcher',
     elementBonus: null,
   },
@@ -403,7 +376,6 @@ export const MUTATION_LIBRARY = {
     baseValue: 50,
     viscScale: 0.5,
     color: '#374151',
-    requiredKills: 100,
     monster: 'nullConstruct',
     elementBonus: null,
   },
@@ -417,7 +389,6 @@ export const MUTATION_LIBRARY = {
     baseValue: 50,
     viscScale: 1,
     color: '#dc2626',
-    requiredKills: 100,
     monster: 'realityShard',
     elementBonus: null,
   },
@@ -431,7 +402,6 @@ export const MUTATION_LIBRARY = {
     baseValue: 10,
     viscScale: 0.4,
     color: '#0f0f23',
-    requiredKills: 600, // Rare
     monster: 'hollowOne',
     elementBonus: null,
   },
@@ -499,6 +469,25 @@ export const TRAIT_RARITY_COLORS = {
   rare: '#a855f7',
   legendary: '#f59e0b',
 };
+
+// ── Mutagen items ────────────────────────────────────────────────────────────
+//
+// One mutagen per mutation, dropped by that mutation's monster. The item is
+// what the player collects and spends; the mutation is what it becomes.
+
+export const mutagenName = (mutationId) => {
+  const m = MUTATION_LIBRARY[mutationId];
+  return m ? `${m.name} Mutagen` : 'Unknown Mutagen';
+};
+
+/** Every mutagen, with the monster that drops it. Used by the Stores screen. */
+export const ALL_MUTAGENS = Object.entries(MUTATION_LIBRARY).map(([id, m]) => ({
+  id,
+  name: mutagenName(id),
+  icon: m.icon,
+  color: m.color,
+  monster: m.monster,
+}));
 
 // Helper function to get mutation description with current VISC value
 export const getMutationDesc = (mutationId, viscosity = 0) => {

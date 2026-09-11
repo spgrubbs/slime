@@ -1,6 +1,24 @@
 import React, { useState, useMemo } from 'react';
 import { SKILL_TREES, canPurchaseSkill, getSkillEffects, SKILL_POINTS_PER_LEVEL } from '../data/skillTreeData.js';
 
+// The bonuses that survive in the tree are all capacities, so they read as
+// counts rather than percentages — "+15 Royal Jelly", not "+15% maxJelly".
+const CAPACITY_LABELS = {
+  maxJelly: 'Royal Jelly',
+  ranchSlots: 'Pool slots',
+  mutationSlots: 'Mutation slots',
+  defenseSlots: 'Ambush slots',
+  rareSpawn: '% rare spawns',
+};
+
+/** A purchased skill's display name, by id, across all three trees. */
+const skillName = (id) => {
+  for (const tree of Object.values(SKILL_TREES)) {
+    if (tree.skills[id]) return tree.skills[id].name;
+  }
+  return id;
+};
+
 const SkillTree = ({ queenLevel, purchasedSkills, onPurchaseSkill, availablePoints }) => {
   const [activeTree, setActiveTree] = useState('expedition');
   const [hoveredSkill, setHoveredSkill] = useState(null);
@@ -70,15 +88,10 @@ const SkillTree = ({ queenLevel, purchasedSkills, onPurchaseSkill, availablePoin
   };
 
   return (
-    <div style={{ background: 'rgba(0,0,0,0.2)', borderRadius: 12, padding: 15 }}>
-      {/* Header with points */}
+    <div>
+      {/* The screen it lives on already names it; state the numbers, not the title. */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 }}>
-        <div>
-          <h3 style={{ margin: 0, fontSize: 18 }}>🌳 Queen Skill Tree</h3>
-          <div style={{ fontSize: 12, opacity: 0.7, marginTop: 4 }}>
-            Level {queenLevel} • Unlock powerful abilities
-          </div>
-        </div>
+        <div style={{ fontSize: 12, opacity: 0.7 }}>Queen level {queenLevel}</div>
         <div style={{
           background: 'rgba(236,72,153,0.2)',
           padding: '8px 16px',
@@ -294,7 +307,7 @@ const SkillTree = ({ queenLevel, purchasedSkills, onPurchaseSkill, availablePoin
                 fontSize: 11,
                 color: '#4ade80'
               }}>
-                {stat}: {value > 0 ? '+' : ''}{value}%
+                {CAPACITY_LABELS[stat] || stat}: {value > 0 ? '+' : ''}{value}
               </span>
             ))}
             {effects.pheromones.map(ability => (
@@ -316,7 +329,7 @@ const SkillTree = ({ queenLevel, purchasedSkills, onPurchaseSkill, availablePoin
                 fontSize: 11,
                 color: '#22d3ee'
               }}>
-                ⚡ {passive}
+                ⚡ {skillName(passive)}
               </span>
             ))}
           </div>

@@ -1,9 +1,9 @@
-import { SAVE_KEY, DEFAULT_ELEMENTS } from '../data/gameConstants.js';
+import { SAVE_KEY } from '../data/gameConstants.js';
 import { dehydrateExpedition } from '../combat/expedition.js';
+import { dehydrateAmbush } from '../combat/caravan.js';
 
 // The key the real-time arena wrote to. Its in-flight expeditions cannot be
 // converted to round-based combatants, but everything else still migrates.
-const LEGACY_SAVE_KEY = 'hive_queen_save_v3';
 
 // Default game state
 export const getDefaultState = () => ({
@@ -12,99 +12,26 @@ export const getDefaultState = () => ({
   mats: {},
   slimes: [],
   exps: {},
-  builds: {},
+  builds: { forestTendril: 1 },
   research: [],
   activeRes: null,
-  lastTowerDefense: 0,
+  lastCaravan: 0,
+  caravanTier: 1,
   monsterKills: {},
-  unlockedMutations: [],
+  mutagens: {},
+  pityKills: {},
+  wardenKills: {},
   purchasedSkills: ['expeditionBasics', 'hiveFoundation', 'combatTraining'], // Root skills free
   lastSave: Date.now(),
 });
 
-// Migrate old slime data to include element system and mutation system
-const migrateSlimeData = (slime) => {
-  const migrated = { ...slime };
-
-  // Add elements if missing (element system)
-  if (!migrated.elements) {
-    migrated.elements = { ...DEFAULT_ELEMENTS };
-  }
-
-  // Add primaryElement if missing
-  if (migrated.primaryElement === undefined) {
-    migrated.primaryElement = null;
-  }
-
-  // Migrate traits to mutations (mutation system)
-  // Old structure: slime.traits = ['wolfFang', 'dragonHeart']
-  // New structure: slime.mutations = ['wolfFang', 'dragonHeart'], slime.traits = [] (personality)
-  if (migrated.traits && !migrated.mutations) {
-    migrated.mutations = [...migrated.traits];
-    migrated.traits = []; // Reset traits for personality system (Phase 3)
-  }
-
-  // Ensure mutations array exists
-  if (!migrated.mutations) {
-    migrated.mutations = [];
-  }
-
-  // Ensure traits array exists (for personality traits)
-  if (!Array.isArray(migrated.traits)) {
-    migrated.traits = [];
-  }
-
-  return migrated;
-};
-
-// Migrate save data to current version
-const migrateSaveData = (data) => {
-  const migrated = { ...data };
-
-  // Migrate slimes to include element data and mutation data
-  if (migrated.slimes && Array.isArray(migrated.slimes)) {
-    migrated.slimes = migrated.slimes.map(migrateSlimeData);
-  }
-
-  // Migrate old traits inventory to unlockedMutations
-  // Old structure: traits = { wolfFang: 2, dragonHeart: 1 }
-  // New structure: unlockedMutations = ['wolfFang', 'dragonHeart']
-  if (migrated.traits && typeof migrated.traits === 'object' && !migrated.unlockedMutations) {
-    migrated.unlockedMutations = Object.keys(migrated.traits);
-    // Delete the old traits inventory
-    delete migrated.traits;
-  }
-
-  // Ensure unlockedMutations exists
-  if (!migrated.unlockedMutations) {
-    migrated.unlockedMutations = [];
-  }
-
-  // Migrate defeatedMonsters array to monsterKills object
-  // Old structure: defeatedMonsters = ['wolf', 'goblin', 'wolf']
-  // New structure: monsterKills = { wolf: 2, goblin: 1 }
-  if (migrated.defeatedMonsters && Array.isArray(migrated.defeatedMonsters) && !migrated.monsterKills) {
-    migrated.monsterKills = {};
-    // Count occurrences of each monster type (estimate if it was unique list)
-    migrated.defeatedMonsters.forEach(type => {
-      // If defeatedMonsters was unique, estimate some kills based on having defeated them
-      migrated.monsterKills[type] = (migrated.monsterKills[type] || 0) + 10;
-    });
-    delete migrated.defeatedMonsters;
-  }
-
-  // Ensure monsterKills exists
-  if (!migrated.monsterKills) {
-    migrated.monsterKills = {};
-  }
-
-  // Ensure purchasedSkills exists with root skills
-  if (!migrated.purchasedSkills) {
-    migrated.purchasedSkills = ['expeditionBasics', 'hiveFoundation', 'combatTraining'];
-  }
-
-  return migrated;
-};
+// Saves are not carried across versions. The game is in active design and its
+// state shape changes with almost every pass; the migration layer that used to
+// live here translated a dozen retired systems (kill-count mutation unlocks,
+// skill-point zone gates, a `traits` array that became `mutations`) and was
+// more code than the systems it propped up. A save that predates the current
+// shape is filled in from defaults instead.
+const withDefaults = (data) => ({ ...getDefaultState(), ...data });
 
 // Save game to localStorage
 export const saveGame = (state) => {
@@ -114,7 +41,7 @@ export const saveGame = (state) => {
     Object.entries(state.exps || {}).forEach(([zone, exp]) => {
       exps[zone] = dehydrateExpedition(exp);
     });
-    const saveData = { ...state, exps, lastSave: Date.now() };
+    const saveData = { ...state, exps, ambush: dehydrateAmbush(state.ambush), lastSave: Date.now() };
     localStorage.setItem(SAVE_KEY, JSON.stringify(saveData));
     return true;
   } catch (e) {
@@ -127,19 +54,7 @@ export const saveGame = (state) => {
 export const loadGame = () => {
   try {
     const data = localStorage.getItem(SAVE_KEY);
-    if (data) return migrateSaveData(JSON.parse(data));
-
-    // First run after the combat rewrite: carry the player's progress over from
-    // the arena-era save, dropping only the expeditions that were mid-flight.
-    const legacy = localStorage.getItem(LEGACY_SAVE_KEY);
-    if (!legacy) return null;
-
-    const parsed = JSON.parse(legacy);
-    const dropped = Object.keys(parsed.exps || {}).length;
-    if (dropped > 0) {
-      console.info(`Migrating save: recalled ${dropped} in-flight expedition(s).`);
-    }
-    return migrateSaveData({ ...parsed, exps: {} });
+    return data ? withDefaults(JSON.parse(data)) : null;
   } catch (e) {
     console.error('Load failed:', e);
     return null;

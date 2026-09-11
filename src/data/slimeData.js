@@ -6,10 +6,17 @@ export const STAT_INFO = {
 };
 
 // Slime tier definitions
-// BALANCE: Wide gaps between tiers create meaningful progression
-// Basic slimes are for Zone 1, suicide in Zone 3+
-// Each tier roughly doubles power from previous
-// biomassPerPercent: biomass needed for 1% stat increase (capped at maxBiomassBonus)
+//
+// A slime's power has two parts that behave completely differently:
+//
+//   INTRINSIC — tier, traits and mutations. Permanent, safe, and the real
+//               ladder. Tier steps are x2, x1.75 and x1.43.
+//   HELD      — biomass carried on the slime. Temporary, capped well below a
+//               tier step, and forfeited entirely if the slime goes down.
+//
+// So maturing a slime never promotes it a rung; it sharpens the rung it is on
+// and gives you something to lose. biomassPerPercent is how much biomass buys
+// 1% of stats, capped at maxBiomassBonus.
 export const SLIME_TIERS = {
   basic: {
     name: 'Basic',
@@ -19,7 +26,7 @@ export const SLIME_TIERS = {
     color: '#4ade80',
     baseHp: 30,             // Comfortable in Zone 1
     biomassPerPercent: 3,   // Easy to grow initially
-    maxBiomassBonus: 80,    // Cap at 80% bonus
+    maxBiomassBonus: 35,    // Temporary power only — never a tier's worth
     unlockBuilding: null,   // Always available
   },
   enhanced: {
@@ -30,7 +37,7 @@ export const SLIME_TIERS = {
     color: '#22d3ee',
     baseHp: 75,             // Comfortable in Zone 2-3
     biomassPerPercent: 8,
-    maxBiomassBonus: 100,
+    maxBiomassBonus: 35,
     unlockBuilding: 'spawningVat',
   },
   elite: {
@@ -41,7 +48,7 @@ export const SLIME_TIERS = {
     color: '#a855f7',
     baseHp: 150,            // Comfortable in Zone 4-5
     biomassPerPercent: 20,
-    maxBiomassBonus: 120,
+    maxBiomassBonus: 35,
     unlockBuilding: 'royalHatchery',
   },
   royal: {
@@ -52,7 +59,7 @@ export const SLIME_TIERS = {
     color: '#f59e0b',
     baseHp: 300,            // Can tackle Zone 6
     biomassPerPercent: 40,
-    maxBiomassBonus: 150,
+    maxBiomassBonus: 35,
     unlockBuilding: 'primordialChamber',
   },
 };

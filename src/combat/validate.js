@@ -9,6 +9,7 @@
 
 import { MUTATION_LIBRARY, SLIME_TRAITS, STATUS_EFFECTS } from '../data/traitData.js';
 import { MONSTER_ABILITIES } from '../data/monsterData.js';
+import { WARDENS } from '../data/wardenData.js';
 import { hasEffect } from './hooks.js';
 
 // Monster ability effects the resolver knows how to execute.
@@ -35,6 +36,16 @@ export function validateRegistry({ throwOnError = true } = {}) {
   for (const id of Object.keys(SLIME_TRAITS)) {
     if (!hasEffect('trait', id)) {
       errors.push(`Trait "${id}" has no registered effect`);
+    }
+  }
+
+  // Every Warden's mechanic must resolve, for the same reason mutations must:
+  // a boss whose rule silently does nothing is just a bag of hit points.
+  for (const [zone, w] of Object.entries(WARDENS)) {
+    if (!w.mechanic) {
+      errors.push(`Warden "${zone}" has no \`mechanic\` — it would be a stat check`);
+    } else if (!hasEffect('warden', w.mechanic)) {
+      errors.push(`Warden "${zone}" declares mechanic "${w.mechanic}" with no registered effect`);
     }
   }
 

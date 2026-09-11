@@ -31,15 +31,28 @@ const roster = (n = 3, over = {}) =>
 
 const ctx = (seed = 1) => ({ rng: seeded(seed), roundMs: ROUND_MS });
 
-/** Run an expedition to completion (or the step cap) and collect side effects. */
+/**
+ * Run an expedition to completion (or the step cap), collecting side effects.
+ * `exp.logs` is capped, so anything asserting on log contents has to watch the
+ * whole run rather than reading the tail afterwards — `allLogs` is that record.
+ */
 function runToEnd(exp, zone, c, maxSteps = 4000) {
   const all = [];
+  const allLogs = [];
+  let seen = 0;
   for (let i = 0; i < maxSteps; i++) {
     if (exp.phase === 'defeat') break;
+    const before = exp.logs.length;
     const { sideEffects } = tickExpedition(exp, ROUND_MS, c, zone);
+    // The buffer may have rotated; take whatever is new at the tail.
+    const grew = exp.logs.length - before;
+    if (grew > 0) allLogs.push(...exp.logs.slice(-grew));
+    else if (exp.logs.length === 80) allLogs.push(...exp.logs.slice(-1));
+    seen = exp.logs.length;
     all.push(...sideEffects);
     if (sideEffects.some(se => se.type === 'expComplete' || se.type === 'expWipe')) break;
   }
+  all.logs = allLogs;
   return all;
 }
 
@@ -79,16 +92,16 @@ test('materials ride home on the expedition rather than banking immediately', ()
 
 test('intermission events fire between encounters', () => {
   const exp = makeExpedition('swamp', roster(), 12, ctx());
-  runToEnd(exp, 'swamp', ctx(11));
-  const travelLogs = exp.logs.filter(l => l.v?.startsWith('travel event'));
+  const run = runToEnd(exp, 'swamp', ctx(11));
+  const travelLogs = run.logs.filter(l => l.v?.startsWith('travel event'));
   assert.ok(travelLogs.length > 0, 'no intermission events fired');
 });
 
 test('exploration events fire during travel', () => {
   // Rare (15% per intermission), so run a long expedition.
   const exp = makeExpedition('forest', roster(), 60, ctx());
-  runToEnd(exp, 'forest', ctx(21));
-  const explore = exp.logs.filter(l => l.v?.startsWith('exploration'));
+  const run = runToEnd(exp, 'forest', ctx(21));
+  const explore = run.logs.filter(l => l.v?.startsWith('exploration'));
   assert.ok(explore.length > 0, 'no exploration events fired across 60 kills');
 });
 
@@ -100,8 +113,8 @@ test('slimes accrue elemental affinity in an elemental zone', () => {
 
 test('every battle log entry carries a verbose derivation', () => {
   const exp = makeExpedition('caves', roster(), 8, ctx());
-  runToEnd(exp, 'caves', ctx(7));
-  const missing = exp.logs.filter(l => !l.v);
+  const run = runToEnd(exp, 'caves', ctx(7));
+  const missing = run.logs.filter(l => !l.v);
   assert.deepEqual(missing.map(l => l.m), [], 'log entries without a trace');
 });
 
@@ -132,10 +145,16 @@ test('an expedition survives a save/load round trip', () => {
   assert.equal(restored.slimes[0].ref.id, party[0].id, 'ref was rebuilt');
   assert.equal(restored.enemy ? restored.enemy.ref !== null : true, true);
 
-  // And it keeps running.
+  // And it keeps running. Ticks only advance the round counter while a fight is
+  // actually on, so walk out of any travel phase first rather than assuming a
+  // particular fight length — that assumption broke the moment monster HP moved.
   const before = restored.round;
-  tickExpedition(restored, ROUND_MS, ctx(8), 'forest');
-  assert.ok(restored.round > before);
+  let ticks = 0;
+  while (restored.round === before && ticks < 40) {
+    tickExpedition(restored, ROUND_MS, ctx(8), 'forest');
+    ticks++;
+  }
+  assert.ok(restored.round > before, `round advanced within ${ticks} ticks`);
 });
 
 test('a restored expedition drops combatants whose slime is gone', () => {

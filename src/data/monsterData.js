@@ -1,11 +1,89 @@
 // Monster type definitions
-// BALANCE: Wide gaps between zones - each zone is a major step up
-// Zone 1: Basic slimes comfortable, ~20-40 HP, 3-6 dmg
-// Zone 2: Basic slimes struggle, Enhanced comfortable, ~60-100 HP, 8-14 dmg
-// Zone 3: Basic suicide, Enhanced struggle, ~120-180 HP, 16-24 dmg
-// Zone 4: Enhanced suicide, Elite comfortable, ~200-350 HP, 28-40 dmg
+//
+// BALANCE — fight LENGTH, not just difficulty.
+//
+// Measured against the real resolver, a party of four at each zone's
+// recommendedStats used to clear the forest in 2.2 rounds losing 2% of its
+// health, while caves-and-deeper already ran 4.7-5.7 rounds at 28-45%. The
+// early game was over before the arena could show a single behaviour, and no
+// build expressed itself in two rounds.
+//
+// So the correction is front-loaded and tapers to nothing: HP and damage were
+// multiplied by (x3.0, x2.0) at tier 1, (x1.8, x1.4) at 2, (x1.3, x1.1) at 3,
+// (x1.1, x1.0) at 4, and left alone at 5-6, which were already in band. The
+// whole game now sits at roughly 5-7 rounds a fight. A flat doubling was the
+// obvious move and the wrong one: it would have pushed the peaks to 11 rounds
+// and a 56% win rate, breaking the part of the curve that already worked.
+//
+// Re-check with the sim described in docs/GAME_DESIGN.md §11.
+//
+// Zone 1: Basic slimes comfortable, ~45-120 HP, 6-12 dmg
+// Zone 2: Basic slimes struggle, Enhanced comfortable, ~90-215 HP, 11-20 dmg
+// Zone 3: Basic suicide, Enhanced struggle, ~145-235 HP, 18-26 dmg
+// Zone 4: Enhanced suicide, Elite comfortable, ~220-385 HP, 28-40 dmg
 // Zone 5: Elite struggle, Royal comfortable, ~400-600 HP, 45-65 dmg
 // Zone 6: Royal struggle with investment, ~700-1000 HP, 70-100 dmg
+
+// ── Material drops ───────────────────────────────────────────────────────────
+//
+// Every material rolls independently when a monster dies, at a rate set by what
+// it gates rather than by which monster dropped it. Commons keep the economy
+// moving; gating materials are deliberately slow, because in an incremental the
+// wait IS the progression.
+//
+// Rare monsters are their own gate — they only appear ~5% of the time — so
+// everything they carry drops generously once you have actually found one.
+
+export const MATERIAL_RATES = {
+  common:   0.38,   // keeps buildings and ranches ticking over
+  uncommon: 0.16,
+  gating:   0.08,   // wanted in quantity by one specific building
+  fromRare: 0.45,   // anything on a rare monster; the spawn was the grind
+};
+
+/** Materials wanted in bulk by a building or ranch, so they drop slowly. */
+export const GATING_MATERIALS = new Set([
+  'Storm Core', 'Void Essence', 'Wyrm Scale', 'Snail Shell', 'Ancient Stone',
+  'Golem Core', 'Ember Core', 'Phoenix Ash', 'Turtle Shell', 'Life Essence',
+  'Mana Crystal', 'Crystal Shard',
+]);
+
+const UNCOMMON_MATERIALS = new Set([
+  'Iron Ore', 'Bat Wing', 'Snake Scale', 'Digestive Sac',
+]);
+
+/** Chance that `mat` drops from one kill of `monster`. */
+export const materialDropChance = (mat, monster) => {
+  if (monster?.rare) return MATERIAL_RATES.fromRare;
+  if (GATING_MATERIALS.has(mat)) return MATERIAL_RATES.gating;
+  if (UNCOMMON_MATERIALS.has(mat)) return MATERIAL_RATES.uncommon;
+  return MATERIAL_RATES.common;
+};
+
+// ── Mutagens ─────────────────────────────────────────────────────────────────
+//
+// Every monster carries the mutagen for its own mutation. Applying one to a
+// slime grants that mutation permanently and consumes the item — so a mutation
+// is a scarce thing you spend, not a threshold you cross once.
+//
+// The rate belongs to the MUTATION's rarity, not the monster's: a rare monster
+// already appears ~5% of the time, and taxing that twice would put its mutagen
+// past 2,000 zone kills.
+
+export const MUTAGEN_RATES = {
+  common: 0.01,   // ~420 zone kills for one specific mutagen, ~100 for any
+  rare:   0.03,   // ~670 zone kills, behind a 5% spawn
+};
+
+/**
+ * Guaranteed floor. Pure 1% with no floor can hand a player 500 kills and
+ * nothing, which reads as broken rather than unlucky — so the kill tally that
+ * used to gate unlocks becomes the safety net instead of being deleted.
+ */
+export const MUTAGEN_PITY_KILLS = 150;
+
+export const mutagenDropChance = (monster) =>
+  monster?.rare ? MUTAGEN_RATES.rare : MUTAGEN_RATES.common;
 
 // Monster Abilities - special attacks that monsters can use randomly
 // chance: probability (0-1) of using ability instead of normal attack
@@ -127,7 +205,7 @@ export const MONSTER_TYPES = {
     icon: '🐺',
     desc: 'A scrappy young predator learning to hunt. Fast but fragile, it relies on sharp fangs to bring down prey.',
     tier: 1,
-    hp: 25,
+    hp: 100,
     dmg: 4,
     biomass: 6,
     mats: ['Wolf Fang', 'Wolf Pelt'],
@@ -143,7 +221,7 @@ export const MONSTER_TYPES = {
     icon: '🌱',
     desc: 'A carnivorous plant that evolved to trap slimes specifically. Its digestive juices are prized by alchemists.',
     tier: 1,
-    hp: 35,
+    hp: 124,
     dmg: 3,
     biomass: 8,
     mats: ['Slimetrap Vine', 'Digestive Sac'],
@@ -158,10 +236,10 @@ export const MONSTER_TYPES = {
     icon: '🪨',
     desc: 'A small living rock that tumbles through the forest floor. Its stony exterior makes it surprisingly tough.',
     tier: 1,
-    hp: 40,
+    hp: 124,
     dmg: 3,
     biomass: 7,
-    mats: ['Pebble Shard', 'Earthite'],
+    mats: ['Pebble Shard', 'Earthite', 'Iron Ore'],
     trait: null,
     drop: 0.03,
     abilities: ['Rocky hide'],
@@ -173,7 +251,7 @@ export const MONSTER_TYPES = {
     icon: '🕷️',
     desc: 'An aggressive arachnid that weaves webs from living vines. Its bite is quick and its traps are sticky.',
     tier: 1,
-    hp: 20,
+    hp: 92,
     dmg: 6,
     biomass: 5,
     mats: ['Spider Silk', 'Vine Weave'],
@@ -189,7 +267,7 @@ export const MONSTER_TYPES = {
     icon: '🧚',
     desc: 'A rare magical creature that radiates life energy. Fragile but immensely valuable, its essence holds the secret to resurrection.',
     tier: 1,
-    hp: 15,
+    hp: 92,
     dmg: 2,
     biomass: 15,
     mats: ['Fairy Dust', 'Life Essence'],
@@ -207,8 +285,8 @@ export const MONSTER_TYPES = {
     icon: '🐟',
     desc: 'A vicious fish with razor-edged scales that can shred through slime membranes. Thrives in the murky swamp waters.',
     tier: 2,
-    hp: 70,
-    dmg: 10,
+    hp: 175,
+    dmg: 8,
     biomass: 8,
     mats: ['Serrated Scale', 'Carp Fin'],
     trait: null,
@@ -222,10 +300,10 @@ export const MONSTER_TYPES = {
     icon: '🦭',
     desc: 'A bizarre hybrid creature with a chitinous exoskeleton. Its crushing jaws can crack even the toughest slime shell.',
     tier: 2,
-    hp: 90,
-    dmg: 8,
+    hp: 221,
+    dmg: 6,
     biomass: 9,
-    mats: ['Sea Lion Tusk', 'Chitin Shell'],
+    mats: ['Sea Lion Tusk', 'Chitin Shell', 'Turtle Shell'],
     trait: null,
     drop: 0.03,
     abilities: ['Crushing bite'],
@@ -237,10 +315,10 @@ export const MONSTER_TYPES = {
     icon: '🦟',
     desc: 'A giant mosquito-like insect that skates across swamp water. Its venomous proboscis injects a slow-acting toxin.',
     tier: 2,
-    hp: 55,
-    dmg: 12,
+    hp: 164,
+    dmg: 10,
     biomass: 7,
-    mats: ['Strider Leg', 'Marsh Gas'],
+    mats: ['Strider Leg', 'Marsh Gas', 'Snake Scale'],
     trait: null,
     drop: 0.03,
     abilities: ['Poison sting'],
@@ -253,8 +331,8 @@ export const MONSTER_TYPES = {
     icon: '👻',
     desc: 'A flickering ball of spectral energy that lures prey deeper into the swamp. Elementally neutral but hits hard.',
     tier: 2,
-    hp: 50,
-    dmg: 14,
+    hp: 164,
+    dmg: 11,
     biomass: 8,
     mats: ['Wisp Essence', 'Mana Crystal'],
     trait: null,
@@ -268,8 +346,8 @@ export const MONSTER_TYPES = {
     icon: '🐌',
     desc: 'An ancient mollusk that has lived for centuries. Its shell is nearly impenetrable and it yields exceptional biomass.',
     tier: 2,
-    hp: 120,
-    dmg: 5,
+    hp: 221,
+    dmg: 4,
     biomass: 15,
     mats: ['Snail Shell', 'Ancient Stone'],
     trait: null,
@@ -286,8 +364,8 @@ export const MONSTER_TYPES = {
     icon: '🦇',
     desc: 'A cave-dwelling predator that feeds on life essence. Its bite drains vitality and heals its own wounds.',
     tier: 3,
-    hp: 130,
-    dmg: 18,
+    hp: 234,
+    dmg: 8,
     biomass: 12,
     mats: ['Bat Wing', 'Echo Crystal'],
     trait: null,
@@ -302,8 +380,8 @@ export const MONSTER_TYPES = {
     icon: '🪱',
     desc: 'A massive segmented worm that burrows through crystal-laden stone. It hurls rocks from underground to stun prey.',
     tier: 3,
-    hp: 160,
-    dmg: 16,
+    hp: 288,
+    dmg: 7,
     biomass: 14,
     mats: ['Worm Segment', 'Crystal Shard'],
     trait: null,
@@ -318,8 +396,8 @@ export const MONSTER_TYPES = {
     icon: '🔥',
     desc: 'A living ember born from the grotto\'s volcanic vents. Small but intensely hot, its attacks leave scorching burns.',
     tier: 3,
-    hp: 110,
-    dmg: 22,
+    hp: 220,
+    dmg: 10,
     biomass: 11,
     mats: ['Coal Dust', 'Spark Essence'],
     trait: null,
@@ -333,8 +411,8 @@ export const MONSTER_TYPES = {
     icon: '⛰️',
     desc: 'A crystal golem formed from living stalagmites. Extremely durable with natural spike armor that punishes attackers.',
     tier: 3,
-    hp: 180,
-    dmg: 15,
+    hp: 298,
+    dmg: 7,
     biomass: 13,
     mats: ['Stalag Shard', 'Cave Mineral'],
     trait: null,
@@ -348,8 +426,8 @@ export const MONSTER_TYPES = {
     icon: '🦎',
     desc: 'A rare amphibian covered in sapphire-like crystal scales. It can regenerate rapidly and is highly sought after.',
     tier: 3,
-    hp: 140,
-    dmg: 12,
+    hp: 252,
+    dmg: 5,
     biomass: 20,
     mats: ['Sapphire Scale', 'Newt Eye'],
     trait: null,
@@ -366,8 +444,8 @@ export const MONSTER_TYPES = {
     icon: '🔥',
     desc: 'A fire-breathing salamander that thrives in volcanic heat. Its fireballs leave lingering burns on anything they touch.',
     tier: 4,
-    hp: 220,
-    dmg: 32,
+    hp: 359,
+    dmg: 13,
     biomass: 22,
     mats: ['Ember Scale', 'Ash Remnant'],
     trait: null,
@@ -382,10 +460,10 @@ export const MONSTER_TYPES = {
     icon: '🤖',
     desc: 'A construct of living metal animated by ancient magic. Elementally neutral but incredibly durable.',
     tier: 4,
-    hp: 300,
-    dmg: 28,
+    hp: 480,
+    dmg: 11,
     biomass: 25,
-    mats: ['Alloy Shard', 'Crude Iron'],
+    mats: ['Alloy Shard', 'Crude Iron', 'Golem Core'],
     trait: null,
     drop: 0.03,
     abilities: ['Metal body'],
@@ -397,10 +475,10 @@ export const MONSTER_TYPES = {
     icon: '🌋',
     desc: 'A sentient pool of magma that flows through the cinderspire. Extremely dangerous up close, it leaves trails of lava.',
     tier: 4,
-    hp: 250,
-    dmg: 35,
+    hp: 400,
+    dmg: 14,
     biomass: 23,
-    mats: ['Magma Core', 'Molten Slag'],
+    mats: ['Magma Core', 'Molten Slag', 'Ember Core'],
     trait: null,
     drop: 0.03,
     abilities: ['Lava trail'],
@@ -412,10 +490,10 @@ export const MONSTER_TYPES = {
     icon: '💀',
     desc: 'The restless ghost of a creature consumed by the spire\'s flames. Fragile but hits with devastating ghostly fire.',
     tier: 4,
-    hp: 200,
-    dmg: 40,
+    hp: 359,
+    dmg: 16,
     biomass: 24,
-    mats: ['Soul Fragment', 'Ash Wisp'],
+    mats: ['Soul Fragment', 'Ash Wisp', 'Phoenix Ash'],
     trait: null,
     drop: 0.03,
     abilities: ['Ghostly fire'],
@@ -427,8 +505,8 @@ export const MONSTER_TYPES = {
     icon: '🐉',
     desc: 'A juvenile dragon that guards the deepest chambers of the cinderspire. Immensely powerful with draconic fury.',
     tier: 4,
-    hp: 350,
-    dmg: 38,
+    hp: 486,
+    dmg: 15,
     biomass: 40,
     mats: ['Wyrm Scale', 'Dragon Bone'],
     trait: null,
@@ -445,8 +523,8 @@ export const MONSTER_TYPES = {
     icon: '🦅',
     desc: 'A raptor crackling with electrical energy. Its diving attacks carry the force of a lightning bolt.',
     tier: 5,
-    hp: 420,
-    dmg: 50,
+    hp: 607,
+    dmg: 20,
     biomass: 35,
     mats: ['Storm Feather', 'Thunder Beak'],
     trait: null,
@@ -460,10 +538,10 @@ export const MONSTER_TYPES = {
     icon: '🧌',
     desc: 'A massive troll with skin like granite. It can regenerate wounds mid-battle, making prolonged fights dangerous.',
     tier: 5,
-    hp: 600,
-    dmg: 45,
+    hp: 821,
+    dmg: 18,
     biomass: 40,
-    mats: ['Troll Hide', 'Stone Club'],
+    mats: ['Troll Hide', 'Stone Club', 'Iron Ore'],
     trait: null,
     drop: 0.03,
     abilities: ['Regeneration'],
@@ -476,8 +554,8 @@ export const MONSTER_TYPES = {
     icon: '⛈️',
     desc: 'A being of pure storm energy. Its chain lightning can arc between multiple targets simultaneously.',
     tier: 5,
-    hp: 480,
-    dmg: 55,
+    hp: 672,
+    dmg: 22,
     biomass: 38,
     mats: ['Storm Core', 'Lightning Shard'],
     trait: null,
@@ -491,8 +569,8 @@ export const MONSTER_TYPES = {
     icon: '🥶',
     desc: 'A towering ice creature whose freezing breath can slow enemies to a crawl. Durable and relentless.',
     tier: 5,
-    hp: 550,
-    dmg: 52,
+    hp: 770,
+    dmg: 21,
     biomass: 42,
     mats: ['Frost Gem', 'Giant Bone'],
     trait: null,
@@ -507,8 +585,8 @@ export const MONSTER_TYPES = {
     icon: '🦜',
     desc: 'A legendary avian spirit that commands the storms themselves. Among the most powerful aerial predators.',
     tier: 5,
-    hp: 500,
-    dmg: 65,
+    hp: 700,
+    dmg: 26,
     biomass: 60,
     mats: ['Thunderbird Plume', 'Storm Essence'],
     trait: null,
@@ -525,8 +603,8 @@ export const MONSTER_TYPES = {
     icon: '🦑',
     desc: 'A writhing appendage reaching from the void between dimensions. Its touch ignores all physical defenses.',
     tier: 6,
-    hp: 750,
-    dmg: 75,
+    hp: 975,
+    dmg: 26,
     biomass: 70,
     mats: ['Void Fiber', 'Dark Matter'],
     trait: null,
@@ -541,8 +619,8 @@ export const MONSTER_TYPES = {
     icon: '👁️',
     desc: 'A floating eye from the deepest void. It sees all weaknesses and strikes with perfect accuracy.',
     tier: 6,
-    hp: 700,
-    dmg: 85,
+    hp: 910,
+    dmg: 30,
     biomass: 65,
     mats: ['Watcher Eye', 'Abyssal Fragment'],
     trait: null,
@@ -556,8 +634,8 @@ export const MONSTER_TYPES = {
     icon: '🗿',
     desc: 'An ancient construct built from void-infused stone. Immune to elemental damage and incredibly resilient.',
     tier: 6,
-    hp: 900,
-    dmg: 70,
+    hp: 1170,
+    dmg: 24,
     biomass: 75,
     mats: ['Null Core', 'Construct Piece'],
     trait: null,
@@ -571,8 +649,8 @@ export const MONSTER_TYPES = {
     icon: '💠',
     desc: 'A fragment of broken reality given form. It phases in and out of existence, dealing devastating damage.',
     tier: 6,
-    hp: 650,
-    dmg: 95,
+    hp: 884,
+    dmg: 33,
     biomass: 62,
     mats: ['Reality Fragment', 'Dimension Tear'],
     trait: null,
@@ -586,8 +664,8 @@ export const MONSTER_TYPES = {
     icon: '🕳️',
     desc: 'The guardian of the Void Abyss itself. An emptiness given form that consumes all it touches. The ultimate challenge.',
     tier: 6,
-    hp: 1000,
-    dmg: 100,
+    hp: 1196,
+    dmg: 35,
     biomass: 120,
     mats: ['Hollow Core', 'Void Essence'],
     trait: null,
