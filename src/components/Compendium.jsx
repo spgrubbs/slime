@@ -6,6 +6,7 @@ import { SLIME_TIERS, STAT_INFO } from '../data/slimeData.js';
 import { ELEMENTS } from '../data/gameConstants.js';
 import { TUTORIALS, TUTORIAL_ORDER, TUTORIAL_CATEGORIES } from '../data/tutorialData.js';
 import { renderEmphasis } from './TutorialModal.jsx';
+import { WARDENS, prerequisiteZone } from '../data/wardenData.js';
 
 const card = { background: 'rgba(0,0,0,0.3)', borderRadius: 10, padding: 15, marginBottom: 15 };
 const heading = (color) => ({ fontSize: 14, fontWeight: 'bold', marginBottom: 10, color });
@@ -167,7 +168,7 @@ function Reference() {
   );
 }
 
-const Compendium = ({ queen, monsterKills, mutagens = {}, seenTutorials = [] }) => {
+const Compendium = ({ queen, monsterKills, mutagens = {}, wardenKills = {}, seenTutorials = [] }) => {
   const [tab, setTab] = useState('zones'); // 'zones' | 'guide' | 'reference'
   const [zone, setZone] = useState('forest');
   const z = ZONES[zone];
@@ -191,7 +192,8 @@ const Compendium = ({ queen, monsterKills, mutagens = {}, seenTutorials = [] }) 
         <>
           <div style={{ display: 'flex', gap: 6, marginBottom: 15, flexWrap: 'wrap' }}>
             {Object.entries(ZONES).map(([k,zn]) => {
-              const ok = zn.unlocked || (queen?.level || 1) >= (zn.unlock || 0);
+              // The Compendium is a record, not a gate — every zone is readable.
+              const ok = true;
               return <button key={k} onClick={() => ok && setZone(k)} style={{ padding: '8px 12px', background: zone===k ? 'rgba(34,211,238,0.2)' : 'rgba(0,0,0,0.3)', border: `2px solid ${zone===k?'#22d3ee':'transparent'}`, borderRadius: 6, color: '#fff', cursor: ok?'pointer':'not-allowed', opacity: ok?1:0.4, fontSize: 12 }}>{zn.icon} {zn.name}</button>;
             })}
           </div>
@@ -199,13 +201,46 @@ const Compendium = ({ queen, monsterKills, mutagens = {}, seenTutorials = [] }) 
             <div style={{ fontSize: 24, marginBottom: 5 }}>{z.icon}</div>
             <div style={{ fontSize: 16, fontWeight: 'bold', marginBottom: 5 }}>{z.name}</div>
             <div style={{ fontSize: 12, opacity: 0.8 }}>{z.desc}</div>
-            {z.unlock && <div style={{ fontSize: 11, color: '#f59e0b', marginTop: 5 }}>Unlocks at Queen Lv.{z.unlock}</div>}
+            <div style={{ fontSize: 11, color: '#f59e0b', marginTop: 5 }}>
+              {prerequisiteZone(zone)
+                ? `Reached with the ${WARDENS[prerequisiteZone(zone)].seal}`
+                : 'Open from the start'}
+            </div>
             {z.element && (
               <div style={{ fontSize: 11, color: ELEMENTS[z.element]?.color, marginTop: 5 }}>
                 {ELEMENTS[z.element]?.icon} {ELEMENTS[z.element]?.name} Zone (+{z.elementGainRate}/kill)
               </div>
             )}
           </div>
+          {/* The Warden sits above the spawn table because it is not in it. */}
+          {(() => {
+            const w = WARDENS[zone];
+            if (!w) return null;
+            const felled = wardenKills?.[zone] || 0;
+            return (
+              <div style={{ background: 'rgba(245,158,11,0.10)', border: '1px solid rgba(245,158,11,0.35)', borderRadius: 10, padding: 12, marginBottom: 15 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <span style={{ fontSize: 26 }}>{w.icon}</span>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 'bold', fontSize: 13, color: '#fbbf24' }}>{w.name}</div>
+                    <div style={{ fontSize: 10, opacity: 0.7 }}>
+                      {felled ? `Felled ${felled}×` : 'Never felled'} · summoned, never met at random
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'right', fontSize: 10, opacity: 0.75 }}>
+                    <div>❤️ {w.hp}</div>
+                    <div>⚔️ {w.dmg} ×{w.actions}</div>
+                  </div>
+                </div>
+                <div style={{ fontSize: 11, opacity: 0.75, marginTop: 8 }}>{w.desc}</div>
+                <div style={{ fontSize: 10, marginTop: 8, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                  <span style={{ color: '#4ade80' }}>First kill → {w.seal}</span>
+                  <span style={{ color: '#a78bfa' }}>Rekindled → {w.heart}</span>
+                </div>
+              </div>
+            );
+          })()}
+
           <div style={{ fontSize: 14, fontWeight: 'bold', marginBottom: 10 }}>Monsters</div>
           {z.monsters.map(mid => {
             const m = MONSTER_TYPES[mid];

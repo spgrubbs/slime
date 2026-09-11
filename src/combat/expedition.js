@@ -13,6 +13,7 @@ import { MONSTER_TYPES } from '../data/monsterData.js';
 import {
   ZONES, INTERMISSION_EVENTS, EXPLORATION_EVENTS, INTERMISSION_DURATION,
 } from '../data/zoneData.js';
+import { wardenTypeId } from '../data/wardenData.js';
 import { ROUND_MS, BEAT_MS } from '../data/gameConstants.js';
 import { runHooks } from './hooks.js';
 import {
@@ -43,19 +44,31 @@ export function spawnEnemy(zone, rareSpawnMult = 1, rng = Math.random) {
 
 export function makeExpedition(zone, slimes, targetKills, ctx = {}) {
   const rng = ctx.rng || Math.random;
-  const enemy = spawnEnemy(zone, ctx.combatBonuses?.rareSpawn, rng);
   const zd = ZONES[zone];
 
-  const logs = [
-    { m: `Entering ${zd.name}...`, c: '#22d3ee',
-      v: `target ${targetKills === Infinity ? '∞' : targetKills} kills · ${slimes.length} slimes deployed` },
-  ];
-  if (enemy) logs.push({ m: `A ${enemy.name} appears!`, c: '#22d3ee',
-                         v: `${enemy.maxHp} HP · ${enemy.stats.firmness} dmg · ${enemy.ref.element || 'neutral'}` });
+  // A Warden hunt is decided before the party leaves: no wandering, no random
+  // encounters, straight to the thing you came for. That is the whole point of
+  // summoning rather than stumbling — an unprepared party is never ambushed by
+  // a boss, it simply never meets one.
+  const warden = ctx.warden || null;
+  const enemy = warden
+    ? makeEnemyCombatant(wardenTypeId(warden.zone, warden.plus))
+    : spawnEnemy(zone, ctx.combatBonuses?.rareSpawn, rng);
+
+  const logs = warden
+    ? [{ m: `The hive provokes ${zd.name}...`, c: '#f59e0b',
+         v: `Warden hunt · ${slimes.length} slimes deployed` }]
+    : [{ m: `Entering ${zd.name}...`, c: '#22d3ee',
+         v: `target ${targetKills === Infinity ? '∞' : targetKills} kills · ${slimes.length} slimes deployed` }];
+  if (enemy) logs.push({
+    m: warden ? `${enemy.name} rises to meet them!` : `A ${enemy.name} appears!`,
+    c: warden ? '#f59e0b' : '#22d3ee',
+    v: `${enemy.maxHp} HP · ${enemy.stats.firmness} dmg · ${enemy.actions} actions/round · ${enemy.ref.element || 'neutral'}` });
 
   return {
     version: 4,
     zone,
+    warden,
     phase: enemy ? 'battling' : 'intermission',
     round: 0,
     roundTimer: 0,
@@ -287,6 +300,12 @@ export function tickExpedition(exp, dt, ctx = {}, zone) {
 
     exp.kills += 1;
     exp.monsterKillCounts[exp.enemy.type] = (exp.monsterKillCounts[exp.enemy.type] || 0) + 1;
+
+    if (exp.warden) {
+      log({ m: `${exp.enemy.name} falls. 👑`, c: '#f59e0b',
+            v: `warden of ${zd.name} · ${exp.round} rounds` });
+      sideEffects.push({ type: 'wardenDown', zone: exp.warden.zone, plus: !!exp.warden.plus });
+    }
 
     // Materials ride home with the party rather than banking immediately —
     // losing them on a wipe is the point of the risk.

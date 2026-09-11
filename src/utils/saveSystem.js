@@ -13,7 +13,7 @@ export const getDefaultState = () => ({
   mats: {},
   slimes: [],
   exps: {},
-  builds: {},
+  builds: { forestTendril: 1 },
   research: [],
   activeRes: null,
   lastCaravan: 0,
@@ -21,6 +21,7 @@ export const getDefaultState = () => ({
   monsterKills: {},
   mutagens: {},
   pityKills: {},
+  wardenKills: {},
   purchasedSkills: ['expeditionBasics', 'hiveFoundation', 'combatTraining'], // Root skills free
   lastSave: Date.now(),
 });
@@ -83,6 +84,22 @@ const migrateSaveData = (data) => {
   delete migrated.traits;
 
   if (!migrated.pityKills) migrated.pityKills = {};
+  if (!migrated.wardenKills) migrated.wardenKills = {};
+
+  // Zones used to be unlocked with skill points; they are gated by Tendrils
+  // now. Grant a Tendril at REACH level for every zone an old save had already
+  // opened, so nobody loses access to somewhere they had already earned.
+  if (!migrated.builds) migrated.builds = {};
+  migrated.builds.forestTendril = Math.max(1, migrated.builds.forestTendril || 0);
+  const LEGACY_ZONE_SKILLS = {
+    swampAccess: 'swampTendril', cavesAccess: 'cavesTendril', ruinsAccess: 'ruinsTendril',
+    peaksAccess: 'peaksTendril', voidAccess: 'volcanoTendril',
+  };
+  for (const [skill, tendril] of Object.entries(LEGACY_ZONE_SKILLS)) {
+    if ((migrated.purchasedSkills || []).includes(skill)) {
+      migrated.builds[tendril] = Math.max(1, migrated.builds[tendril] || 0);
+    }
+  }
 
   // Migrate defeatedMonsters array to monsterKills object
   // Old structure: defeatedMonsters = ['wolf', 'goblin', 'wolf']

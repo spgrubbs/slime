@@ -32,10 +32,10 @@ export const SKILL_TREES = {
         id: 'swampAccess',
         name: 'Mucus Membrane',
         icon: '🌿',
-        desc: 'Slimes can traverse the Murky Swamp',
+        desc: 'A thicker skin: +8% max HP',
         cost: 2,
         requires: ['expeditionBasics'],
-        effect: { type: 'unlock', zone: 'swamp' },
+        effect: { type: 'bonus', stat: 'maxHp', value: 8 },
         position: { x: 50, y: 22 },
       },
 
@@ -66,10 +66,10 @@ export const SKILL_TREES = {
         id: 'cavesAccess',
         name: 'Crystalline Adaptation',
         icon: '💎',
-        desc: 'Slimes can explore Crystal Grotto',
+        desc: 'Lattice within the gel: +8% firmness',
         cost: 3,
         requires: ['swampAccess'],
-        effect: { type: 'unlock', zone: 'caves' },
+        effect: { type: 'bonus', stat: 'firmness', value: 8 },
         position: { x: 50, y: 34 },
       },
 
@@ -111,10 +111,10 @@ export const SKILL_TREES = {
         id: 'ruinsAccess',
         name: 'Thermal Resistance',
         icon: '🔥',
-        desc: 'Slimes can survive in Cinderspire',
+        desc: 'Heat-hardened: +10% damage reduction',
         cost: 4,
         requires: ['cavesAccess'],
-        effect: { type: 'unlock', zone: 'ruins' },
+        effect: { type: 'bonus', stat: 'damageReduction', value: 10 },
         position: { x: 50, y: 46 },
       },
 
@@ -145,10 +145,10 @@ export const SKILL_TREES = {
         id: 'peaksAccess',
         name: 'Altitude Gel',
         icon: '⛰️',
-        desc: 'Slimes can climb Stormspire Summit',
+        desc: 'Thin-air buoyancy: +10% slipperiness',
         cost: 5,
         requires: ['ruinsAccess'],
-        effect: { type: 'unlock', zone: 'peaks' },
+        effect: { type: 'bonus', stat: 'slipperiness', value: 10 },
         position: { x: 50, y: 58 },
       },
 
@@ -179,10 +179,10 @@ export const SKILL_TREES = {
         id: 'voidAccess',
         name: 'Void Membrane',
         icon: '🕳️',
-        desc: 'Slimes can enter the Void Abyss',
+        desc: 'Nothing sticks to nothing: +12% viscosity',
         cost: 6,
         requires: ['peaksAccess'],
-        effect: { type: 'unlock', zone: 'volcano' },
+        effect: { type: 'bonus', stat: 'viscosity', value: 12 },
         position: { x: 50, y: 70 },
       },
 
@@ -716,6 +716,10 @@ export const getSkillEffects = (purchasedSkills) => {
 };
 
 // Helper to check if a zone is unlocked
+/**
+ * @deprecated Zones are gated by Tendrils now (buildingData.zoneReached), which
+ * are bought with Warden Seals. Kept only so old saves can still be read.
+ */
 export const isZoneUnlocked = (zoneId, purchasedSkills) => {
   if (zoneId === 'forest') return true; // Always unlocked
   const effects = getSkillEffects(purchasedSkills);

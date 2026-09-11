@@ -3,8 +3,12 @@
 // recommendedStats is the stat level at which a party of four with no mutations
 // clears the zone's common monsters roughly three times in four. Calibrated by
 // simulation against the real resolver, not estimated — see docs/GAME_DESIGN.md §11.
-// BALANCE: Each zone has 5 monsters (including 1 rare)
-// Zones unlock progressively via queen level
+// BALANCE: Each zone has 5 monsters (including 1 rare), plus one Warden that is
+// NOT in this list — Wardens live in wardenData.js and are summoned, never spawned.
+//
+// A zone opens when the PREVIOUS zone's Warden falls and its Seal buys this
+// zone's Tendril. Queen level no longer gates anything here; the `unlock` field
+// below is vestigial and read by nothing.
 // element: The dominant element of the zone (affects slime element gain)
 // elementGainRate: How fast slimes gain element affinity per kill (0 = neutral zone)
 // Elemental Progression: Nature → Earth → Water → Fire (each beats the next)

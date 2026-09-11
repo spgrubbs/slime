@@ -18,7 +18,8 @@ import { STAT_INFO, SLIME_TIERS } from './data/slimeData.js';
 import { MUTATION_LIBRARY, TRAIT_LIBRARY, STATUS_EFFECTS, SLIME_TRAITS, getMutationDesc } from './data/traitData.js';
 import { MONSTER_TYPES, MONSTER_ABILITIES } from './data/monsterData.js';
 import { ZONES, EXPLORATION_EVENTS, INTERMISSION_EVENTS, INTERMISSION_DURATION } from './data/zoneData.js';
-import { BUILDINGS, RESEARCH } from './data/buildingData.js';
+import { BUILDINGS, RESEARCH, nextLevelCost, tendrilBonuses, tendrilFor, zoneReached, wardenUnlocked, TENDRILS } from './data/buildingData.js';
+import { WARDENS, wardenTypeId, prerequisiteZone, ZONE_ORDER, ALL_SEALS, ALL_HEARTS } from './data/wardenData.js';
 import { caravanDay, MAX_CARAVAN_TIER } from './data/caravanData.js';
 import { RANCH_TYPES, RANCH_EVENTS, RANCH_UPGRADE_BONUSES, MAX_RANCH_LEVEL, RANCH_MAX_ACCUMULATION_TIME } from './data/ranchData.js';
 import { HIVE_ABILITIES, PRISM_SHOP, MANA_UPDATE_INTERVAL, MANA_PER_SLIME_PER_HOUR } from './data/hiveData.js';
@@ -83,6 +84,7 @@ const calculateOfflineProgress = (saved, bonuses, offlineCtx = {}) => {
     slimesLost: [],
     monstersKilled: 0,
     expeditionsWiped: [],
+    wardensFelled: [],
     researchCompleted: null,
   };
 
@@ -134,6 +136,8 @@ const calculateOfflineProgress = (saved, bonuses, offlineCtx = {}) => {
           slimes = slimes.map(sl => sl.id === se.id && !(sl.traits || []).includes(se.trait)
             ? { ...sl, traits: [...(sl.traits || []), se.trait] }
             : sl);
+        } else if (se.type === 'wardenDown') {
+          results.wardensFelled.push({ zone: se.zone, plus: se.plus });
         }
       });
 
@@ -212,7 +216,8 @@ export default function HiveQueenGame() {
   const [slimes, setSlimes] = useState([]);
   const [exps, setExps] = useState({});
   const [bLogs, setBLogs] = useState({});
-  const [builds, setBuilds] = useState({});
+  // The forest tendril is already grown — the first zone is never gated.
+  const [builds, setBuilds] = useState({ forestTendril: 1 });
   const [research, setResearch] = useState([]);
   const [activeRes, setActiveRes] = useState(null);
   const [logs, setLogs] = useState([{ t: new Date().toLocaleTimeString(), m: 'The Hive awakens...' }]);
@@ -224,6 +229,7 @@ export default function HiveQueenGame() {
   const [ambush, setAmbush] = useState(null);
   const [monsterKills, setMonsterKills] = useState({});
   const [mutagens, setMutagens] = useState({});   // { [mutationId]: count }
+  const [wardenKills, setWardenKills] = useState({}); // { [zone]: times felled }
   const [pityKills, setPityKills] = useState({});  // kills since the last pity mutagen
   const [purchasedSkills, setPurchasedSkills] = useState(['expeditionBasics', 'hiveFoundation', 'combatTraining']);
 
@@ -298,11 +304,17 @@ export default function HiveQueenGame() {
     res: (1 + (builds.researchLab || 0) * 0.25) * (1 + (skillBonuses.researchSpeed || 0) / 100),
   };
 
+  // A rooted tendril's passive is keyed exactly like a skill bonus, so the two
+  // simply add rather than needing a second path through the stat code.
+  const tendrilBon = tendrilBonuses(builds);
+  const bonusOf = (k) => (skillBonuses[k] || 0) + (tendrilBon[k] || 0);
+
   // Combined bonuses applying skill tree effects
   const combatBonuses = {
-    firmness: 1 + ((skillBonuses.firmness || 0) + (skillBonuses.allCombat || 0)) / 100,
-    maxHp: 1 + ((skillBonuses.maxHp || 0) + (skillBonuses.allCombat || 0)) / 100,
-    viscosity: 1 + ((skillBonuses.viscosity || 0) + (skillBonuses.allCombat || 0)) / 100,
+    firmness: 1 + (bonusOf('firmness') + (skillBonuses.allCombat || 0)) / 100,
+    maxHp: 1 + (bonusOf('maxHp') + (skillBonuses.allCombat || 0)) / 100,
+    viscosity: 1 + (bonusOf('viscosity') + (skillBonuses.allCombat || 0)) / 100,
+    slipperiness: 1 + (bonusOf('slipperiness') + (skillBonuses.allCombat || 0)) / 100,
     critChance: (skillBonuses.critChance || 0) / 100, // Flat addition to crit chance
     damageReduction: skillBonuses.damageReduction || 0, // Flat damage reduction
     elementalDamage: 1 + (skillBonuses.elementalDamage || 0) / 100, // Element damage multiplier
@@ -312,8 +324,8 @@ export default function HiveQueenGame() {
     lowHpDamage: 1 + (skillBonuses.lowHpDamage || 0) / 100, // Damage when low HP
     lowHpDefense: (skillBonuses.lowHpDefense || 0) / 100, // Damage reduction when low HP
     mutationPower: 1 + (skillBonuses.mutationPower || 0) / 100, // Mutation passive strength
-    expeditionBiomass: 1 + (skillBonuses.expeditionBiomass || 0) / 100,
-    materialDrop: 1 + (skillBonuses.materialDrop || 0) / 100,
+    expeditionBiomass: 1 + bonusOf('expeditionBiomass') / 100,
+    materialDrop: 1 + bonusOf('materialDrop') / 100,
     rareSpawn: 1 + (skillBonuses.rareSpawn || 0) / 100,
     expeditionRewards: 1 + (skillBonuses.expeditionRewards || 0) / 100,
     biomassGain: 1 + ((skillBonuses.biomassGain || 0) + (skillBonuses.allResources || 0)) / 100,
@@ -516,6 +528,7 @@ export default function HiveQueenGame() {
         setMonsterKills(newMonsterKills);
         setMutagens(saved.mutagens || {});
         setPityKills(saved.pityKills || {});
+        setWardenKills(saved.wardenKills || {});
 
         setPurchasedSkills(saved.purchasedSkills || ['expeditionBasics', 'hiveFoundation', 'combatTraining']);
 
@@ -549,6 +562,7 @@ export default function HiveQueenGame() {
         setMonsterKills(saved.monsterKills || {});
         setMutagens(saved.mutagens || {});
         setPityKills(saved.pityKills || {});
+        setWardenKills(saved.wardenKills || {});
         setPurchasedSkills(saved.purchasedSkills || ['expeditionBasics', 'hiveFoundation', 'combatTraining']);
         setPrisms(saved.prisms || 0);
         setRanchBuildings(saved.ranchBuildings || {});
@@ -568,16 +582,16 @@ export default function HiveQueenGame() {
   useEffect(() => {
     if (!gameLoaded) return;
     const interval = setInterval(() => {
-      const state = { queen, bio, mats, slimes, exps, builds, research, activeRes, lastCaravan, caravanTier, ambush, seenTutorials, tutorialsOn, monsterKills, mutagens, pityKills, purchasedSkills, prisms, ranchBuildings, ranchAssignments, ranchProgress, mana, lastManaUpdate, activeHiveAbilities, lastSave: Date.now() };
+      const state = { queen, bio, mats, slimes, exps, builds, research, activeRes, lastCaravan, caravanTier, ambush, seenTutorials, tutorialsOn, monsterKills, mutagens, pityKills, wardenKills, purchasedSkills, prisms, ranchBuildings, ranchAssignments, ranchProgress, mana, lastManaUpdate, activeHiveAbilities, lastSave: Date.now() };
       if (saveGame(state)) {
         setLastSave(Date.now());
       }
     }, AUTO_SAVE_INTERVAL);
     return () => clearInterval(interval);
-  }, [gameLoaded, queen, bio, mats, slimes, exps, builds, research, activeRes, lastCaravan, caravanTier, ambush, seenTutorials, tutorialsOn, monsterKills, mutagens, pityKills, purchasedSkills, prisms, ranchBuildings, ranchAssignments, ranchProgress, mana, lastManaUpdate, activeHiveAbilities]);
+  }, [gameLoaded, queen, bio, mats, slimes, exps, builds, research, activeRes, lastCaravan, caravanTier, ambush, seenTutorials, tutorialsOn, monsterKills, mutagens, pityKills, wardenKills, purchasedSkills, prisms, ranchBuildings, ranchAssignments, ranchProgress, mana, lastManaUpdate, activeHiveAbilities]);
 
   const manualSave = () => {
-    const state = { queen, bio, mats, slimes, exps, builds, research, activeRes, lastCaravan, caravanTier, ambush, seenTutorials, tutorialsOn, monsterKills, mutagens, pityKills, purchasedSkills, prisms, ranchBuildings, ranchAssignments, ranchProgress, mana, lastManaUpdate, activeHiveAbilities, lastSave: Date.now() };
+    const state = { queen, bio, mats, slimes, exps, builds, research, activeRes, lastCaravan, caravanTier, ambush, seenTutorials, tutorialsOn, monsterKills, mutagens, pityKills, wardenKills, purchasedSkills, prisms, ranchBuildings, ranchAssignments, ranchProgress, mana, lastManaUpdate, activeHiveAbilities, lastSave: Date.now() };
     if (saveGame(state)) {
       setLastSave(Date.now());
       log('💾 Game saved!');
@@ -830,6 +844,8 @@ export default function HiveQueenGame() {
     tab,
     broodView,
     skillPoints: availableSkillPoints,
+    wardenProvoked: ZONE_ORDER.some(z => wardenUnlocked(z, builds)),
+    tendrilLevels: TENDRILS.reduce((n, t) => n + (builds[t.id] || 0), 0),
     woundedCount,
     mutagenKinds: Object.keys(mutagens).length,
     maxHeldBiomass: slimes.reduce((n, sl) => Math.max(n, sl.biomass || 0), 0),
@@ -1133,16 +1149,42 @@ export default function HiveQueenGame() {
     },
   }), [combatBonuses, bon, builds, skillEffects, getRanchBonuses, activeHiveAbilities]);
 
-  const startExp = (zone) => {
+  // ── Wardens ───────────────────────────────────────────────────────────────
+  //
+  // A Warden hunt is a separate kind of expedition: declared up front, one
+  // fight, home either way. The party never blunders into one.
+
+  /** Has this zone's Warden been beaten at least once? */
+  const wardenBeaten = (zone) => (wardenKills[zone] || 0) > 0;
+
+  /** Can a hunt be launched — tendril provoked, and not already out there? */
+  const canHuntWarden = (zone) =>
+    wardenUnlocked(zone, builds) && !exps[zone] && party.length > 0;
+
+  const recordWardenKill = useCallback((zone, plus) => {
+    setWardenKills(prev => ({ ...prev, [zone]: (prev[zone] || 0) + 1 }));
+    const w = WARDENS[zone];
+    if (!w) return;
+    log(plus
+      ? `${w.name} falls again. Its Core is yours.`
+      : `${w.name} falls for the first time. The way onward opens.`);
+  }, []);
+
+  const startExp = (zone, opts = {}) => {
     if (exps[zone] || !party.length) return;
-    // Expeditions run until you recall them or the party goes down.
-    const targetKills = Infinity;
+    const warden = opts.warden ? { zone, plus: wardenBeaten(zone) } : null;
+    if (warden && !wardenUnlocked(zone, builds)) return;
+
+    // A hunt is one fight. Everything else runs until you recall it.
+    const targetKills = warden ? 1 : Infinity;
 
     const roster = party.map(id => slimes.find(s => s.id === id)).filter(Boolean);
-    const exp = makeExpedition(zone, roster, targetKills, combatContext());
+    const exp = makeExpedition(zone, roster, targetKills, { ...combatContext(), warden });
 
     setExps(pr => ({ ...pr, [zone]: exp }));
-    log(`Party sent to ${ZONES[zone].name}!`);
+    log(warden
+      ? `The hive provokes ${WARDENS[zone]?.name || 'the Warden'}!`
+      : `Party sent to ${ZONES[zone].name}!`);
     lastArenaTickRef.current = Date.now();
     setParty([]);
   };
@@ -1255,11 +1297,17 @@ export default function HiveQueenGame() {
     const b = BUILDINGS[id];
     if (!b) return;
 
+    // Tendrils price each level separately (reach / provoke / root); everything
+    // else charges the same cost at every level.
+    const level = builds[id] || 0;
+    const cost = nextLevelCost(id, level);
+    if (!cost) return;
+
     // Handle different cost formats with skill discount
     const discount = getBuildingDiscount();
-    const hasMats = b.cost.mats;
-    const biomassCost = Math.floor((b.cost.biomass || 0) * discount);
-    const matCosts = hasMats ? b.cost.mats : (!b.cost.biomass ? b.cost : {});
+    const hasMats = cost.mats;
+    const biomassCost = Math.floor((cost.biomass || 0) * discount);
+    const matCosts = hasMats ? cost.mats : (!cost.biomass ? cost : {});
 
     // Check affordability
     if (bio < biomassCost) return;
@@ -1274,7 +1322,8 @@ export default function HiveQueenGame() {
       return n;
     });
     setBuilds(p => ({ ...p, [id]: (p[id] || 0) + 1 }));
-    log(`Built ${b.name}!`);
+    const lv = b.levels?.[level];
+    log(lv ? `${b.name} — ${lv.title}. ${lv.desc}.` : `Built ${b.name}!`);
   };
 
   // ── Caravan ambush ────────────────────────────────────────────────────────
@@ -1596,6 +1645,9 @@ export default function HiveQueenGame() {
                       ? { ...sl, traits: [...(sl.traits || []), se.trait] }
                       : sl));
                   break;
+                case 'wardenDown':
+                  recordWardenKill(se.zone, se.plus);
+                  break;
                 case 'expComplete':
                   stopExp(se.zone);
                   break;
@@ -1903,10 +1955,15 @@ export default function HiveQueenGame() {
                       // - { biomass, mats }: building with biomass + materials
                       // - { mat: count, ... }: legacy material-only format
                       const isResearch = typeof b.cost === 'number';
-                      const hasMats = !isResearch && b.cost.mats;
+                      // Tendrils price every level differently, so the panel has
+                      // to quote the NEXT level rather than a single flat cost.
+                      const lvl = builds[k] || 0;
+                      const cost = isResearch ? b.cost : (nextLevelCost(k, lvl) || { biomass: 0, mats: {} });
+                      const hasMats = !isResearch && cost.mats;
                       const discount = getBuildingDiscount();
-                      const biomassCost = Math.floor((isResearch ? b.cost : (b.cost.biomass || 0)) * discount);
-                      const matCosts = hasMats ? b.cost.mats : (!isResearch && !b.cost.biomass ? b.cost : {});
+                      const biomassCost = Math.floor((isResearch ? b.cost : (cost.biomass || 0)) * discount);
+                      const matCosts = hasMats ? cost.mats : (!isResearch && !cost.biomass ? cost : {});
+                      const nextLvl = b.levels?.[lvl];
 
                       const done = research.includes(k);
                       const canAffordBio = bio >= biomassCost;
@@ -1919,13 +1976,18 @@ export default function HiveQueenGame() {
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
                           <span style={{ fontSize: 28 }}>{b.icon}</span>
                           <div style={{ flex: 1 }}>
-                            <div style={{ fontWeight: 'bold' }}>{b.name}</div>
-                            <div style={{ fontSize: 12, opacity: 0.7 }}>{b.desc}</div>
+                            <div style={{ fontWeight: 'bold' }}>
+                              {b.name}
+                              {b.levels && <span style={{ fontSize: 11, opacity: 0.6, fontWeight: 'normal' }}> · {lvl}/{b.max}</span>}
+                            </div>
+                            <div style={{ fontSize: 12, opacity: 0.7 }}>
+                              {nextLvl ? `${nextLvl.title} — ${nextLvl.desc}` : (b.levels ? b.levels[b.levels.length - 1].desc : b.desc)}
+                            </div>
                             {isResearch && b.time && (
                               <div style={{ fontSize: 11, opacity: 0.5, marginTop: 4 }}>Build time: {Math.floor(b.time / 60)}:{(b.time % 60).toString().padStart(2, '0')}</div>
                             )}
                           </div>
-                          {!isResearch && <span style={{ marginLeft: 'auto', color: '#4ade80', fontSize: 18 }}>x{builds[k] || 0}</span>}
+                          {!isResearch && !b.levels && <span style={{ marginLeft: 'auto', color: '#4ade80', fontSize: 18 }}>x{builds[k] || 0}</span>}
                         </div>
 
                         {isResearch ? (
@@ -2174,7 +2236,7 @@ export default function HiveQueenGame() {
             )}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 15 }}>
               {Object.entries(ZONES).map(([k, z]) => {
-                const ok = isZoneUnlocked(k, purchasedSkills);
+                const ok = zoneReached(k, builds);
                 const has = exps[k];
                 const zoneElement = z.element ? ELEMENTS[z.element] : null;
                 return <button key={k} onClick={() => ok && setSelZone(k)} style={{ padding: 10, background: selZone === k ? 'rgba(34,211,238,0.2)' : 'rgba(0,0,0,0.3)', border: `2px solid ${selZone === k ? '#22d3ee' : has ? '#4ade80' : 'transparent'}`, borderRadius: 8, color: '#fff', cursor: ok ? 'pointer' : 'not-allowed', opacity: ok ? 1 : 0.4, textAlign: 'center', position: 'relative' }}>
@@ -2218,6 +2280,39 @@ export default function HiveQueenGame() {
                   {!avail.length && slimes.length > 0 && <div style={{ opacity: 0.5, fontSize: 11 }}>All busy</div>}
                 </div>
                 <button onClick={() => startExp(selZone)} disabled={!party.length} style={{ width: '100%', padding: 12, background: party.length ? 'linear-gradient(135deg, #4ade80, #22d3ee)' : 'rgba(100,100,100,0.5)', border: 'none', borderRadius: 8, color: '#fff', fontWeight: 'bold', cursor: party.length ? 'pointer' : 'not-allowed' }}>⚔️ Start</button>
+
+                {/* The Warden is opted into here, never met by accident. */}
+                {(() => {
+                  const w = WARDENS[selZone];
+                  if (!w) return null;
+                  const provoked = wardenUnlocked(selZone, builds);
+                  const beaten = wardenBeaten(selZone);
+                  const ready = provoked && party.length > 0;
+                  return (
+                    <button
+                      onClick={() => ready && startExp(selZone, { warden: true })}
+                      disabled={!ready}
+                      title={provoked
+                        ? `${beaten ? `${w.name}, Rekindled` : w.name} — one fight, then the party comes home`
+                        : `Grow the ${BUILDINGS[tendrilFor(selZone)].name} to Provoke on the Hive screen`}
+                      style={{
+                        width: '100%', marginTop: 8, padding: 12, borderRadius: 8, color: '#fff',
+                        fontWeight: 'bold', border: '1px solid rgba(245,158,11,0.5)',
+                        background: ready ? 'linear-gradient(135deg, #f59e0b, #ef4444)' : 'rgba(70,60,40,0.5)',
+                        cursor: ready ? 'pointer' : 'not-allowed', opacity: provoked ? 1 : 0.55,
+                      }}
+                    >
+                      {provoked ? `${w.icon} Challenge ${beaten ? `${w.name}, Rekindled` : w.name}` : `🔒 ${w.name}`}
+                      <div style={{ fontSize: 10, fontWeight: 'normal', opacity: 0.85, marginTop: 2 }}>
+                        {!provoked
+                          ? `Needs ${BUILDINGS[tendrilFor(selZone)].name} · Provoke`
+                          : beaten
+                            ? `Drops ${w.heart}`
+                            : `Drops ${w.seal} — opens the next zone`}
+                      </div>
+                    </button>
+                  );
+                })()}
               </div>
             )}
             {Object.keys(exps).length > 1 && (
@@ -2254,6 +2349,7 @@ export default function HiveQueenGame() {
             queen={queen}
             monsterKills={monsterKills}
             mutagens={mutagens}
+            wardenKills={wardenKills}
             seenTutorials={seenTutorials}
           />
         )}
@@ -2302,6 +2398,8 @@ export default function HiveQueenGame() {
             <button onClick={() => { setSeenTutorials([]); setTutorialsOn(true); }} style={{ padding: 8, background: '#a855f7', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 12 }}>Replay Tutorials</button>
             <button onClick={() => { setSeenTutorials(TUTORIAL_ORDER); }} style={{ padding: 8, background: 'rgba(255,255,255,0.15)', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 12, color: '#fff' }}>Skip Tutorials</button>
             <button onClick={() => setSlimes(list => list.map((sl, i) => (i === 0 ? { ...sl, wounded: true, woundedAt: Date.now(), biomass: 0 } : sl)))} style={{ padding: 8, background: '#ef4444', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 12 }}>Wound First Slime</button>
+            <button onClick={() => setBuilds(b => { const n = { ...b }; TENDRILS.forEach(t => { n[t.id] = Math.max(2, n[t.id] || 0); }); return n; })} style={{ padding: 8, background: '#f59e0b', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 12 }}>All Tendrils → Provoke</button>
+            <button onClick={() => setMats(m => { const n = { ...m }; TENDRILS.forEach(t => { Object.keys(t.levels[1].cost.mats || {}).forEach(k => { n[k] = (n[k] || 0) + 20; }); }); ALL_SEALS.concat(ALL_HEARTS).forEach(k => { n[k] = (n[k] || 0) + 2; }); return n; })} style={{ padding: 8, background: '#f59e0b', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 12 }}>+Tendril Mats &amp; Seals</button>
           </div>
         </div>
       )}

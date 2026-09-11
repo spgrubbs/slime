@@ -29,7 +29,7 @@ not continuous play.
 | **Materials** | 📦 | Monster drops, caravan ambushes | Buildings |
 | **Mana** | ✨ | 1/hour per living slime + Mana Well ranch | Hive Abilities (timed global buffs) |
 | **Prisms** | 💎 | 0.1% expedition drop, **guaranteed on routing a caravan**, IAP | Prism Shop (trait grants, time skips, mutation resets) |
-| **Queen XP** | 👑 | Reabsorbing slimes, biomass conversion | Queen levels 1–50 → skill points, zone unlocks |
+| **Queen XP** | 👑 | Reabsorbing slimes, biomass conversion | Queen levels 1–50 → skill points, royal jelly cap |
 
 Biomass is the throughput resource; **Prisms are the gate resource** and the reason caravan
 ambushes exist at all. Royal Jelly is the population cap — and because a wounded slime keeps
@@ -203,7 +203,8 @@ Send up to 4 slimes to a zone. They fight **until you recall them** — there is
 pick, because picking one was never a decision. Slimes gain biomass and element affinity and
 drop materials the whole time, including while the game is closed. A slime that goes down is
 **wounded**, not killed (§3) — the loss is its held biomass and a day in the pool.
-Zones unlock at Queen level 1 / 5 / 10 / 18 / 28 / 40.
+A zone opens when the previous zone's **Warden** falls and its Seal buys the next Tendril (§17).
+Each zone also holds one Warden of its own, challenged from the planner rather than met at random.
 
 This is where 90% of the game happens. It runs while you're away.
 
@@ -266,21 +267,28 @@ changes. Mana is the soft economy; Prisms are the hard one.
 ## 8. Progression Spine
 
 ```
-Queen level ──┬── zone unlocks (1/5/10/18/28/40)
-              ├── skill points → 3 trees (Ooze Outreach / Hive Growth / Slime Combat)
+Zone N's Warden ── Seal ── Tendril N+1 "Reach" ── zone N+1 opens   ← the spine
+                                │
+Zone N materials ── Tendril N "Provoke" ── zone N's Warden becomes challengeable
+                                │
+Warden+ Core ───── Tendril N "Root" ── small permanent passive
+
+Queen level ──┬── skill points → 3 trees (Ooze Outreach / Hive Growth / Slime Combat)
               └── royal jelly cap (population)
 
-Monster kills ──── mutation unlocks (100 per type)
-
-Buildings ──────── tier unlocks, defense slots, biomass recovery
+Monster kills ──── mutagen pity floor (1 per 150); drops are the real source
+Buildings ──────── tier unlocks, ambush slots, biomass recovery
 Research ───────── multipliers on the above
-
 Caravan tier ───── Prisms + human materials → buildings, legendary traits, resets
 ```
 
-Three parallel currencies of progress (queen level, mutation library, buildings) that gate
-each other loosely. The mutation library is the one that survives death — it's the
-"metaprogression" that makes losing a party survivable.
+The spine is the top line and it is **linear and earned**: you cannot reach a zone without
+beating the one before it, and you cannot challenge a Warden without grinding its zone first.
+Everything else — queen level, mutagens, buildings, research — is breadth that makes the spine
+achievable, not an alternative route along it.
+
+This replaced three parallel currencies that gated each other only loosely, where advancing
+meant reaching a biomass total rather than accomplishing anything.
 
 ---
 
@@ -399,6 +407,11 @@ procession along a road rather than one monster holding ground.
     the only mechanism, and slimes now spawn blank.
 12. ~~Nine screens, split by system.~~ Six, split by subject — see §11c. The roster no longer
     appears twice, and Inventory is a fold on the Hive rather than a screen.
+13. ~~Zones gated by a skill point.~~ Gated by the previous zone's Warden — see §17.
+14. ~~No fight in the game worth optimising for.~~ Six Wardens, each unbeatable by the party
+    that clears its zone.
+15. ~~Fights over in two rounds.~~ Front-loaded HP/damage pass; the game now runs 5-6.5
+    rounds a fight everywhere.
 
 ### Open
 
@@ -584,84 +597,6 @@ than heal, a mutagen *takes hold* rather than being equipped.
 
 ---
 
-## 13. Proposal — Expeditions as delves
-
-_Not built. This is the pitch for replacing the 10 / 100 / infinite kill-count picker._
-
-### The problem
-
-The current duration picker is a decision in shape only. "10 enemies" and "100 enemies" differ
-by how long you wait, not by anything you weigh, and once **infinite** unlocks the other two
-are dead options. Nothing in the system generates tension: a party either survives
-indefinitely or dies to a monster it was never equipped for, and the player has no way to
-express how much risk they are willing to take. Offline it is worse — you come back to an
-outcome you had no input into.
-
-### The reframe: the decision is *when to turn back*
-
-Depth replaces kill count. A party pushes into a zone stage by stage; every stage pays, and
-every stage is harder than the last. The interesting question is never "how many" — it is
-**how far do we push before we come home**, and that question can be answered *in advance*,
-which is exactly what makes it work while the player is asleep.
-
-### The four pieces
-
-**1. Depth.** An expedition runs in stages. Stage N is a handful of encounters against the
-zone's monsters at a depth multiplier. Clearing it banks its haul and advances to N+1.
-Rewards, material rarity and mutation kill-credit all scale with depth; so does monster
-power. Pushing deeper is strictly better *and* strictly more dangerous, with no dominant
-choice anywhere on the curve.
-
-**2. Reserves.** The party carries a finite supply — call it Reserves — that drains per stage
-and cannot be replenished in the field. As it runs low, healing effects weaken and incoming
-damage climbs. Reserves guarantee every run ends without an arbitrary cooldown saying so, and
-they give buildings, ranches and traits something meaningful to extend.
-
-**3. Standing orders.** Set before departure. The party obeys them without the player
-present:
-
-| Order | Reads as |
-|---|---|
-| Return at depth **N** | "Get me to my target and come home" |
-| Return if any slime drops below **X%** | Cautious — protects the investment |
-| Return when a slime goes **Down** | The default; loses nobody to a bad streak |
-| Return on empty Reserves | Squeeze the run for everything it has |
-| Press on regardless | Greedy. Records are set here, and parties are lost here |
-
-This is the actual decision, and it is a *risk posture* rather than a duration. It is also
-what makes offline progression honest: the party comes home on its own terms, so you return
-to a finished run report rather than an ongoing emergency you cannot influence.
-
-**4. A loss mechanic — still open.** The first draft proposed *Downed, not dead*: a slime at
-0 HP is carried, and survives if the party gets home. That fails its own test. With three of
-four Downed there is no reason on earth to press on, so the "decision" resolves itself and the
-risk evaporates. Options are laid out in §14 instead; the delve works with any of them.
-
-### What this buys
-
-- **Continuous and productive.** One expedition runs until an order fires. Every stage pays,
-  so even a timid posture earns.
-- **Tension you chose.** Losing a slime is the consequence of an order you set, not of
-  variance you never had a say in.
-- **Honest offline.** The resolver is already headless; offline just runs stages until an
-  order triggers or the elapsed time runs out.
-- **A months-long axis.** Track **deepest cleared** per zone as a permanent record. It is a
-  better zone gate than queen level, and it only moves with real investment — matured slimes,
-  which cost biomass, which costs time.
-- **Real-time pacing without a cooldown.** A stage takes a few minutes, rising with depth. A
-  lunch-break check-in is a shallow run; an overnight is a deep one with a careful order. The
-  clock throttles progress instead of a timer gate.
-
-### Open questions
-
-- **Which loss mechanic** (§14).
-- **How much Reserves upkeep is enough** that "press on regardless" is a gamble rather than a
-  strictly correct play at high power.
-- **Whether depth records should gate zones outright**, or just recommend them.
-
-
----
-
 ## 14. Proposal — five ways to make loss hurt
 
 _Not built. Alternatives to permadeath-on-wipe, after the Downed idea was rejected for
@@ -755,8 +690,7 @@ particular is the natural next dial, since auto-recalling on the first wound wou
 many slimes one bad night can put in the pool.
 
 ---
-
-## 15. Proposal — the missing middle
+## 15. Proposal — the missing middle *(resolved: Wardens, §17)*
 
 _Not built. The question this answers: the game stops introducing itself far too early, and
 nothing in it ever asks whether a slime is built **right** rather than built **big**._
@@ -804,51 +738,15 @@ rewards, which gives the endgame a ladder that is not just a bigger number.
 This is the cheapest of the three to build: a Warden is a monster definition with hooks the
 resolver already supports, a summon cost, and the fight screen that already exists.
 
-### B. Provisioning — ranches become a supply chain
+### B. Provisioning, and C. Brood lineage — **rejected**
 
-Deep zones consume **Provisions** while a party is in the field. Ranches produce them,
-buildings refine them, and running out **auto-recalls the party** — a soft failure that costs
-you time rather than slimes.
+Two other candidates were put up alongside Wardens: ranches producing consumables that
+expeditions burn (Provisioning), and slimes inheriting from parents (Brood lineage). Both were
+turned down. Recording them so they are not proposed again: Provisioning adds an upkeep chore
+to a game whose appeal is that it runs without you, and lineage is a second slime-authoring
+system competing with the one mutagens already provide.
 
-- **It gates**: you cannot sustain a Void expedition until your supply chain can feed one.
-  Unlike a skill node, this gate keeps mattering after you first pass it.
-- **It enhances**: better provisions mean longer, deeper, richer runs.
-- **It is the late biomass sink** the economy currently lacks.
-- Provision *types* — rations, stimulants, ballast — give a light loadout layer without
-  becoming crafted equipment, which mutations already are.
-
-This is the answer to "an economy from buildings and ranches that both gates and enhances
-later expeditions". It also promotes ranches from passive trickle to something you plan.
-
-### C. Brood lineage — the late scope expansion
-
-Unlocks around zone 5. A **Brood Chamber** lets two slimes produce an offspring that inherits
-a weighted mix of their traits, their elemental affinity, and a chance at one parent's
-mutation *without spending a slot*.
-
-- Gives elements and personality traits a second life as **heritable material** rather than
-  flavour.
-- Directly answers the risk flagged in §4 — that the roster stops turning over once you have a
-  stable of perfected Royals. Breeding makes the stable the *input* to something.
-- It is thematically the thing a Hive Queen should obviously do, and the current
-  spawn-from-a-menu is a strange omission for the fiction.
-- It arrives late and opens a deep optimisation space at exactly the point the game currently
-  runs out of new ideas.
-
-### Recommendation
-
-**Wardens first**, and if only one thing gets built, that one. It is the direct answer to
-"there has to be a challenging battle somewhere", it costs the least against the existing
-engine, and it is the piece that makes the other two worth having — provisions matter because
-Wardens are worth reaching, and breeding matters because Wardens demand variety.
-
-Suggested sequencing against the 50-level spine:
-
-| Introduced around | System | What it changes |
-|---|---|---|
-| Zone 2→3 (~25%) | **Zone Wardens** | Advancement becomes an accomplishment; builds start to matter |
-| Zone 4 (~50%) | **Provisioning** | Ranches become an economy; deep zones gain ongoing cost |
-| Zone 5 (~70%) | **Brood lineage** | The roster becomes an input, not an endpoint |
+Wardens were the pick, and they are built — see §17.
 
 ### On the guided tutorial
 
@@ -859,6 +757,7 @@ and predicates of the form `s.tutorialStep === 3`. The free-firing entries stay 
 for systems met after the opening.
 
 ---
+
 
 ## 16. Mutagens replace kill-count unlocks — **BUILT**
 
@@ -949,3 +848,99 @@ which could clog the population cap. I think that is correct rather than a flaw 
 spares, not veterans, and the Vat is what opens the other mode. But it should be a deliberate
 choice, not a surprise, and the Convalescence Pool's slot pressure is what keeps it from
 becoming a pure hoarding game.
+
+
+---
+
+## 17. Zone Wardens and Tendrils — **BUILT**
+
+The answer to §15: one real fight per zone, and a building chain that turns beating it into
+the way forward.
+
+### The Warden
+
+Six Wardens, one per zone, in `wardenData.js`. They are **not in any spawn table** — you never
+meet one by accident, because a boss that can wipe an unprepared party at random punishes
+exploring rather than rewarding preparation. A hunt is declared in the expedition planner
+before the party leaves: no travel phase, no wandering, one fight, home either way.
+
+Two states:
+
+| | Drops | Purpose |
+|---|---|---|
+| **Warden** (first kill) | a **Seal** | the only way to grow a Tendril into the *next* zone |
+| **Warden+ / Rekindled** (every kill after) | a **Core** | buys that Tendril's final level |
+
+Tuned against the real resolver, not estimated:
+
+| Party strength | Warden | Warden+ |
+|---|---|---|
+| the zone's `recommendedStats` (clears its commons) | **0%** | 0% |
+| ×1.5 | 48–80% over 10–14 rounds | 0% |
+| ×2 | 98–100% over 7–12 rounds | 0% |
+| ×3 | — | knife edge |
+| ×4 | — | 100% over 9–11 rounds |
+
+That first row is the whole point: **the party that clears a zone loses to its Warden.** If a
+stock party could take it, the boss would not be a reason to optimise anything. There are
+tests asserting all three bands, so a future balance change cannot quietly erase the gate.
+
+Two findings worth keeping, both counter-intuitive:
+
+- **Past a threshold, more HP makes a boss *less* beatable, not merely slower.** The party's
+  total health is fixed, so every extra round is another round of incoming damage; the fight
+  flips from "long" to "lost" without ever getting closer. Damage, and above all **action
+  count**, is the real dial — giving Warden+ a single extra action put every one of them at a
+  0% win rate, which is why it now has exactly the actions its base form does.
+- **`heal` is disproportionate at boss scale.** It restores 15% of max HP per proc, so over a
+  20-round fight it returns most of the bar. On the *first* boss in the game it made the
+  Verdant Warden+ harder than the Hollow one. It is off the Wardens entirely for now.
+
+### The Tendril
+
+Zones used to be bought with skill points, which made the most significant progression in the
+game a menu click. Each zone now has a **Tendril** building with three levels, and each level
+is a different kind of gate:
+
+| Level | Costs | Grants |
+|---|---|---|
+| 1 **Reach** | the **previous** zone's Warden Seal | expeditions to this zone |
+| 2 **Provoke** | four ordinary materials from *this* zone, ~90–150 kills' worth | the Warden can be challenged |
+| 3 **Root** | this zone's Warden Core | a small permanent passive (+6%) |
+
+So the way into a new zone is beating the one before it. The forest Tendril starts at Reach on
+a new game — there is no earlier Warden to buy it with, and the first zone should not be gated
+at all. Old saves are migrated: any zone a skill had already opened gets its Tendril at Reach.
+
+The five skill nodes that used to unlock zones keep their place in the tree (other skills
+require them) and pay a stat bonus instead.
+
+### Balance: fight length
+
+Separately, the whole game was too fast at the front. Measured at each zone's
+`recommendedStats`, the forest ran **2.2 rounds at 2% party damage** — over before the arena
+could show a single behaviour, and far too short for any build to express itself.
+
+The correction is front-loaded and tapers to nothing, because caves-and-deeper were already in
+band at 4.7–5.7 rounds and 28–45% damage:
+
+| Zone tier | HP × | Damage × |
+|---|---|---|
+| 1 | 3.0 | 2.0 |
+| 2 | 1.8 | 1.4 |
+| 3 | 1.3 | 1.1 |
+| 4 | 1.1 | 1.0 |
+| 5–6 | 1.0 | 1.0 |
+
+The whole game now sits at roughly **5–6.5 rounds** a fight, and the forest went from 2% to
+18% party damage. A flat doubling was the obvious move and the wrong one: it would have put
+the peaks at 11.4 rounds and a 56% win rate, breaking the part of the curve that worked.
+
+### The arena
+
+Monsters used to spawn at a single fixed point, which was the exact spot the previous one died
+— so each new monster materialised already surrounded by the squad that had just killed
+something else. They now enter from a random edge (in from the right, or over the rise, or up
+from the near slope) and walk to a post of their own. Motions are also retired when a
+combatant leaves the field: enemy ids are derived from the monster type, so without that a
+second Young Wolf inherited the dead one's position and skipped its entrance entirely.

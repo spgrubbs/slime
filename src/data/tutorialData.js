@@ -92,8 +92,8 @@ export const TUTORIALS = {
     title: 'Mutations',
     icon: '🧬',
     body: [
-      'Killing enough of a monster unlocks its mutation — permanently, for every slime you forge after.',
-      'Mutations are the part of a slime you actually design. They are never lost to wounds.',
+      'Monsters rarely drop a **mutagen** for their own mutation. Apply one to a slime with a free slot and it takes hold permanently.',
+      'Mutations are the part of a slime you actually design. They are never lost to wounds — only to reabsorbing.',
       'Most scale with **Viscosity**, so a high-VISC slime is one whose tricks fire.',
     ],
     when: (s) => s.mutagenKinds > 0,
@@ -125,6 +125,32 @@ export const TUTORIALS = {
     when: (s) => s.tab === 'road',
   },
 
+  wardens: {
+    id: 'wardens',
+    category: 'expedition',
+    title: 'Zone Wardens',
+    icon: '👑',
+    body: [
+      'Every zone has one. A Warden is **summoned, never stumbled into** — grow that zone\'s Tendril to **Provoke** and the challenge appears in the expedition planner.',
+      'The party that clears a zone will **lose** to its Warden. Expect to roughly double your stats first.',
+      'First kill drops a **Seal**, and a Seal is the only way to reach the next zone. After that it comes back **Rekindled** — far harder, and carrying the **Core** its Tendril needs to finish.',
+    ],
+    when: (s) => s.wardenProvoked,
+  },
+
+  tendrils: {
+    id: 'tendrils',
+    category: 'hive',
+    title: 'Tendrils',
+    icon: '🌲',
+    body: [
+      'The hive reaches a zone by growing a **Tendril** into it. Three levels, three different jobs.',
+      '**Reach** opens the zone, and is bought with the previous Warden\'s Seal. **Provoke** lets you challenge that zone\'s Warden, and wants a pile of ordinary materials from it.',
+      '**Root** is the last one: it costs a Warden\'s Core and pays a small permanent bonus, forever.',
+    ],
+    when: (s) => s.tab === 'hive' && s.tendrilLevels > 1,
+  },
+
   elements: {
     id: 'elements',
     category: 'expedition',
@@ -144,9 +170,9 @@ export const TUTORIALS = {
     title: 'The skill tree',
     icon: '🌳',
     body: [
-      'Queen levels buy skill points. Points unlock zones, buildings and whole features.',
+      'Queen levels buy skill points. Points unlock buildings, stat bonuses and whole features.',
       'Three trees: expeditions, hive economy, and combat.',
-      'Zone access lives here — not in your slimes.',
+      'Zones are **not** bought here — those are Tendrils, and Tendrils are bought with Warden Seals.',
     ],
     when: (s) => s.tab === 'hive' && s.skillPoints > 0,
   },

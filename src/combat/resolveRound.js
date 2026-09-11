@@ -12,6 +12,7 @@ import { STATUS_EFFECTS } from '../data/traitData.js';
 import {
   MONSTER_TYPES, MONSTER_ABILITIES, materialDropChance, mutagenDropChance,
 } from '../data/monsterData.js';
+import { WARDEN_TYPES } from '../data/wardenData.js';
 import { calculateElementalDamage } from '../utils/helpers.js';
 import { runHooks } from './hooks.js';
 import { computeStats, computeMaxHp, buildEffectList } from './stats.js';
@@ -54,7 +55,9 @@ export function makeSlimeCombatant(slime, { combatBonuses = {}, bon = {}, mutati
 }
 
 export function makeEnemyCombatant(type, { hpMultiplier = 1, isBoss = false } = {}) {
-  const md = MONSTER_TYPES[type];
+  // Wardens live in their own table but are the same shape, so the resolver
+  // treats them as just another monster id.
+  const md = MONSTER_TYPES[type] || WARDEN_TYPES[type];
   if (!md) return null;
   const maxHp = Math.floor(md.hp * hpMultiplier);
   const tier = md.tier || 1;
@@ -68,7 +71,8 @@ export function makeEnemyCombatant(type, { hpMultiplier = 1, isBoss = false } = 
     side: 'enemy',
     type,
     ref: md,
-    isBoss: isBoss || !!md.rare,
+    isBoss: isBoss || !!md.rare || !!md.isWarden,
+    isWarden: !!md.isWarden,
     hp: maxHp,
     maxHp,
     actions,
