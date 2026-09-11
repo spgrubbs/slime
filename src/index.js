@@ -73,15 +73,31 @@ root.render(
   </ErrorBoundary>
 );
 
-// Register the offline shell so an installed copy opens with no connection.
-// Skipped in development, where a stale cache just gets in the way, and inside
-// the Capacitor shell, which already serves everything from local files.
-if ('serviceWorker' in navigator
-    && process.env.NODE_ENV === 'production'
-    && window.location.protocol !== 'capacitor:') {
+// The offline shell, so an installed PWA opens with no connection.
+//
+// Deliberately NOT registered inside the Capacitor shell. The native app already
+// serves every asset from local files, so the cache buys nothing — and it costs
+// something real: the WebView's storage survives an APK upgrade, so a cached
+// bundle would keep being served after you install a new build. "I sideloaded
+// the new APK and it is still showing the old one" is the worst bug to hit in
+// the middle of a playtest, because nothing about it looks like a caching
+// problem.
+//
+// Detected via the `Capacitor` global the native bridge injects, not via the
+// URL scheme: androidScheme is 'https', so the protocol inside the app is
+// indistinguishable from the web.
+const inNativeShell = typeof window !== 'undefined' && !!window.Capacitor;
+
+if ('serviceWorker' in navigator && process.env.NODE_ENV === 'production' && !inNativeShell) {
   window.addEventListener('load', () => {
     navigator.serviceWorker
       .register(`${process.env.PUBLIC_URL}/service-worker.js`)
       .catch(err => console.warn('Service worker registration failed:', err));
   });
+} else if ('serviceWorker' in navigator && inNativeShell) {
+  // Clear out anything a previous build registered here before this was fixed,
+  // otherwise that stale cache outlives the upgrade that was meant to replace it.
+  navigator.serviceWorker.getRegistrations()
+    .then(rs => rs.forEach(r => r.unregister()))
+    .catch(() => {});
 }
