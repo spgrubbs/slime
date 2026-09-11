@@ -112,9 +112,39 @@ export function makeMotion(index, total, side) {
     ? { x: 0.06 + Math.random() * 0.06, d: 0.24 + spread * 0.6, vx: 0, vd: 0,
         state: 'advance', until: 0, home, angle: home, lane: spread, bulk: 1,
         hop: 0, hopPhase: Math.random() * Math.PI * 2, frame: (index * 3) % 8, drips: [] }
-    : { x: 0.66, d: 0.5, vx: 0, vd: 0, state: 'hold', until: 0, home: 0, angle: 0,
-        lane: spread, bulk: 1.4,
-        hop: 0, hopPhase: Math.random() * Math.PI * 2, frame: 0, drips: [] };
+    : makeEnemyMotion(spread);
+}
+
+/**
+ * Where a monster comes IN from, and where it settles.
+ *
+ * Both used to be the single point (0.66, 0.5), which meant each new monster
+ * materialised on the exact spot the last one died — already surrounded by the
+ * squad that had just killed something else. Now it walks on from off the edge
+ * and takes up a post of its own, so the squad has to go and meet it.
+ */
+export function makeEnemyMotion(spread = 0.5, rand = Math.random) {
+  // A post somewhere in the right-hand half of the ground, never the same twice.
+  const postX = 0.58 + rand() * 0.18;
+  const postD = 0.30 + rand() * 0.44;
+
+  // Enter from off the right edge, or from beyond the top/bottom of the plane.
+  const edge = rand();
+  let x, d;
+  if (edge < 0.55) {            // in from the right
+    x = 1.12 + rand() * 0.1;
+    d = postD + (rand() - 0.5) * 0.3;
+  } else if (edge < 0.78) {      // in from the far side (up the slope)
+    x = postX + (rand() - 0.5) * 0.35;
+    d = -0.18 - rand() * 0.1;
+  } else {                       // in from the near side (down the slope)
+    x = postX + (rand() - 0.5) * 0.35;
+    d = 1.18 + rand() * 0.1;
+  }
+
+  return { x, d, vx: 0, vd: 0, state: 'hold', until: 0, home: 0, angle: 0,
+           lane: spread, bulk: 1.4, postX, postD,
+           hop: 0, hopPhase: rand() * Math.PI * 2, frame: 0, drips: [] };
 }
 
 const BEHAVIORS = ['press', 'flank', 'circle', 'dart'];
@@ -218,8 +248,11 @@ function stepEnemyMotion(m, dt, now, laneIndex = 0, marching = false) {
     m.x -= dt * 0.012;
     m.d = 0.46 + Math.sin(now / 1800 + laneIndex) * 0.05;
   } else {
-    m.x += (0.66 - m.x) * 1.4 * dt;
-    m.d += (0.5 + Math.sin(now / 2400) * 0.06 - m.d) * 1.4 * dt;
+    // Walk to this monster's own post, wherever it entered from.
+    const px = m.postX ?? 0.66;
+    const pd = m.postD ?? 0.5;
+    m.x += (px - m.x) * 1.4 * dt;
+    m.d += (pd + Math.sin(now / 2400 + laneIndex) * 0.06 - m.d) * 1.4 * dt;
   }
   m.hopPhase += dt * 2.6;
   m.hop = Math.abs(Math.sin(m.hopPhase)) * 2;
@@ -462,6 +495,16 @@ export function drawFrame(ctx, view, motions, dt, now, tick) {
 
   const focus = (view.enemies || []).find(e => e.id === view.focusId && !e.dead)
              || (view.enemies || []).find(e => !e.dead);
+
+  // Retire motions for anything no longer on the field. Enemy combatant ids are
+  // derived from the monster type, so without this a second Young Wolf inherits
+  // the dead one's motion and is already standing in the middle of the squad
+  // instead of walking on.
+  const present = new Set([
+    ...(view.enemies || []).map(e => e.id),
+    ...(view.slimes || []).map(sl => sl.id),
+  ]);
+  for (const id of motions.keys()) if (!present.has(id)) motions.delete(id);
 
   // Enemies first so their motion is available as a target this frame.
   (view.enemies || []).forEach((e, i) => {
