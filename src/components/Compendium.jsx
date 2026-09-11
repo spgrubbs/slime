@@ -233,6 +233,20 @@ const Compendium = ({ queen, monsterKills, mutagens = {}, wardenKills = {}, seen
                   </div>
                 </div>
                 <div style={{ fontSize: 11, opacity: 0.75, marginTop: 8 }}>{w.desc}</div>
+
+                {/* The rule, and what answers it. A Warden the player cannot
+                    read is just a wall. */}
+                <div style={{ marginTop: 8, display: 'grid', gap: 3 }}>
+                  {(w.abilities || []).map(a => (
+                    <div key={a} style={{ fontSize: 11, color: '#fbbf24' }}>◆ {a}</div>
+                  ))}
+                </div>
+                {w.counter && (
+                  <div style={{ marginTop: 8, padding: '6px 9px', background: 'rgba(74,222,128,0.10)', border: '1px solid rgba(74,222,128,0.3)', borderRadius: 6, fontSize: 11, color: '#86efac' }}>
+                    {felled ? `💡 ${w.counter}` : '💡 Fight it once and its weakness will be recorded here.'}
+                  </div>
+                )}
+
                 <div style={{ fontSize: 10, marginTop: 8, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                   <span style={{ color: '#4ade80' }}>First kill → {w.seal}</span>
                   <span style={{ color: '#a78bfa' }}>Rekindled → {w.heart}</span>
