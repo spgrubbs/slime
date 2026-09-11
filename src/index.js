@@ -72,3 +72,16 @@ root.render(
     <HiveQueenGame />
   </ErrorBoundary>
 );
+
+// Register the offline shell so an installed copy opens with no connection.
+// Skipped in development, where a stale cache just gets in the way, and inside
+// the Capacitor shell, which already serves everything from local files.
+if ('serviceWorker' in navigator
+    && process.env.NODE_ENV === 'production'
+    && window.location.protocol !== 'capacitor:') {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker
+      .register(`${process.env.PUBLIC_URL}/service-worker.js`)
+      .catch(err => console.warn('Service worker registration failed:', err));
+  });
+}

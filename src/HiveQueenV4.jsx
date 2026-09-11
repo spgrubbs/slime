@@ -1839,7 +1839,7 @@ export default function HiveQueenGame() {
         {visibleTabs.map((t) => <div key={t.id} onClick={() => setTab(t.id)} style={{ width: 8, height: 8, borderRadius: '50%', background: tab === t.id ? '#ec4899' : 'rgba(255,255,255,0.3)', cursor: 'pointer' }} />)}
       </div>
       
-      <main style={{ padding: 15, paddingBottom: 100 }}>
+      <main style={{ padding: 15, paddingBottom: 'calc(110px + env(safe-area-inset-bottom))' }}>
         <h2 style={{ margin: '0 0 15px', fontSize: 20 }}>{tabs.find(t => t.id === tab)?.icon} {tabs.find(t => t.id === tab)?.label}</h2>
         
         {tab === 'hive' && (
@@ -2470,7 +2470,15 @@ export default function HiveQueenGame() {
         )}
       </main>
 
-      <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: 'rgba(0,0,0,0.95)', borderTop: '1px solid rgba(255,255,255,0.1)', maxHeight: 70, overflowY: 'auto', padding: 8 }}>
+      <div style={{
+        position: 'fixed', bottom: 0, left: 0, right: 0,
+        background: 'rgba(0,0,0,0.95)', borderTop: '1px solid rgba(255,255,255,0.1)',
+        maxHeight: 70, overflowY: 'auto',
+        padding: 8,
+        // Fixed elements are positioned against the viewport rather than the
+        // safe-area-padded body, so this bar has to clear the gesture pill itself.
+        paddingBottom: 'calc(8px + env(safe-area-inset-bottom))',
+      }}>
         <div style={{ fontSize: 10, opacity: 0.5, marginBottom: 4 }}>📜 Log</div>
         {logs.slice(-4).reverse().map((l, i) => <div key={i} style={{ fontSize: 10, padding: '2px 0', opacity: i === 0 ? 1 : 0.6 }}><span style={{ opacity: 0.4, marginRight: 6 }}>{l.t}</span>{l.m}</div>)}
       </div>
