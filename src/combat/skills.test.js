@@ -15,7 +15,7 @@ const allSkills = () =>
 const SOURCES = [
   'src/combat/resolveRound.js', 'src/combat/expedition.js', 'src/combat/caravan.js',
   'src/combat/stats.js', 'src/combat/effects.js', 'src/combat/wardenMechanics.js',
-  'src/HiveQueenV4.jsx',
+  'src/SlimeQueen.jsx',
 ];
 const sourceText = SOURCES
   .map(f => fs.readFileSync(path.join(process.cwd(), f), 'utf8'))

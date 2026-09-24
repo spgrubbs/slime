@@ -6,7 +6,7 @@
 export const BUILDINGS = {
   // === ZONE TENDRILS ===
   //
-  // The hive reaches a zone by growing a tendril into it. Three levels, and
+  // The nucleus reaches a zone by growing a tendril into it. Three levels, and
   // each one is a different kind of gate:
   //
   //   1 REACH    expeditions to this zone become possible. Bought with the
@@ -130,7 +130,7 @@ export const BUILDINGS = {
     category: 'tier',
   },
   royalHatchery: {
-    name: 'Royal Hatchery',
+    name: 'Gestation Pool',
     icon: '🥚',
     desc: 'Enables spawning of Elite slimes',
     cost: { biomass: 800, mats: { 'Snail Shell': 3, 'Mana Crystal': 5 } },
@@ -152,7 +152,7 @@ export const BUILDINGS = {
   slimePit: {
     name: 'Slime Pit',
     icon: '🕳️',
-    desc: '+10 max Royal Jelly capacity',
+    desc: '+10 max Plasm',
     cost: { biomass: 1500, mats: { 'Human Bone': 8, 'Iron Sword': 5 } }, // Now requires human materials!
     max: 5,                             // Can build multiple
     category: 'capacity',

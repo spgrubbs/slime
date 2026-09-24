@@ -66,7 +66,7 @@ function Reference() {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11, minWidth: 340 }}>
             <thead>
               <tr style={{ opacity: 0.6 }}>
-                {['Tier', '🍯', 'Stats', 'Slots', 'HP', 'Held cap'].map(h => (
+                {['Tier', '🫧', 'Stats', 'Slots', 'HP', 'Held cap'].map(h => (
                   <th key={h} style={{ textAlign: 'left', padding: '4px 8px 6px 0', fontWeight: 'normal' }}>{h}</th>
                 ))}
               </tr>
@@ -168,7 +168,8 @@ function Reference() {
   );
 }
 
-const Compendium = ({ queen, monsterKills, mutagens = {}, wardenKills = {}, seenTutorials = [] }) => {
+const Compendium = ({ queen, monsterKills, mutagens = {}, wardenKills = {},
+                     mutationsUnlocked = false, seenTutorials = [] }) => {
   const [tab, setTab] = useState('zones'); // 'zones' | 'guide' | 'reference'
   const [zone, setZone] = useState('forest');
   const z = ZONES[zone];
@@ -321,7 +322,7 @@ const Compendium = ({ queen, monsterKills, mutagens = {}, wardenKills = {}, seen
                 </div>
 
                 {/* Mutation Progress Section - only show if monster has a mutation */}
-                {mutation && (
+                {mutation && mutationsUnlocked && (
                   <div style={{
                     background: isUnlocked ? 'rgba(168,85,247,0.15)' : 'rgba(0,0,0,0.2)',
                     borderRadius: 8,

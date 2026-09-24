@@ -729,7 +729,10 @@ export function resolveKill(world, ctx, records, sideEffects, zoneDef) {
   }
   // The monster's own mutagen. Rare, and the only way a slime ever gains a
   // mutation — the host applies a pity floor on top of this roll.
-  if (md.mutation) {
+  // Gated on the Unstable Genes skill. Before it, a mutagen is an item the
+  // player cannot use and has had nothing explained about, so it should not
+  // drop at all rather than pile up unexplained.
+  if (md.mutation && ctx.passives?.includes('mutagenesis')) {
     // Trophy Hunter: a rare monster never keeps its mutagen.
     if (md.rare && ctx.passives?.includes('trophyHunter')) {
       sideEffects.push({ type: 'mutagen', mutation: md.mutation });

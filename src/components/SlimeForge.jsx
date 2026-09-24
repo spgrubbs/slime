@@ -64,7 +64,7 @@ const SlimeForge = ({ biomass, freeJelly, tiers, onSpawn }) => {
             >
               <div style={{ fontSize: 13 }}>{ok ? '🟢' : '🔒'}</div>
               <div style={{ fontWeight: tier === k ? 'bold' : 'normal' }}>{t.name}</div>
-              <div style={{ opacity: 0.7 }}>🍯{t.jellyCost}</div>
+              <div style={{ opacity: 0.7 }}>🫧{t.jellyCost}</div>
             </button>
           );
         })}
@@ -87,7 +87,7 @@ const SlimeForge = ({ biomass, freeJelly, tiers, onSpawn }) => {
           background: canSpawn ? 'linear-gradient(135deg, #4ade80, #22d3ee)' : 'rgba(100,100,100,0.5)',
         }}
       >
-        {canSpawn ? `🥚 Spawn — 🧬${bioCost} · 🍯${jellyCost}` : `Need 🧬${bioCost} · 🍯${jellyCost}`}
+        {canSpawn ? `🥚 Spawn — 🧬${bioCost} · 🫧${jellyCost}` : `Need 🧬${bioCost} · 🫧${jellyCost}`}
       </button>
     </div>
   );

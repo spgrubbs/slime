@@ -1,6 +1,6 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import HiveQueenGame from './HiveQueenV4.jsx';
+import SlimeQueen from './SlimeQueen.jsx';
 
 // Error Boundary to catch and display errors
 class ErrorBoundary extends React.Component {
@@ -69,7 +69,7 @@ class ErrorBoundary extends React.Component {
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
   <ErrorBoundary>
-    <HiveQueenGame />
+    <SlimeQueen />
   </ErrorBoundary>
 );
 

@@ -8,7 +8,7 @@
 // you can afford it and never think about it again. "Materials survive a wipe"
 // changes how far you are willing to push an expedition.
 //
-// Flat bonuses survive in exactly one place: CAPACITY. Royal jelly, ranch
+// Flat bonuses survive in exactly one place: CAPACITY. Plasm, ranch
 // slots, mutation slots and ambush slots are quantities by nature, and a
 // capacity increase does change what you can field.
 //
@@ -36,14 +36,14 @@ export const SKILL_TREES = {
         position: { x: 50, y: 8 },
       },
 
-      scoutingParty: {
-        id: 'scoutingParty',
-        name: 'Sensory Tendrils',
-        icon: '👁️',
-        desc: 'See a monster\'s stats before engaging',
+      mutagenesis: {
+        id: 'mutagenesis',
+        name: 'Unstable Genes',
+        icon: '🧬',
+        desc: 'Monsters begin dropping mutagens, and slimes can take them',
         cost: 1,
         requires: ['expeditionBasics'],
-        effect: { type: 'passive', desc: 'Show monster HP/DMG in zone select' },
+        effect: { type: 'passive', desc: 'Unlocks mutagen drops and mutation slots' },
         position: { x: 22, y: 20 },
       },
 
@@ -97,7 +97,7 @@ export const SKILL_TREES = {
         icon: '🏃',
         desc: 'Unlock the Swift Expedition pheromone',
         cost: 2,
-        requires: ['scoutingParty'],
+        requires: ['mutagenesis'],
         effect: { type: 'pheromone', ability: 'swiftExpedition' },
         position: { x: 14, y: 33 },
       },
@@ -204,10 +204,10 @@ export const SKILL_TREES = {
   },
 
   hive: {
-    name: 'Hive Growth',
+    name: 'Deep Culture',
     icon: '🏛️',
     color: '#a855f7',
-    description: 'What the hive can hold, build and take back',
+    description: 'What the nucleus can hold, build and take back',
     skills: {
       hiveFoundation: {
         id: 'hiveFoundation',
@@ -222,9 +222,9 @@ export const SKILL_TREES = {
 
       jellyProduction: {
         id: 'jellyProduction',
-        name: 'Royal Jelly Glands',
-        icon: '🍯',
-        desc: '+15 royal jelly — a bigger brood',
+        name: 'Plasm Glands',
+        icon: '🫧',
+        desc: '+15 plasm — a bigger brood',
         cost: 1,
         requires: ['hiveFoundation'],
         effect: { type: 'bonus', stat: 'maxJelly', value: 15 },
@@ -288,9 +288,9 @@ export const SKILL_TREES = {
 
       royalHatcheryUnlock: {
         id: 'royalHatcheryUnlock',
-        name: 'Royal Brooding',
+        name: 'Deep Gestation',
         icon: '🥚',
-        desc: 'Unlock the Royal Hatchery',
+        desc: 'Unlock the Gestation Pool',
         cost: 3,
         requires: ['researchLabUnlock'],
         effect: { type: 'unlock', building: 'royalHatchery' },
@@ -321,7 +321,7 @@ export const SKILL_TREES = {
 
       nurturingAuraSkill: {
         id: 'nurturingAuraSkill',
-        name: 'Brooding Musk',
+        name: 'Nurturing Musk',
         icon: '💗',
         desc: 'Unlock the Nurturing Aura pheromone',
         cost: 3,
@@ -365,9 +365,9 @@ export const SKILL_TREES = {
 
       economyMastery: {
         id: 'economyMastery',
-        name: 'The Deep Hive',
+        name: 'The Deep Culture',
         icon: '🏰',
-        desc: '+30 royal jelly and +2 more pool slots',
+        desc: '+30 plasm and +2 more pool slots',
         cost: 6,
         requires: ['slimePitUnlock', 'dismantle'],
         effect: { type: 'bonus', stat: 'maxJelly', value: 30, also: { ranchSlots: 2 } },

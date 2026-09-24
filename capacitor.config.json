@@ -1,6 +1,6 @@
 {
   "appId": "com.spgrubbs.hivequeen",
-  "appName": "Hive Queen",
+  "appName": "Slime Queen",
   "webDir": "build",
   "android": {
     "allowMixedContent": false,

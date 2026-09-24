@@ -1,4 +1,4 @@
-# Hive Queen — Game Design Document
+# Slime Queen — Game Design Document
 
 _Status: living document. Reconstructed from the implemented systems in `src/`._
 
@@ -6,7 +6,7 @@ _Status: living document. Reconstructed from the implemented systems in `src/`._
 
 ## 1. Pitch
 
-You are a slime Hive Queen. You don't fight — you **breed, mutate, and dispatch**.
+You are a slime Slime Queen. You don't fight — you **breed, mutate, and dispatch**.
 
 Slimes are **assets, not ammunition**. You build one deliberately, send it out, and it comes
 back changed — fatter with biomass, or wounded and empty-handed. Nothing you build is ever
@@ -25,14 +25,14 @@ not continuous play.
 | Resource | Symbol | Source | Sink |
 |---|---|---|---|
 | **Biomass** | 🧬 | Monster kills, ranches, withdrawing from or reabsorbing slimes | Spawning, buildings, research |
-| **Royal Jelly** | 🍯 | `BASE_JELLY` + `JELLY_PER_QUEEN_LEVEL` × level, + Slime Pit, + skills | **The population cap.** Held by every living slime, wounded ones included |
+| **Plasm** | 🍯 | `BASE_JELLY` + `JELLY_PER_QUEEN_LEVEL` × level, + Slime Pit, + skills | **The population cap.** Held by every living slime, wounded ones included |
 | **Materials** | 📦 | Monster drops, caravan ambushes | Buildings |
 | **Mana** | ✨ | 1/hour per living slime + Mana Well ranch | Hive Abilities (timed global buffs) |
 | **Prisms** | 💎 | 0.1% expedition drop, **guaranteed on routing a caravan**, IAP | Prism Shop (trait grants, time skips, mutation resets) |
-| **Queen XP** | 👑 | Reabsorbing slimes, biomass conversion | Queen levels 1–50 → skill points, royal jelly cap |
+| **Queen XP** | 👑 | Reabsorbing slimes, biomass conversion | Queen levels 1–50 → skill points, plasm cap |
 
 Biomass is the throughput resource; **Prisms are the gate resource** and the reason caravan
-ambushes exist at all. Royal Jelly is the population cap — and because a wounded slime keeps
+ambushes exist at all. Plasm is the population cap — and because a wounded slime keeps
 its jelly for the whole time it is mending, a bad expedition squeezes how much else you can
 have in the field.
 
@@ -87,7 +87,7 @@ A slime reduced to 0 HP is **Wounded**, not killed:
 
 - it forfeits **every point of held biomass**,
 - it cannot be deployed until it has mended,
-- it keeps its royal jelly slot the entire time.
+- it keeps its plasm slot the entire time.
 
 Recovery happens in a **Convalescence Pool** — 2 slots and 24 hours at base, improving to 6
 slots and ~14 hours by level 5. Slots and time are both upgradeable, and both are the real
@@ -274,7 +274,7 @@ Zone N materials ── Tendril N "Provoke" ── zone N's Warden becomes chall
 Warden+ Core ───── Tendril N "Root" ── small permanent passive
 
 Queen level ──┬── skill points → 3 trees (Ooze Outreach / Hive Growth / Slime Combat)
-              └── royal jelly cap (population)
+              └── plasm cap (population)
 
 Monster kills ──── mutagen pity floor (1 per 150); drops are the real source
 Buildings ──────── tier unlocks, ambush slots, biomass recovery
@@ -559,7 +559,7 @@ ever listed materials.
 | Screen | What it is | Holds |
 |---|---|---|
 | 👑 **The Hive** | the Queen and everything she owns | level & mana, abilities, buildings, Instincts (skill tree), Stores (materials) |
-| 🟢 **The Brood** | every slime, upright or mending | Forge, mutagens on hand, roster, slime detail, and the Pools |
+| 🟢 **The Spawn** | every slime, upright or mending | Forge, mutagens on hand, roster, slime detail, and the Pools |
 | 🗺️ **The Wilds** | where slimes are sent | zones, expedition parties, the arena |
 | 🎯 **The Road** | the one timed event | caravan ambush, its cooldown, catapults |
 | 📖 **Memory** | the record | Compendium: zones, guide, reference |
@@ -672,7 +672,7 @@ the party with it. `lazy` slimes bank sooner; `greedy` ones push for one more st
 
 Implemented as of this pass. A slime that goes down forfeits **all** its held biomass and is
 **Wounded**; it recovers in a Convalescence Pool (2 slots / 24h at base, 6 slots / ~14h at
-level 5) and holds its royal jelly the entire time.
+level 5) and holds its plasm the entire time.
 
 Why this one over the others:
 
@@ -1038,7 +1038,7 @@ tree was **57% flat bonuses** (31 of 54 skills), plus five nodes that unlocked
 zones — a job Tendrils took over in §17.
 
 It is now **47 skills, 5 of them numbers (11%)**, and all five are *capacity*:
-royal jelly, pool slots, mutation slots, ambush slots, rare spawn rate. A
+plasm, pool slots, mutation slots, ambush slots, rare spawn rate. A
 capacity is legitimately a quantity, and raising one changes what you can field.
 
 Everything else is a rule. A sample of what replaced the bonuses:
@@ -1085,3 +1085,95 @@ There is no migration layer. The game is in active design and its state shape
 changes most passes; the translator that used to live in `saveSystem.js` carried
 a dozen retired systems and was more code than the systems it propped up. A save
 that predates the current shape is filled in from defaults.
+
+
+---
+
+## 19. Playtest pass — what the first Android build found
+
+Six things, five of them cheap and one a real defect.
+
+### The defect: expeditions ended on reload
+
+An overnight expedition came back having done nothing: seventeen hours away, an
+empty summary, the party recalled, no progress.
+
+`targetKills` was `Infinity` for the ordinary "run until recalled" case, and
+**`JSON.stringify(Infinity)` is `null`**. After any save, `kills >= null`
+coerces to `kills >= 0` — true immediately — so the first kill fired
+`expComplete` and recalled the party. This was not an offline bug at all: *any*
+reload ended the expedition. It is now a number or `null`, never Infinity, with
+an explicit null check at both comparison sites.
+
+Two things fell out of investigating it:
+
+- **The offline cap was set without measuring.** `MAX_OFFLINE_ROUNDS = 1500` is
+  40 minutes of simulated time, so a 17-hour absence was truncated to 40 minutes
+  even once the break was fixed. Measured, a full 24h of forest costs ~430ms to
+  simulate. The ceiling is now 60,000 — a safety net rather than the real limit,
+  which is the 24h elapsed-time cap.
+- **A reloaded Warden hunt lost its rule.** `hydrateExpedition` looked the enemy
+  up in `MONSTER_TYPES` only, so a Warden rehydrated with a null `ref` and an
+  empty `effects` list — its mechanic silently stopped applying mid-fight.
+
+### Early fights had no risk at all
+
+A tier-1 party ran seventeen fights and finished at **full health**. Travel
+recovery (28%) comfortably exceeded what a forest fight cost (13%), so health
+only ever moved one way.
+
+Early damage went up — tier 1 ×1.4, tier 2 ×1.15, tier 6 ×1.15 — and a party now
+ends 17 fights at 60-73% health, losing a slime roughly one run in three, with
+the numbers degrading over a longer session (33-66% and up to 2 slimes down over
+60 fights).
+
+**The thing worth remembering:** attrition here is *bimodal*, not a dial. Losing
+a slime cuts party damage, which lengthens fights, which costs more health —
+positive feedback against an absorbing barrier. Recovery a little above the cost
+of a fight pins the party at full health; a little below spirals to a wipe.
+There is almost no stable middle, so the risk that matters comes from per-slime
+variance (a basic slime has ~30 HP and takes 8-damage hits), not from a slow
+average bleed. An earlier attempt to equalise single-fight cost across all six
+zones made the deep zones completely safe, because sustained behaviour and
+single-fight cost are not the same measurement.
+
+### Sensory Tendrils is gone
+
+It told the player "this zone expects 4 in each stat" — the answer to the
+question the game is actually asking. Working out what a zone costs *is* the
+reading. Its slot in the tree went to the mutation unlock, which wanted to be
+early and cheap.
+
+### Mutations are now an unlock
+
+**Unstable Genes** (1 point, off the expedition root) turns on mutagen drops,
+the pity floor, and the mutation tutorial. Before it, nothing about mutagens
+exists: no drops, no pity progress, and no Compendium progress bar filling
+toward a system that has never been explained.
+
+### Travel is a visible transition
+
+Between fights the party is on the road, and the arena now shows it: roadside
+silhouettes and ground streaks slide right-to-left in two parallax bands while
+the slimes bob along in a loose file. The *world* moves rather than the party,
+which reads as walking left-to-right without anyone leaving the canvas. Each
+zone has its own silhouette — conifers, reeds, stalagmites, broken pillars,
+crags, tilted slabs.
+
+### The theme is slime, not bee
+
+"Hive Queen", royal jelly and a hatchery are beekeeping. The vocabulary is now:
+
+| was | is |
+|---|---|
+| Hive Queen | **Slime Queen** |
+| The Hive | **The Nucleus** |
+| The Brood | **The Spawn** |
+| Royal Jelly 🍯 | **Plasm** 🫧 |
+| Royal Hatchery | **Gestation Pool** |
+| Hive Growth (tree) | **Deep Culture** |
+
+Internal identifiers (`hiveFoundation`, `activeHiveAbilities`, the Android
+`appId`) are deliberately unchanged: they are not imagery, and the `appId`
+especially must stay, or the next APK installs as a second app beside the one
+already on the phone instead of upgrading it.

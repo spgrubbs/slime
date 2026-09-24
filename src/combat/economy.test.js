@@ -187,17 +187,28 @@ test('the pity floor caps the worst case', () => {
   assert.ok(MUTAGEN_PITY_KILLS <= expectedRawKillsOfThatMonster * 2);
 });
 
-test('mutagens actually drop from kills', () => {
+/** Observed mutagen drop rate over N kills, with the given skills active. */
+const mutagenRate = (passives, N = 6000) => {
   const sl = makeSlimeCombatant(slime('royal'));
   let drops = 0;
-  const N = 6000;
   for (let i = 0; i < N; i++) {
     const se = [];
-    resolveKill({ slimes: [sl], enemy: makeEnemyCombatant('youngWolf') }, { rng: Math.random }, [], se, null);
+    resolveKill({ slimes: [sl], enemy: makeEnemyCombatant('youngWolf') },
+                { rng: Math.random, passives }, [], se, null);
     drops += se.filter(x => x.type === 'mutagen' && x.mutation === 'sharp').length;
   }
-  const rate = drops / N;
+  return drops / N;
+};
+
+test('mutagens actually drop from kills, once unlocked', () => {
+  const rate = mutagenRate(['mutagenesis']);
   assert.ok(rate > 0.005 && rate < 0.02, `observed ${(rate * 100).toFixed(2)}% vs 1% expected`);
+});
+
+test('no mutagen drops before Unstable Genes is bought', () => {
+  // Otherwise the player accumulates an item they cannot use and has had
+  // nothing explained about, and the Compendium fills a progress bar toward it.
+  assert.equal(mutagenRate([], 2000), 0);
 });
 
 test('every mutation is obtainable from a monster that exists in a zone', () => {

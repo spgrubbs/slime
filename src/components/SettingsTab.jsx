@@ -252,8 +252,8 @@ const SettingsTab = ({ onSave, onDelete, lastSave, prisms, slimes, purchasePrism
       <div style={{ background: 'rgba(0,0,0,0.3)', borderRadius: 10, padding: 15 }}>
         <div style={{ fontSize: 14, fontWeight: 'bold', marginBottom: 10 }}>ℹ️ About</div>
         <div style={{ fontSize: 12, opacity: 0.7 }}>
-          <p>Hive Queen v0.5</p>
-          <p>An idle game where you control a slime hive.</p>
+          <p>Slime Queen v0.5</p>
+          <p>An idle game where you control a slime nucleus.</p>
           <p style={{ marginTop: 10 }}>Tips:</p>
           <ul style={{ margin: '5px 0', paddingLeft: 20 }}>
             <li>Send expeditions before closing - they'll continue offline!</li>

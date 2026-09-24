@@ -13,7 +13,7 @@ export const TUTORIAL_CATEGORIES = {
   basics:     { name: 'Getting Started', icon: '🥚' },
   slimes:     { name: 'Your Slimes',     icon: '🟢' },
   expedition: { name: 'The Field',       icon: '🗺️' },
-  hive:       { name: 'The Hive',        icon: '🏛️' },
+  hive:       { name: 'The Nucleus',     icon: '🏛️' },
 };
 
 /**
@@ -24,7 +24,7 @@ export const TUTORIALS = {
   welcome: {
     id: 'welcome',
     category: 'basics',
-    title: 'You are the Hive Queen',
+    title: 'You are the Slime Queen',
     icon: '👑',
     body: [
       'You never fight. You breed slimes, shape them, and send them out.',
@@ -42,7 +42,7 @@ export const TUTORIALS = {
     body: [
       'A slime\'s **tier** sets its power. Better tiers need buildings first.',
       '**Firmness** hits and holds. **Slipperiness** dodges and crits. **Viscosity** makes mutations land.',
-      'Every slime you keep alive occupies **royal jelly** — that is your population cap.',
+      'Every slime you keep alive occupies **plasm** — that is your population cap.',
     ],
     when: (s) => s.tab === 'brood',
   },
@@ -80,7 +80,7 @@ export const TUTORIALS = {
     icon: '🩹',
     body: [
       'Slimes do not die. One that falls is **wounded**: it loses everything it carried and cannot be sent out.',
-      'It mends in a **Convalescence Pool** — and holds its royal jelly the whole time.',
+      'It mends in a **Convalescence Pool** — and holds its plasm the whole time.',
       'The cost of a bad run is a body clogging your capacity, not a name off the list.',
     ],
     when: (s) => s.woundedCount > 0,
@@ -96,7 +96,7 @@ export const TUTORIALS = {
       'Mutations are the part of a slime you actually design. They are never lost to wounds — only to reabsorbing.',
       'Most scale with **Viscosity**, so a high-VISC slime is one whose tricks fire.',
     ],
-    when: (s) => s.mutagenKinds > 0,
+    when: (s) => s.mutationsUnlocked,
   },
 
   ranch: {
@@ -144,7 +144,7 @@ export const TUTORIALS = {
     title: 'Tendrils',
     icon: '🌲',
     body: [
-      'The hive reaches a zone by growing a **Tendril** into it. Three levels, three different jobs.',
+      'The nucleus reaches a zone by growing a **Tendril** into it. Three levels, three different jobs.',
       '**Reach** opens the zone, and is bought with the previous Warden\'s Seal. **Provoke** lets you challenge that zone\'s Warden, and wants a pile of ordinary materials from it.',
       '**Root** is the last one: it costs a Warden\'s Core and pays a small permanent bonus, forever.',
     ],

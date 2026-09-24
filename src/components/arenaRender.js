@@ -271,6 +271,85 @@ function stepDrips(m, viscosity, dt, now) {
 
 // ── Drawing ──────────────────────────────────────────────────────────────────
 
+/**
+ * Silhouette props that scroll past during travel.
+ *
+ * `scroll` is a monotonically increasing distance in pixels, so props wrap
+ * around the canvas and the whole plane reads as moving right-to-left — which
+ * is what sells the party walking left-to-right without ever moving them off
+ * the screen.
+ */
+function drawScenery(ctx, zone, scroll) {
+  const t = ZONE_THEMES[zone] || ZONE_THEMES.forest;
+  const shape = SCENERY[zone] || SCENERY.forest;
+
+  // Two parallax bands: far ones are small, dim and slow; near ones large,
+  // darker and quick. Depth comes from the speed difference more than the size.
+  for (const [band, speed, depth, count, scale, alpha] of [
+    ['far', 0.35, 0.06, 7, 0.55, 0.30],
+    ['near', 1.0, 0.92, 5, 1.25, 0.55],
+  ]) {
+    for (let i = 0; i < count; i++) {
+      const spacing = CANVAS_W / count;
+      // Wrap with a per-band phase so the two layers never line up.
+      const x = ((i * spacing - scroll * speed) % (CANVAS_W + 120) + CANVAS_W + 120) % (CANVAS_W + 120) - 60;
+      const y = groundY(depth + (i % 3) * 0.02);
+      const h = 26 * scale * (0.8 + (i % 4) * 0.12);
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = band === 'far' ? t.far : t.sky;
+      shape(ctx, x, y, h);
+      ctx.globalAlpha = 1;
+    }
+  }
+}
+
+// Each zone's roadside silhouette. Deliberately crude — they read at a glance
+// and at this size anything more detailed is mud.
+const SCENERY = {
+  forest: (ctx, x, y, h) => {           // conifers
+    ctx.beginPath();
+    ctx.moveTo(x, y); ctx.lineTo(x + h * 0.32, y - h); ctx.lineTo(x + h * 0.64, y);
+    ctx.closePath(); ctx.fill();
+    ctx.fillRect(x + h * 0.27, y, h * 0.1, h * 0.18);
+  },
+  swamp: (ctx, x, y, h) => {            // drooping reeds
+    ctx.beginPath();
+    for (let k = 0; k < 3; k++) {
+      const bx = x + k * h * 0.22;
+      ctx.moveTo(bx, y);
+      ctx.quadraticCurveTo(bx + h * 0.18, y - h * 0.7, bx + h * 0.5, y - h * 0.55);
+      ctx.lineTo(bx + h * 0.1, y);
+    }
+    ctx.fill();
+  },
+  caves: (ctx, x, y, h) => {            // stalagmites
+    ctx.beginPath();
+    ctx.moveTo(x, y); ctx.lineTo(x + h * 0.2, y - h * 1.1); ctx.lineTo(x + h * 0.42, y);
+    ctx.closePath(); ctx.fill();
+  },
+  ruins: (ctx, x, y, h) => {            // broken pillars
+    ctx.fillRect(x, y - h, h * 0.3, h);
+    ctx.fillRect(x - h * 0.08, y - h - h * 0.12, h * 0.46, h * 0.14);
+  },
+  peaks: (ctx, x, y, h) => {            // jagged crags
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + h * 0.3, y - h * 1.2);
+    ctx.lineTo(x + h * 0.52, y - h * 0.55);
+    ctx.lineTo(x + h * 0.8, y - h * 1.0);
+    ctx.lineTo(x + h, y);
+    ctx.closePath(); ctx.fill();
+  },
+  volcano: (ctx, x, y, h) => {          // shattered slabs, tilted
+    ctx.save(); ctx.translate(x, y); ctx.rotate(-0.22);
+    ctx.fillRect(0, -h * 0.9, h * 0.26, h * 0.9);
+    ctx.restore();
+  },
+  road: (ctx, x, y, h) => {             // milestones
+    ctx.fillRect(x, y - h * 0.5, h * 0.22, h * 0.5);
+  },
+};
+
 function drawGround(ctx, zone, tick) {
   const t = ZONE_THEMES[zone] || ZONE_THEMES.forest;
 
@@ -487,9 +566,44 @@ function drawEnemy(ctx, c, m, now, opts = {}) {
  * `view` is { zone, slimes, enemies, focusId, marching, phase } and `motions`
  * is a persistent Map the caller owns so movement survives re-renders.
  */
+// How fast the world slides past during travel, in px/second of scroll.
+const TRAVEL_SPEED = 55;
+let travelScroll = 0;
+
+/** Short ground dashes rushing past, so the plane itself reads as moving. */
+function drawGroundStreaks(ctx, zone, scroll) {
+  ctx.strokeStyle = 'rgba(255,255,255,0.10)';
+  ctx.lineWidth = 2;
+  for (let i = 0; i < 14; i++) {
+    const d = 0.18 + (i % 7) * 0.12;
+    const y = groundY(d);
+    const span = CANVAS_W + 80;
+    const speed = 0.6 + d * 1.6;         // nearer streaks move faster
+    const x = ((i * 91 - scroll * speed) % span + span) % span - 40;
+    const len = 10 + d * 26;
+    ctx.globalAlpha = 0.25 + d * 0.35;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + len, y);
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+}
+
 export function drawFrame(ctx, view, motions, dt, now, tick) {
   ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
   drawGround(ctx, view?.zone, tick);
+
+  // Travel: the party is between fights. Rather than move the slimes off the
+  // canvas, the WORLD moves — scenery and ground streaks slide right to left —
+  // which reads as walking left-to-right and keeps everyone on screen.
+  if (view?.traveling) {
+    travelScroll += dt * TRAVEL_SPEED;
+    drawScenery(ctx, view.zone, travelScroll);
+    drawGroundStreaks(ctx, view.zone, travelScroll);
+  } else {
+    travelScroll = 0;
+  }
 
   if (!view) return;
 
@@ -534,6 +648,20 @@ export function drawFrame(ctx, view, motions, dt, now, tick) {
   (view.slimes || []).forEach((s, i) => {
     if (!motions.has(s.id)) motions.set(s.id, makeMotion(i, (view.slimes || []).length, 'slime'));
     const m = motions.get(s.id);
+
+    if (view.traveling && !s.dead) {
+      // A loose marching file, bobbing, with a little stagger so it does not
+      // read as a rigid formation.
+      const lane = 0.34 + (i % 4) * 0.12;
+      const tx = 0.30 + (i % 2) * 0.07 + Math.sin(now / 700 + i * 1.7) * 0.012;
+      m.x += (tx - m.x) * 2.2 * dt;
+      m.d += (lane - m.d) * 2.2 * dt;
+      m.hopPhase += dt * 6.5;
+      m.hop = Math.abs(Math.sin(m.hopPhase)) * 3.2;
+      m.bulk = sizeFromFirmness((s.stats || {}).firmness ?? 10);
+      stepDrips(m, (s.stats || {}).viscosity ?? 0, dt, now);
+      return;
+    }
     const stats = s.stats || { firmness: 10, slipperiness: 10, viscosity: 10 };
     m.bulk = sizeFromFirmness(stats.firmness);
     if (s.dead) {

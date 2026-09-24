@@ -15,6 +15,20 @@
 // obvious move and the wrong one: it would have pushed the peaks to 11 rounds
 // and a 56% win rate, breaking the part of the curve that already worked.
 //
+// A later pass raised early damage again (tier 1 x1.4, tier 2 x1.15, tier 6
+// x1.15 off those values): with travel recovery in place, a tier-1 party could
+// run seventeen fights and finish at FULL health, which is not a game. Measured
+// at each zone's recommendedStats, a party now ends 17 fights around 60-73% and
+// loses a slime roughly one run in three.
+//
+// Worth knowing before touching this: attrition here is BIMODAL, not a dial.
+// Losing a slime cuts party damage, which lengthens fights, which costs more
+// health — positive feedback with an absorbing barrier. Recovery slightly above
+// the cost of a fight pins the party at full health; slightly below it spirals
+// to a wipe. There is very little stable middle, so the risk that matters comes
+// from per-slime variance (a basic slime has ~30 HP and takes 8-damage hits),
+// not from a slow average bleed.
+//
 // Re-check with the sim described in docs/GAME_DESIGN.md §11.
 //
 // Zone 1: Basic slimes comfortable, ~45-120 HP, 6-12 dmg
@@ -206,7 +220,7 @@ export const MONSTER_TYPES = {
     desc: 'A scrappy young predator learning to hunt. Fast but fragile, it relies on sharp fangs to bring down prey.',
     tier: 1,
     hp: 100,
-    dmg: 4,
+    dmg: 6,
     biomass: 6,
     mats: ['Wolf Fang', 'Wolf Pelt'],
     trait: null,
@@ -222,7 +236,7 @@ export const MONSTER_TYPES = {
     desc: 'A carnivorous plant that evolved to trap slimes specifically. Its digestive juices are prized by alchemists.',
     tier: 1,
     hp: 124,
-    dmg: 3,
+    dmg: 4,
     biomass: 8,
     mats: ['Slimetrap Vine', 'Digestive Sac'],
     trait: null,
@@ -237,7 +251,7 @@ export const MONSTER_TYPES = {
     desc: 'A small living rock that tumbles through the forest floor. Its stony exterior makes it surprisingly tough.',
     tier: 1,
     hp: 124,
-    dmg: 3,
+    dmg: 4,
     biomass: 7,
     mats: ['Pebble Shard', 'Earthite', 'Iron Ore'],
     trait: null,
@@ -252,7 +266,7 @@ export const MONSTER_TYPES = {
     desc: 'An aggressive arachnid that weaves webs from living vines. Its bite is quick and its traps are sticky.',
     tier: 1,
     hp: 92,
-    dmg: 6,
+    dmg: 8,
     biomass: 5,
     mats: ['Spider Silk', 'Vine Weave'],
     trait: null,
@@ -268,7 +282,7 @@ export const MONSTER_TYPES = {
     desc: 'A rare magical creature that radiates life energy. Fragile but immensely valuable, its essence holds the secret to resurrection.',
     tier: 1,
     hp: 92,
-    dmg: 2,
+    dmg: 3,
     biomass: 15,
     mats: ['Fairy Dust', 'Life Essence'],
     trait: null,
@@ -286,7 +300,7 @@ export const MONSTER_TYPES = {
     desc: 'A vicious fish with razor-edged scales that can shred through slime membranes. Thrives in the murky swamp waters.',
     tier: 2,
     hp: 175,
-    dmg: 8,
+    dmg: 9,
     biomass: 8,
     mats: ['Serrated Scale', 'Carp Fin'],
     trait: null,
@@ -301,7 +315,7 @@ export const MONSTER_TYPES = {
     desc: 'A bizarre hybrid creature with a chitinous exoskeleton. Its crushing jaws can crack even the toughest slime shell.',
     tier: 2,
     hp: 221,
-    dmg: 6,
+    dmg: 7,
     biomass: 9,
     mats: ['Sea Lion Tusk', 'Chitin Shell', 'Turtle Shell'],
     trait: null,
@@ -316,7 +330,7 @@ export const MONSTER_TYPES = {
     desc: 'A giant mosquito-like insect that skates across swamp water. Its venomous proboscis injects a slow-acting toxin.',
     tier: 2,
     hp: 164,
-    dmg: 10,
+    dmg: 12,
     biomass: 7,
     mats: ['Strider Leg', 'Marsh Gas', 'Snake Scale'],
     trait: null,
@@ -332,7 +346,7 @@ export const MONSTER_TYPES = {
     desc: 'A flickering ball of spectral energy that lures prey deeper into the swamp. Elementally neutral but hits hard.',
     tier: 2,
     hp: 164,
-    dmg: 11,
+    dmg: 13,
     biomass: 8,
     mats: ['Wisp Essence', 'Mana Crystal'],
     trait: null,
@@ -347,7 +361,7 @@ export const MONSTER_TYPES = {
     desc: 'An ancient mollusk that has lived for centuries. Its shell is nearly impenetrable and it yields exceptional biomass.',
     tier: 2,
     hp: 221,
-    dmg: 4,
+    dmg: 5,
     biomass: 15,
     mats: ['Snail Shell', 'Ancient Stone'],
     trait: null,
@@ -604,7 +618,7 @@ export const MONSTER_TYPES = {
     desc: 'A writhing appendage reaching from the void between dimensions. Its touch ignores all physical defenses.',
     tier: 6,
     hp: 975,
-    dmg: 26,
+    dmg: 30,
     biomass: 70,
     mats: ['Void Fiber', 'Dark Matter'],
     trait: null,
@@ -620,7 +634,7 @@ export const MONSTER_TYPES = {
     desc: 'A floating eye from the deepest void. It sees all weaknesses and strikes with perfect accuracy.',
     tier: 6,
     hp: 910,
-    dmg: 30,
+    dmg: 34,
     biomass: 65,
     mats: ['Watcher Eye', 'Abyssal Fragment'],
     trait: null,
@@ -635,7 +649,7 @@ export const MONSTER_TYPES = {
     desc: 'An ancient construct built from void-infused stone. Immune to elemental damage and incredibly resilient.',
     tier: 6,
     hp: 1170,
-    dmg: 24,
+    dmg: 28,
     biomass: 75,
     mats: ['Null Core', 'Construct Piece'],
     trait: null,
@@ -650,7 +664,7 @@ export const MONSTER_TYPES = {
     desc: 'A fragment of broken reality given form. It phases in and out of existence, dealing devastating damage.',
     tier: 6,
     hp: 884,
-    dmg: 33,
+    dmg: 38,
     biomass: 62,
     mats: ['Reality Fragment', 'Dimension Tear'],
     trait: null,
@@ -665,7 +679,7 @@ export const MONSTER_TYPES = {
     desc: 'The guardian of the Void Abyss itself. An emptiness given form that consumes all it touches. The ultimate challenge.',
     tier: 6,
     hp: 1196,
-    dmg: 35,
+    dmg: 40,
     biomass: 120,
     mats: ['Hollow Core', 'Void Essence'],
     trait: null,

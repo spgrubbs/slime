@@ -92,9 +92,13 @@ const calculateOfflineProgress = (saved, bonuses, offlineCtx = {}) => {
 
   // Offline expeditions run the real resolver rather than a simplified copy of
   // it — mutations, traits and status effects all apply exactly as they do
-  // while you are watching. Progress is capped so a long absence cannot lock
-  // the tab up on load.
-  const MAX_OFFLINE_ROUNDS = 1500;
+  // while you are watching.
+  //
+  // The ceiling is a safety net, not the real limit: elapsed time is already
+  // capped at 24h above, and 24h is 54,000 rounds. The old 1,500 was set
+  // without measuring and quietly truncated an overnight session to 40 minutes
+  // of progress. Measured, a full 24h of forest costs ~430ms to simulate.
+  const MAX_OFFLINE_ROUNDS = 60000;
 
   Object.entries(exps || {}).forEach(([zone, savedExp]) => {
     if (!ZONES[zone]) return;
@@ -142,7 +146,7 @@ const calculateOfflineProgress = (saved, bonuses, offlineCtx = {}) => {
       });
 
       if (exp.phase === 'defeat') break;
-      if (exp.kills >= exp.targetKills) break;
+      if (exp.targetKills != null && exp.kills >= exp.targetKills) break;
     }
 
     if (exp.phase === 'defeat' || exp.slimes.every(c => c.dead)) {
@@ -206,7 +210,7 @@ const calculateOfflineProgress = (saved, bonuses, offlineCtx = {}) => {
 };
 
 // ============== MAIN GAME ==============
-export default function HiveQueenGame() {
+export default function SlimeQueen() {
   const [gameLoaded, setGameLoaded] = useState(false);
   const [welcomeBack, setWelcomeBack] = useState(null);
   
@@ -220,7 +224,7 @@ export default function HiveQueenGame() {
   const [builds, setBuilds] = useState({ forestTendril: 1 });
   const [research, setResearch] = useState([]);
   const [activeRes, setActiveRes] = useState(null);
-  const [logs, setLogs] = useState([{ t: new Date().toLocaleTimeString(), m: 'The Hive awakens...' }]);
+  const [logs, setLogs] = useState([{ t: new Date().toLocaleTimeString(), m: 'The nucleus stirs...' }]);
   const [speed, setSpeed] = useState(1);
   const [lastTick, setLastTick] = useState(Date.now());
   const [lastSave, setLastSave] = useState(null);
@@ -247,7 +251,7 @@ export default function HiveQueenGame() {
   // Format: { abilityId: expirationTimestamp, ... }
 
   const [tab, setTab] = useState('hive');
-  // The Brood screen holds both the roster and the pools the slimes rest in.
+  // The Spawn screen holds both the roster and the pools the slimes rest in.
   const [broodView, setBroodView] = useState('roster');
   const [menu, setMenu] = useState(false);
   const [dev, setDev] = useState(false);
@@ -271,8 +275,8 @@ export default function HiveQueenGame() {
   // the Queen and her hive, the slimes themselves, where slimes are sent,
   // the one timed event, the record, and the knobs.
   const tabs = [
-    { id: 'hive', icon: '👑', label: 'The Hive' },
-    { id: 'brood', icon: '🟢', label: 'The Brood', badge: slimes.length },
+    { id: 'hive', icon: '👑', label: 'The Nucleus' },
+    { id: 'brood', icon: '🟢', label: 'The Spawn', badge: slimes.length },
     { id: 'wilds', icon: '🗺️', label: 'The Wilds' },
     { id: 'road', icon: '🎯', label: 'The Road' },
     { id: 'memory', icon: '📖', label: 'Memory' },
@@ -703,7 +707,7 @@ export default function HiveQueenGame() {
    * A slime that goes down is wounded, not killed. It forfeits every point of
    * held biomass — the temporary half of its power — and cannot be deployed
    * again until it has recovered in a Convalescence Pool. It keeps its jelly
-   * slot the whole time, so a bad run clogs the hive's capacity.
+   * slot the whole time, so a bad run clogs the nucleus's capacity.
    */
   // Field Triage (skill) keeps the carried biomass; without it a wound spills
   // everything the slime was holding, which is the whole risk of carrying it.
@@ -854,6 +858,7 @@ export default function HiveQueenGame() {
     tendrilLevels: TENDRILS.reduce((n, t) => n + (builds[t.id] || 0), 0),
     woundedCount,
     mutagenKinds: Object.keys(mutagens).length,
+    mutationsUnlocked: skillEffects.passives.includes('mutagenesis'),
     maxHeldBiomass: slimes.reduce((n, sl) => Math.max(n, sl.biomass || 0), 0),
     maxElementAffinity: slimes.reduce(
       (n, sl) => Math.max(n, ...Object.values(sl.elements || { a: 0 })), 0),
@@ -1182,14 +1187,15 @@ export default function HiveQueenGame() {
     if (warden && !wardenUnlocked(zone, builds)) return;
 
     // A hunt is one fight. Everything else runs until you recall it.
-    const targetKills = warden ? 1 : Infinity;
+    // null = until recalled. Never Infinity: it does not survive a save.
+    const targetKills = warden ? 1 : null;
 
     const roster = party.map(id => slimes.find(s => s.id === id)).filter(Boolean);
     const exp = makeExpedition(zone, roster, targetKills, { ...combatContext(), warden });
 
     setExps(pr => ({ ...pr, [zone]: exp }));
     log(warden
-      ? `The hive provokes ${WARDENS[zone]?.name || 'the Warden'}!`
+      ? `The nucleus provokes ${WARDENS[zone]?.name || 'the Warden'}!`
       : `Party sent to ${ZONES[zone].name}!`);
     lastArenaTickRef.current = Date.now();
     setParty([]);
@@ -1269,7 +1275,9 @@ export default function HiveQueenGame() {
         setMonsterKills(prev => ({ ...prev, [monsterType]: (prev[monsterType] || 0) + count }));
 
         const md = MONSTER_TYPES[monsterType];
-        if (!md?.mutation) return;
+        // Same gate as the drop roll: no pity progress toward something the
+        // player has not unlocked yet.
+        if (!md?.mutation || !hasPassive('mutagenesis')) return;
         setPityKills(prev => {
           const total = (prev[monsterType] || 0) + count;
           const earned = Math.floor(total / MUTAGEN_PITY_KILLS);
@@ -1344,7 +1352,7 @@ export default function HiveQueenGame() {
     const b = BUILDINGS[id];
     const level = builds[id] || 0;
     if (!b || level <= 0) return;
-    if (b.category === 'tendril' && level <= 1) { log('The hive will not withdraw a tendril.'); return; }
+    if (b.category === 'tendril' && level <= 1) { log('The nucleus will not withdraw a tendril.'); return; }
 
     const cost = nextLevelCost(id, level - 1) || {};
     const biomassBack = Math.floor((cost.biomass || 0) * getBuildingDiscount());
@@ -1754,9 +1762,12 @@ export default function HiveQueenGame() {
     enemies: selExpedition.enemy ? [selExpedition.enemy] : [],
     focusId: selExpedition.enemy?.id,
     marching: false,
+    // Between fights the party is on the road; the arena scrolls the world past
+    // them rather than leaving them standing in an empty field.
+    traveling: selExpedition.phase === 'intermission',
   } : null;
   const expHud = selExpedition ? [
-    { text: `💀 ${selExpedition.kills}${selExpedition.targetKills !== Infinity ? `/${selExpedition.targetKills}` : ''}`, color: '#f59e0b' },
+    { text: `💀 ${selExpedition.kills}${selExpedition.targetKills != null ? `/${selExpedition.targetKills}` : ''}`, color: '#f59e0b' },
     { text: `Round ${selExpedition.round}`, color: '#94a3b8' },
     selExpedition.phase === 'intermission'
       ? { text: '🚶 Traveling', color: '#22d3ee' }
@@ -1807,7 +1818,7 @@ export default function HiveQueenGame() {
       <div style={{ fontFamily: 'system-ui', background: 'linear-gradient(135deg, #1a1a2e, #16213e)', minHeight: '100vh', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <div style={{ textAlign: 'center' }}>
           <div style={{ fontSize: 48, marginBottom: 20 }}>🟢</div>
-          <div>Loading Hive Queen...</div>
+          <div>Loading Slime Queen...</div>
         </div>
       </div>
     );
@@ -1823,10 +1834,10 @@ export default function HiveQueenGame() {
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'rgba(0,0,0,0.3)', padding: '4px 10px', borderRadius: 12, fontSize: 12 }}>🧬 <strong>{Math.floor(bio)}</strong></div>
           <div
-            title={`Royal Jelly is your population cap — ${slimes.length} slime(s) alive${woundedCount ? `, ${woundedCount} wounded and still holding a slot` : ''}. Raise it with Queen levels, the Slime Pit, and skills.`}
+            title={`Plasm is your population cap — ${slimes.length} slime(s) alive${woundedCount ? `, ${woundedCount} wounded and still holding a slot` : ''}. Raise it with Queen levels, the Slime Pit, and skills.`}
             style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'rgba(0,0,0,0.3)', padding: '4px 10px', borderRadius: 12, fontSize: 12 }}
           >
-            🍯 <strong>{freeJelly}/{maxJelly}</strong>
+            🫧 <strong>{freeJelly}/{maxJelly}</strong>
             {woundedCount > 0 && <span style={{ color: '#f87171', fontSize: 10 }}>🩹{woundedCount}</span>}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'rgba(0,0,0,0.3)', padding: '4px 10px', borderRadius: 12, fontSize: 12 }}>🔮 <strong>{mana}</strong></div>
@@ -1848,7 +1859,7 @@ export default function HiveQueenGame() {
               <div style={{ display: 'flex', alignItems: 'center', gap: 20, marginBottom: 15 }}>
                 <SlimeSprite tier="royal" size={80} isQueen />
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 18, fontWeight: 'bold' }}>The Hive Queen</div>
+                  <div style={{ fontSize: 18, fontWeight: 'bold' }}>The Slime Queen</div>
                   <div style={{ fontSize: 14, opacity: 0.7, marginBottom: 10 }}>Level {queen.level}</div>
                   <button
                     onClick={levelUpQueen}
@@ -1888,7 +1899,7 @@ export default function HiveQueenGame() {
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <span style={{ fontSize: 16, fontWeight: 'bold' }}>🔮 Mana & Abilities</span>
+                  <span style={{ fontSize: 16, fontWeight: 'bold' }}>🔮 Pheromones</span>
                   <span style={{ background: 'rgba(0,0,0,0.3)', padding: '4px 10px', borderRadius: 6, fontSize: 14, fontWeight: 'bold' }}>
                     {mana}
                   </span>
@@ -2144,7 +2155,7 @@ export default function HiveQueenGame() {
             </div>
           ) : (
             <div>
-              {/* The Brood is every slime you have: the ones on their feet and the ones mending. */}
+              {/* The Spawn is every slime you have: the ones on their feet and the ones mending. */}
               <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
                 {[
                   { id: 'roster', icon: '🟢', label: 'Roster', badge: slimes.length },
@@ -2199,7 +2210,7 @@ export default function HiveQueenGame() {
               <div style={{ textAlign: 'center', padding: 40 }}>
                 <div style={{ fontSize: 48, marginBottom: 15 }}>🏠</div>
                 <div style={{ fontSize: 16, fontWeight: 'bold', marginBottom: 10 }}>Slime Ranch</div>
-                <div style={{ opacity: 0.7, marginBottom: 15 }}>🔒 Unlock via Skill Tree (Hive Growth → Cultivation Pools)</div>
+                <div style={{ opacity: 0.7, marginBottom: 15 }}>🔒 Unlock via Skill Tree (Deep Culture → Cultivation Pools)</div>
               </div>
             ))}
 
@@ -2319,7 +2330,15 @@ export default function HiveQueenGame() {
                       {zoneElement.icon}
                     </div>
                   )}
-                  {!ok && <div style={{ fontSize: 9, color: '#f59e0b' }}>🔒 Skills</div>}
+                  {!ok && (
+                    <div style={{ fontSize: 9, color: '#f59e0b' }} title={
+                      prerequisiteZone(k)
+                        ? `Fell ${WARDENS[prerequisiteZone(k)].name} for its ${WARDENS[prerequisiteZone(k)].seal}, then grow the ${BUILDINGS[tendrilFor(k)].name}`
+                        : 'Grow this zone\'s Tendril'
+                    }>
+                      🔒 {prerequisiteZone(k) ? WARDENS[prerequisiteZone(k)].seal : 'Tendril'}
+                    </div>
+                  )}
                   {has && <div style={{ fontSize: 9, color: '#4ade80' }}>⚔️ {has.kills}</div>}
                 </button>;
               })}
@@ -2333,33 +2352,6 @@ export default function HiveQueenGame() {
               verboseLogs={verboseLogs}
               setVerboseLogs={setVerboseLogs}
             />
-            {/* Sensory Tendrils: what actually lives here, and how hard it hits. */}
-            {hasPassive('scoutingParty') && !exps[selZone] && (
-              <div style={{ marginTop: 12, background: 'rgba(34,211,238,0.08)', border: '1px solid rgba(34,211,238,0.25)', borderRadius: 10, padding: 10 }}>
-                <div style={{ fontSize: 12, fontWeight: 'bold', color: '#22d3ee', marginBottom: 6 }}>
-                  👁️ Sensory Tendrils
-                  <span style={{ fontWeight: 'normal', opacity: 0.65, marginLeft: 6 }}>
-                    expects ~{ZONES[selZone].recommendedStats} in each stat
-                  </span>
-                </div>
-                <div style={{ display: 'grid', gap: 4 }}>
-                  {ZONES[selZone].monsters.map(mid => {
-                    const m = MONSTER_TYPES[mid];
-                    if (!m) return null;
-                    return (
-                      <div key={mid} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11 }}>
-                        <span>{m.icon}</span>
-                        <span style={{ flex: 1, opacity: m.rare ? 1 : 0.85, color: m.rare ? '#fbbf24' : undefined }}>
-                          {m.name}{m.rare && ' ✦'}
-                        </span>
-                        <span style={{ opacity: 0.7 }}>❤️ {m.hp}</span>
-                        <span style={{ opacity: 0.7 }}>⚔️ {m.dmg}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
             {exps[selZone] ? (
               <button onClick={() => stopExp(selZone)} style={{ width: '100%', marginTop: 15, padding: 12, background: 'linear-gradient(135deg, #ef4444, #f59e0b)', border: 'none', borderRadius: 8, color: '#fff', fontWeight: 'bold', cursor: 'pointer' }}>🛑 Recall</button>
             ) : (
@@ -2449,6 +2441,7 @@ export default function HiveQueenGame() {
             monsterKills={monsterKills}
             mutagens={mutagens}
             wardenKills={wardenKills}
+            mutationsUnlocked={hasPassive('mutagenesis')}
             seenTutorials={seenTutorials}
           />
         )}

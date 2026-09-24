@@ -1,4 +1,4 @@
-# Playtesting Hive Queen on Android
+# Playtesting Slime Queen on Android
 
 Two ways to get it on a phone. The PWA takes thirty seconds and needs nothing
 installed; the APK is a real Android app you sideload.
@@ -14,7 +14,7 @@ with no browser chrome and works with no connection.
 1. Open the Vercel URL in **Chrome on Android**.
 2. Tap the **⋮** menu → **Add to Home screen** (Chrome may also show an
    "Install app" prompt on its own).
-3. Confirm. It appears in the launcher as **Hive Queen** with its own icon.
+3. Confirm. It appears in the launcher as **Slime Queen** with its own icon.
 
 It runs fullscreen, portrait-locked, keeps its own storage, and survives going
 offline. This is genuinely how a player would hold it.

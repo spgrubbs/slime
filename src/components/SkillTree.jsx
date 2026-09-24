@@ -2,9 +2,9 @@ import React, { useState, useMemo } from 'react';
 import { SKILL_TREES, canPurchaseSkill, getSkillEffects, SKILL_POINTS_PER_LEVEL } from '../data/skillTreeData.js';
 
 // The bonuses that survive in the tree are all capacities, so they read as
-// counts rather than percentages — "+15 Royal Jelly", not "+15% maxJelly".
+// counts rather than percentages — "+15 Plasm", not "+15% maxJelly".
 const CAPACITY_LABELS = {
-  maxJelly: 'Royal Jelly',
+  maxJelly: 'Plasm',
   ranchSlots: 'Pool slots',
   mutationSlots: 'Mutation slots',
   defenseSlots: 'Ambush slots',

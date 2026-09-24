@@ -1,7 +1,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Stat derivation — the single source of truth
 //
-// Previously duplicated between HiveQueenV4.getSlimeStats and
+// Previously duplicated between SlimeQueen.getSlimeStats and
 // arenaCombat.calcSlimeStats, which had already drifted apart. Both now call
 // through here.
 // ─────────────────────────────────────────────────────────────────────────────

@@ -180,3 +180,48 @@ test('a dehydrated expedition contains no functions', () => {
   };
   walk(saved);
 });
+
+// ── Persistence hazards ──────────────────────────────────────────────────────
+
+test('an expedition with no kill target survives JSON and keeps running', () => {
+  // The bug this exists for: targetKills used to be Infinity for the ordinary
+  // "run until recalled" case. JSON.stringify(Infinity) is null, and
+  // `kills >= null` coerces to `kills >= 0` — true immediately. So the first
+  // kill after any save recalled the party, and an overnight expedition came
+  // back having done nothing.
+  const party = roster();
+  const exp = makeExpedition('forest', party, null, ctx());
+  for (let i = 0; i < 30; i++) tickExpedition(exp, ROUND_MS, ctx(8), 'forest');
+
+  const saved = JSON.parse(JSON.stringify(dehydrateExpedition(exp)));
+  assert.equal(saved.targetKills, null, 'no target survives as null, not undefined');
+
+  const back = hydrateExpedition(saved, party);
+  const killsAtLoad = back.kills;
+
+  let completed = false;
+  for (let i = 0; i < 400; i++) {
+    const { sideEffects } = tickExpedition(back, ROUND_MS, ctx(8), 'forest');
+    if (sideEffects.some(se => se.type === 'expComplete')) completed = true;
+    if (back.phase === 'defeat') break;
+  }
+  assert.equal(completed, false, 'an untargeted expedition never completes on its own');
+  assert.ok(back.kills > killsAtLoad, 'it kept killing things after the reload');
+});
+
+test('Infinity passed as a target is normalised away', () => {
+  const exp = makeExpedition('forest', roster(), Infinity, ctx());
+  assert.equal(exp.targetKills, null);
+});
+
+test('a warden hunt still ends on its one kill after a reload', () => {
+  const party = roster();
+  const exp = makeExpedition('forest', party, 1,
+    { ...ctx(), warden: { zone: 'forest', plus: false } });
+  const back = hydrateExpedition(JSON.parse(JSON.stringify(dehydrateExpedition(exp))), party);
+  assert.equal(back.targetKills, 1, 'a real target is preserved');
+  assert.equal(back.enemy.isWarden, true);
+  // The mechanic has to come back too, or the rule stops applying mid-hunt.
+  assert.ok(back.enemy.effects.length > 0, 'the warden mechanic was rebuilt');
+  assert.equal(back.enemy.effects[0].source, 'warden');
+});

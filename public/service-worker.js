@@ -1,4 +1,4 @@
-// Offline shell for Hive Queen.
+// Offline shell for Slime Queen.
 //
 // The game is entirely client-side — all state lives in localStorage — so
 // caching the build output is enough to make it work with no connection at all.
@@ -9,7 +9,7 @@
 // instead cache-on-first-use and serve cache-first for same-origin assets, with
 // the navigation request falling back to the cached shell when offline.
 
-const CACHE = 'hive-queen-v1';
+const CACHE = 'slime-queen-v1';
 const SHELL = './index.html';
 
 self.addEventListener('install', (event) => {

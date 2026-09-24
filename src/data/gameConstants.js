@@ -8,14 +8,14 @@ export const TICK_RATE = 100;
 export const BASE_SLIME_COST = 10;       // Base jelly cost for spawning
 export const TRAIT_JELLY_COST = 5;       // Increased from 3 - traits are valuable
 
-// Royal Jelly capacity
+// Plasm capacity — the population cap
 export const BASE_JELLY = 30;            // Reduced from 50 - start with fewer slimes
 export const JELLY_PER_QUEEN_LEVEL = 5;  // Reduced from 10 - slower scaling
 
 
 // Save settings
 export const AUTO_SAVE_INTERVAL = 30000; // 30 seconds
-export const SAVE_KEY = 'hive_queen_save_v4'; // v4: turn-based rounds, combatant-shaped expeditions
+export const SAVE_KEY = 'slime_queen_save_v5'; // v5: Slime Queen rename, plasm replaces royal jelly
 
 // Caravan ambush — one opportunity per real-world day
 export const CARAVAN_COOLDOWN = 24 * 60 * 60 * 1000;

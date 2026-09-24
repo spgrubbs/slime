@@ -13,7 +13,8 @@ import { MONSTER_TYPES } from '../data/monsterData.js';
 import {
   ZONES, INTERMISSION_EVENTS, EXPLORATION_EVENTS, INTERMISSION_DURATION,
 } from '../data/zoneData.js';
-import { wardenTypeId } from '../data/wardenData.js';
+import { wardenTypeId, WARDEN_TYPES } from '../data/wardenData.js';
+import { WARDEN_MECHANICS } from './wardenMechanics.js';
 import { ROUND_MS, BEAT_MS, TRAVEL_REGEN } from '../data/gameConstants.js';
 import { runHooks } from './hooks.js';
 import {
@@ -42,7 +43,20 @@ export function spawnEnemy(zone, rareSpawnMult = 1, rng = Math.random) {
 
 // ── Expedition state ─────────────────────────────────────────────────────────
 
-export function makeExpedition(zone, slimes, targetKills, ctx = {}) {
+/**
+ * `targetKills` is a NUMBER or `null`, never Infinity.
+ *
+ * It used to be Infinity for the ordinary "run until recalled" case, and that
+ * silently ended every expedition: JSON.stringify(Infinity) is `null`, and
+ * `kills >= null` coerces to `kills >= 0`, which is true immediately. So the
+ * first kill after any save/reload fired expComplete and recalled the party —
+ * offline progress looked like it had done nothing at all, because the run
+ * ended one tick in.
+ */
+export function makeExpedition(zone, slimes, targetKills = null, ctx = {}) {
+  // Normalise here so nothing downstream has to know about the old sentinel.
+  targetKills = Number.isFinite(targetKills) ? targetKills : null;
+
   const rng = ctx.rng || Math.random;
   const zd = ZONES[zone];
 
@@ -56,10 +70,10 @@ export function makeExpedition(zone, slimes, targetKills, ctx = {}) {
     : spawnEnemy(zone, ctx.combatBonuses?.rareSpawn, rng);
 
   const logs = warden
-    ? [{ m: `The hive provokes ${zd.name}...`, c: '#f59e0b',
+    ? [{ m: `The nucleus provokes ${zd.name}...`, c: '#f59e0b',
          v: `Warden hunt · ${slimes.length} slimes deployed` }]
     : [{ m: `Entering ${zd.name}...`, c: '#22d3ee',
-         v: `target ${targetKills === Infinity ? '∞' : targetKills} kills · ${slimes.length} slimes deployed` }];
+         v: `target ${targetKills ?? '∞'} kills · ${slimes.length} slimes deployed` }];
   if (enemy) logs.push({
     m: warden ? `${enemy.name} rises to meet them!` : `A ${enemy.name} appears!`,
     c: warden ? '#f59e0b' : '#22d3ee',
@@ -367,7 +381,7 @@ export function tickExpedition(exp, dt, ctx = {}, zone) {
       : null;
     exp.enemy = null;
 
-    if (exp.kills >= exp.targetKills) {
+    if (exp.targetKills != null && exp.kills >= exp.targetKills) {
       log({ m: 'Target reached! Recalling party...', c: '#4ade80',
             v: `${exp.kills}/${exp.targetKills} kills` });
       sideEffects.push({ type: 'expComplete' });
@@ -438,7 +452,18 @@ export function hydrateExpedition(exp, slimes = []) {
       };
     }),
     enemy: exp.enemy
-      ? { ...exp.enemy, ref: MONSTER_TYPES[exp.enemy.type] || null, effects: [], status: exp.enemy.status || [], flags: exp.enemy.flags || {} }
+      ? {
+          ...exp.enemy,
+          ref: MONSTER_TYPES[exp.enemy.type] || WARDEN_TYPES[exp.enemy.type] || null,
+          // A Warden carries its mechanic as an effect; rebuild it or the rule
+          // silently stops applying for the rest of a reloaded hunt.
+          effects: WARDEN_TYPES[exp.enemy.type]?.mechanic
+            ? [{ source: 'warden', id: WARDEN_TYPES[exp.enemy.type].mechanic,
+                 def: WARDEN_MECHANICS[WARDEN_TYPES[exp.enemy.type].mechanic] || {} }]
+            : [],
+          status: exp.enemy.status || [],
+          flags: exp.enemy.flags || {},
+        }
       : null,
   };
 }
