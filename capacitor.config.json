@@ -1,0 +1,12 @@
+{
+  "appId": "com.spgrubbs.hivequeen",
+  "appName": "Slime Queen",
+  "webDir": "build",
+  "android": {
+    "allowMixedContent": false,
+    "backgroundColor": "#1a1a2eff"
+  },
+  "server": {
+    "androidScheme": "https"
+  }
+}

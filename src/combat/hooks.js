@@ -82,6 +82,23 @@ export function effectChance(def, viscosity = 0, mult = 1, cap = 0.95) {
  * Every effect a combatant carries, paired with its computed power.
  * Returns [{ effect, def, power, chance }] for the requested hook.
  */
+// ── Affinity ─────────────────────────────────────────────────────────────────
+//
+// A handful of mutations are elemental in nature and grow stronger in a slime
+// steeped in their element: Pyrolyze burns hotter in a fire slime, Permafrost
+// bites harder in a water one. The bonus is linear in that element's affinity
+// and tops out at +AFFINITY_SCALE when the element has locked in.
+//
+// Read off the slime (`ref`), not the combatant, so it reflects affinity already
+// banked — not what the current expedition has gathered and not yet brought home.
+export const AFFINITY_SCALE = 0.6;
+
+export function affinityMult(def, slime) {
+  if (!def?.affinity) return 1;
+  const aff = Math.max(0, Math.min(100, slime?.elements?.[def.affinity] || 0));
+  return 1 + AFFINITY_SCALE * (aff / 100);
+}
+
 export function collectHooks(combatant, hook, mutationPower = 1) {
   const out = [];
   const visc = combatant?.stats?.viscosity || 0;
@@ -89,8 +106,11 @@ export function collectHooks(combatant, hook, mutationPower = 1) {
   for (const { source, id, def } of (combatant?.effects || [])) {
     const effect = getEffect(source, id);
     if (!effect?.hooks?.[hook]) continue;
-    // Traits are flat by design; only mutation magnitudes scale with skills.
-    const mult = source === 'mutation' ? mutationPower : 1;
+    // Traits are flat by design; only mutation magnitudes scale with skills,
+    // and with the slime's affinity for the mutation's element.
+    const mult = source === 'mutation'
+      ? mutationPower * affinityMult(def, combatant?.ref)
+      : 1;
     out.push({
       effect,
       def,

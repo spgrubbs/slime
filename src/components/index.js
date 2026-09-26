@@ -1,8 +1,9 @@
 // UI Component exports
 export { default as SlimeSprite } from './SlimeSprite.jsx';
 export { default as MonsterSprite } from './MonsterSprite.jsx';
-export { default as ArenaCanvas } from './ArenaCanvas.jsx';
-export { default as TowerDefense } from './TowerDefense.jsx';
+export { default as CombatView } from './CombatView.jsx';
+export { default as Caravan } from './Caravan.jsx';
+export { default as TutorialModal } from './TutorialModal.jsx';
 export { default as SlimeForge } from './SlimeForge.jsx';
 export { default as SlimeDetail } from './SlimeDetail.jsx';
 export { default as Compendium } from './Compendium.jsx';

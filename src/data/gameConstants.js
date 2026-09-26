@@ -8,18 +8,17 @@ export const TICK_RATE = 100;
 export const BASE_SLIME_COST = 10;       // Base jelly cost for spawning
 export const TRAIT_JELLY_COST = 5;       // Increased from 3 - traits are valuable
 
-// Royal Jelly capacity
+// Plasm capacity — the population cap
 export const BASE_JELLY = 30;            // Reduced from 50 - start with fewer slimes
 export const JELLY_PER_QUEEN_LEVEL = 5;  // Reduced from 10 - slower scaling
 
 
 // Save settings
 export const AUTO_SAVE_INTERVAL = 30000; // 30 seconds
-export const SAVE_KEY = 'hive_queen_save_v4'; // v4: turn-based rounds, combatant-shaped expeditions
+export const SAVE_KEY = 'slime_queen_save_v5'; // v5: Slime Queen rename, plasm replaces royal jelly
 
-// Tower Defense timing
-export const TOWER_DEFENSE_COOLDOWN = 24 * 60 * 60 * 1000; // 24 hours real-time
-export const TD_TICK_SPEED = 100;        // Fast for active gameplay
+// Caravan ambush — one opportunity per real-world day
+export const CARAVAN_COOLDOWN = 24 * 60 * 60 * 1000;
 
 // Research timing uses real seconds (not game ticks)
 // This ensures research takes actual real-world time
@@ -76,3 +75,13 @@ export const ARENA_H = 120;
 export const ARENA_SLIME_X = 46;     // resting x for the slime line
 export const ARENA_ENEMY_X = 156;    // resting x for the enemy
 export const ARENA_LUNGE = 26;       // world units an attacker lunges forward
+
+/**
+ * Fraction of max HP each slime recovers during one travel leg.
+ *
+ * This is the dial that decides how long an expedition lasts. A party survives
+ * exactly as long as it out-heals what a fight costs it, so an at-level zone
+ * (which costs less than this per fight) runs indefinitely, and an over-level
+ * one bleeds down at the difference. Tuned in docs/GAME_DESIGN.md §11.
+ */
+export const TRAVEL_REGEN = 0.28;

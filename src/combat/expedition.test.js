@@ -31,15 +31,28 @@ const roster = (n = 3, over = {}) =>
 
 const ctx = (seed = 1) => ({ rng: seeded(seed), roundMs: ROUND_MS });
 
-/** Run an expedition to completion (or the step cap) and collect side effects. */
+/**
+ * Run an expedition to completion (or the step cap), collecting side effects.
+ * `exp.logs` is capped, so anything asserting on log contents has to watch the
+ * whole run rather than reading the tail afterwards — `allLogs` is that record.
+ */
 function runToEnd(exp, zone, c, maxSteps = 4000) {
   const all = [];
+  const allLogs = [];
+  let seen = 0;
   for (let i = 0; i < maxSteps; i++) {
     if (exp.phase === 'defeat') break;
+    const before = exp.logs.length;
     const { sideEffects } = tickExpedition(exp, ROUND_MS, c, zone);
+    // The buffer may have rotated; take whatever is new at the tail.
+    const grew = exp.logs.length - before;
+    if (grew > 0) allLogs.push(...exp.logs.slice(-grew));
+    else if (exp.logs.length === 80) allLogs.push(...exp.logs.slice(-1));
+    seen = exp.logs.length;
     all.push(...sideEffects);
     if (sideEffects.some(se => se.type === 'expComplete' || se.type === 'expWipe')) break;
   }
+  all.logs = allLogs;
   return all;
 }
 
@@ -79,29 +92,30 @@ test('materials ride home on the expedition rather than banking immediately', ()
 
 test('intermission events fire between encounters', () => {
   const exp = makeExpedition('swamp', roster(), 12, ctx());
-  runToEnd(exp, 'swamp', ctx(11));
-  const travelLogs = exp.logs.filter(l => l.v?.startsWith('travel event'));
+  const run = runToEnd(exp, 'swamp', ctx(11));
+  const travelLogs = run.logs.filter(l => l.v?.startsWith('travel event'));
   assert.ok(travelLogs.length > 0, 'no intermission events fired');
 });
 
 test('exploration events fire during travel', () => {
   // Rare (15% per intermission), so run a long expedition.
   const exp = makeExpedition('forest', roster(), 60, ctx());
-  runToEnd(exp, 'forest', ctx(21));
-  const explore = exp.logs.filter(l => l.v?.startsWith('exploration'));
+  const run = runToEnd(exp, 'forest', ctx(21));
+  const explore = run.logs.filter(l => l.v?.startsWith('exploration'));
   assert.ok(explore.length > 0, 'no exploration events fired across 60 kills');
 });
 
 test('slimes accrue elemental affinity in an elemental zone', () => {
-  const exp = makeExpedition('forest', roster(), 15, ctx()); // nature zone
-  runToEnd(exp, 'forest', ctx(4));
+  const learned = (seed) => ({ ...ctx(seed), passives: ['affinity'] });
+  const exp = makeExpedition('forest', roster(), 15, learned(1)); // nature zone
+  runToEnd(exp, 'forest', learned(4));
   assert.ok(exp.slimes.some(c => (c.elementGains.nature || 0) > 0));
 });
 
 test('every battle log entry carries a verbose derivation', () => {
   const exp = makeExpedition('caves', roster(), 8, ctx());
-  runToEnd(exp, 'caves', ctx(7));
-  const missing = exp.logs.filter(l => !l.v);
+  const run = runToEnd(exp, 'caves', ctx(7));
+  const missing = run.logs.filter(l => !l.v);
   assert.deepEqual(missing.map(l => l.m), [], 'log entries without a trace');
 });
 
@@ -132,10 +146,16 @@ test('an expedition survives a save/load round trip', () => {
   assert.equal(restored.slimes[0].ref.id, party[0].id, 'ref was rebuilt');
   assert.equal(restored.enemy ? restored.enemy.ref !== null : true, true);
 
-  // And it keeps running.
+  // And it keeps running. Ticks only advance the round counter while a fight is
+  // actually on, so walk out of any travel phase first rather than assuming a
+  // particular fight length — that assumption broke the moment monster HP moved.
   const before = restored.round;
-  tickExpedition(restored, ROUND_MS, ctx(8), 'forest');
-  assert.ok(restored.round > before);
+  let ticks = 0;
+  while (restored.round === before && ticks < 40) {
+    tickExpedition(restored, ROUND_MS, ctx(8), 'forest');
+    ticks++;
+  }
+  assert.ok(restored.round > before, `round advanced within ${ticks} ticks`);
 });
 
 test('a restored expedition drops combatants whose slime is gone', () => {
@@ -160,4 +180,49 @@ test('a dehydrated expedition contains no functions', () => {
     }
   };
   walk(saved);
+});
+
+// ── Persistence hazards ──────────────────────────────────────────────────────
+
+test('an expedition with no kill target survives JSON and keeps running', () => {
+  // The bug this exists for: targetKills used to be Infinity for the ordinary
+  // "run until recalled" case. JSON.stringify(Infinity) is null, and
+  // `kills >= null` coerces to `kills >= 0` — true immediately. So the first
+  // kill after any save recalled the party, and an overnight expedition came
+  // back having done nothing.
+  const party = roster();
+  const exp = makeExpedition('forest', party, null, ctx());
+  for (let i = 0; i < 30; i++) tickExpedition(exp, ROUND_MS, ctx(8), 'forest');
+
+  const saved = JSON.parse(JSON.stringify(dehydrateExpedition(exp)));
+  assert.equal(saved.targetKills, null, 'no target survives as null, not undefined');
+
+  const back = hydrateExpedition(saved, party);
+  const killsAtLoad = back.kills;
+
+  let completed = false;
+  for (let i = 0; i < 400; i++) {
+    const { sideEffects } = tickExpedition(back, ROUND_MS, ctx(8), 'forest');
+    if (sideEffects.some(se => se.type === 'expComplete')) completed = true;
+    if (back.phase === 'defeat') break;
+  }
+  assert.equal(completed, false, 'an untargeted expedition never completes on its own');
+  assert.ok(back.kills > killsAtLoad, 'it kept killing things after the reload');
+});
+
+test('Infinity passed as a target is normalised away', () => {
+  const exp = makeExpedition('forest', roster(), Infinity, ctx());
+  assert.equal(exp.targetKills, null);
+});
+
+test('a warden hunt still ends on its one kill after a reload', () => {
+  const party = roster();
+  const exp = makeExpedition('forest', party, 1,
+    { ...ctx(), warden: { zone: 'forest', plus: false } });
+  const back = hydrateExpedition(JSON.parse(JSON.stringify(dehydrateExpedition(exp))), party);
+  assert.equal(back.targetKills, 1, 'a real target is preserved');
+  assert.equal(back.enemy.isWarden, true);
+  // The mechanic has to come back too, or the rule stops applying mid-hunt.
+  assert.ok(back.enemy.effects.length > 0, 'the warden mechanic was rebuilt');
+  assert.equal(back.enemy.effects[0].source, 'warden');
 });

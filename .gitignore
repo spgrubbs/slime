@@ -26,3 +26,12 @@ yarn-error.log*
 # OS
 .DS_Store
 Thumbs.db
+
+# Android build output (the project itself IS committed — only artefacts are not)
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/.idea/
+*.apk
+*.aab

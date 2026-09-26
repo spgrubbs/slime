@@ -1,7 +1,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Stat derivation — the single source of truth
 //
-// Previously duplicated between HiveQueenV4.getSlimeStats and
+// Previously duplicated between SlimeQueen.getSlimeStats and
 // arenaCombat.calcSlimeStats, which had already drifted apart. Both now call
 // through here.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -61,7 +61,8 @@ export function computeStats(slime, pendingBiomass = 0, combatBonuses = {}, muta
   if (!slime) return { firmness: 0, slipperiness: 0, viscosity: 0 };
 
   const stats = baseStatsOf(slime, pendingBiomass);
-  const carrier = { stats: { ...stats }, effects: buildEffectList(slime) };
+  // `ref` so affinity-scaled statMods (Stoneskin) see the slime's element.
+  const carrier = { stats: { ...stats }, effects: buildEffectList(slime), ref: slime };
 
   runHooks(carrier, 'statMod', { stats, slime }, mutationPower);
 

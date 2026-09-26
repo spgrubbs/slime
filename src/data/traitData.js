@@ -15,12 +15,12 @@ export const MUTATION_LIBRARY = {
     baseChance: 10,
     viscScale: 0.25,
     color: '#94a3b8',
-    requiredKills: 100,
     monster: 'youngWolf',
     elementBonus: null,
   },
   digest: {
     name: 'Digest',
+    affinity: 'nature',          // scales with nature affinity
     icon: '🌱',
     stat: 'viscosity',
     bonus: 2,
@@ -29,12 +29,12 @@ export const MUTATION_LIBRARY = {
     baseValue: 5,
     viscScale: 0.5,
     color: '#22c55e',
-    requiredKills: 100,
     monster: 'venusSlimetrap',
     elementBonus: { nature: 5 },
   },
   stoneskin: {
     name: 'Stoneskin',
+    affinity: 'earth',          // scales with earth affinity
     icon: '🪨',
     stat: 'firmness',
     bonus: 2,
@@ -43,12 +43,12 @@ export const MUTATION_LIBRARY = {
     baseValue: 5,
     viscScale: 0.1,
     color: '#a16207',
-    requiredKills: 100,
     monster: 'pebblet',
     elementBonus: { earth: 5 },
   },
   vinewebs: {
     name: 'Vinewebs',
+    affinity: 'nature',          // scales with nature affinity
     icon: '🕸️',
     stat: 'slipperiness',
     bonus: 2,
@@ -57,7 +57,6 @@ export const MUTATION_LIBRARY = {
     baseChance: 10,
     viscScale: 0.25,
     color: '#65a30d',
-    requiredKills: 100,
     monster: 'vineSpider',
     elementBonus: { nature: 3 },
   },
@@ -71,7 +70,6 @@ export const MUTATION_LIBRARY = {
     baseValue: 1,
     viscScale: 2,
     color: '#4ade80',
-    requiredKills: 200, // Rare monster
     monster: 'lifeFairy',
     elementBonus: { nature: 8 },
   },
@@ -87,12 +85,12 @@ export const MUTATION_LIBRARY = {
     baseChance: 10,
     viscScale: 0.4,
     color: '#ef4444',
-    requiredKills: 100,
     monster: 'serratedCarp',
     elementBonus: { water: 3 },
   },
   whirlpool: {
     name: 'Whirlpool',
+    affinity: 'water',          // scales with water affinity
     icon: '🌀',
     stat: 'viscosity',
     bonus: 3,
@@ -101,7 +99,6 @@ export const MUTATION_LIBRARY = {
     baseValue: 5,
     viscScale: 0.3,
     color: '#3b82f6',
-    requiredKills: 100,
     monster: 'antSeaLion',
     elementBonus: { water: 5 },
   },
@@ -115,7 +112,6 @@ export const MUTATION_LIBRARY = {
     baseChance: 25,
     viscScale: 0.4,
     color: '#06b6d4',
-    requiredKills: 100,
     monster: 'swampStrider',
     elementBonus: { water: 3 },
   },
@@ -129,7 +125,6 @@ export const MUTATION_LIBRARY = {
     baseChance: 10,
     viscScale: 0.5,
     color: '#8b5cf6',
-    requiredKills: 100,
     monster: 'wilOWisp',
     elementBonus: { fire: 3 },
   },
@@ -143,7 +138,6 @@ export const MUTATION_LIBRARY = {
     baseChance: 1,
     viscScale: 0.15,
     color: '#fbbf24',
-    requiredKills: 300, // Rare
     monster: 'theSnail',
     elementBonus: null,
   },
@@ -159,7 +153,6 @@ export const MUTATION_LIBRARY = {
     baseChance: 10,
     viscScale: 0.2,
     color: '#dc2626',
-    requiredKills: 100,
     monster: 'vampireBat',
     elementBonus: null,
   },
@@ -173,7 +166,6 @@ export const MUTATION_LIBRARY = {
     baseChance: 25,
     viscScale: 0.5,
     color: '#a16207',
-    requiredKills: 100,
     monster: 'rockWorm',
     elementBonus: { earth: 5 },
   },
@@ -187,7 +179,6 @@ export const MUTATION_LIBRARY = {
     baseChance: 10,
     viscScale: 0.25,
     color: '#fcd34d',
-    requiredKills: 100,
     monster: 'coalSprite',
     elementBonus: { earth: 3 },
   },
@@ -201,7 +192,6 @@ export const MUTATION_LIBRARY = {
     baseValue: 10,
     viscScale: 0.5,
     color: '#6b7280',
-    requiredKills: 100,
     monster: 'stalagMite',
     elementBonus: { earth: 5 },
   },
@@ -215,7 +205,6 @@ export const MUTATION_LIBRARY = {
     baseValue: 25,
     viscScale: 0.2,
     color: '#3b82f6',
-    requiredKills: 300, // Rare
     monster: 'sapphireNewt',
     elementBonus: { water: 8 },
   },
@@ -231,7 +220,6 @@ export const MUTATION_LIBRARY = {
     baseValue: 2,
     viscScale: 0.3,
     color: '#22c55e',
-    requiredKills: 100,
     monster: 'embermander',
     elementBonus: { fire: 5 },
   },
@@ -245,12 +233,12 @@ export const MUTATION_LIBRARY = {
     special: 'extraSlots',
     extraSlots: 2,
     color: '#94a3b8',
-    requiredKills: 100,
     monster: 'animatedAlloy',
     elementBonus: { earth: 3 },
   },
   pyrolyze: {
     name: 'Pyrolyze',
+    affinity: 'fire',          // scales with fire affinity
     icon: '🔥',
     stat: 'viscosity',
     bonus: 3,
@@ -259,7 +247,6 @@ export const MUTATION_LIBRARY = {
     baseChance: 15,
     viscScale: 0.3,
     color: '#f97316',
-    requiredKills: 100,
     monster: 'magmaOoze',
     elementBonus: { fire: 5 },
   },
@@ -273,12 +260,12 @@ export const MUTATION_LIBRARY = {
     baseChance: 15,
     viscScale: 0.3,
     color: '#6b7280',
-    requiredKills: 100,
     monster: 'burntSpirit',
     elementBonus: null,
   },
   draconicPower: {
     name: 'Draconic Power',
+    affinity: 'fire',          // scales with fire affinity
     icon: '🐲',
     stat: 'firmness',
     bonus: 3,
@@ -287,7 +274,6 @@ export const MUTATION_LIBRARY = {
     baseValue: 3,
     viscScale: 0.15,
     color: '#dc2626',
-    requiredKills: 400, // Rare
     monster: 'wyrm',
     elementBonus: { fire: 10 },
   },
@@ -303,12 +289,12 @@ export const MUTATION_LIBRARY = {
     baseValue: 15,
     viscScale: 0.3,
     color: '#fbbf24',
-    requiredKills: 100,
     monster: 'thunderHawk',
     elementBonus: null,
   },
   earthshaker: {
     name: 'Earthshaker',
+    affinity: 'earth',          // scales with earth affinity
     icon: '👹',
     stat: 'firmness',
     bonus: 4,
@@ -317,7 +303,6 @@ export const MUTATION_LIBRARY = {
     baseChance: 10,
     viscScale: 0.3,
     color: '#a16207',
-    requiredKills: 100,
     monster: 'boulderTroll',
     elementBonus: { earth: 5 },
   },
@@ -331,12 +316,12 @@ export const MUTATION_LIBRARY = {
     baseValue: 15,
     viscScale: 0.3,
     color: '#3b82f6',
-    requiredKills: 100,
     monster: 'stormElemental',
     elementBonus: { water: 5 },
   },
   permafrost: {
     name: 'Permafrost',
+    affinity: 'water',          // scales with water affinity
     icon: '❄️',
     stat: 'viscosity',
     bonus: 3,
@@ -345,7 +330,6 @@ export const MUTATION_LIBRARY = {
     baseChance: 12,
     viscScale: 0.3,
     color: '#06b6d4',
-    requiredKills: 100,
     monster: 'frostGiant',
     elementBonus: { water: 5 },
   },
@@ -359,7 +343,6 @@ export const MUTATION_LIBRARY = {
     baseValue: 10,
     viscScale: 0.25,
     color: '#8b5cf6',
-    requiredKills: 500, // Rare
     monster: 'thunderbird',
     elementBonus: null,
   },
@@ -375,7 +358,6 @@ export const MUTATION_LIBRARY = {
     baseValue: 2,
     viscScale: 0.2,
     color: '#4c1d95',
-    requiredKills: 100,
     monster: 'voidTendril',
     elementBonus: null,
   },
@@ -389,7 +371,6 @@ export const MUTATION_LIBRARY = {
     baseValue: 5,
     viscScale: 0.2,
     color: '#7c3aed',
-    requiredKills: 100,
     monster: 'abyssalWatcher',
     elementBonus: null,
   },
@@ -403,7 +384,6 @@ export const MUTATION_LIBRARY = {
     baseValue: 50,
     viscScale: 0.5,
     color: '#374151',
-    requiredKills: 100,
     monster: 'nullConstruct',
     elementBonus: null,
   },
@@ -417,7 +397,6 @@ export const MUTATION_LIBRARY = {
     baseValue: 50,
     viscScale: 1,
     color: '#dc2626',
-    requiredKills: 100,
     monster: 'realityShard',
     elementBonus: null,
   },
@@ -431,7 +410,6 @@ export const MUTATION_LIBRARY = {
     baseValue: 10,
     viscScale: 0.4,
     color: '#0f0f23',
-    requiredKills: 600, // Rare
     monster: 'hollowOne',
     elementBonus: null,
   },
@@ -447,14 +425,33 @@ export const TRAIT_LIBRARY = MUTATION_LIBRARY;
 //   dmgMult    multiplier on the carrier's OUTGOING damage
 //   speedMult  multiplier on the carrier's effective slipperiness
 //   harmful    eligible for cleansing (Slough Skin); false for buffs
+// The three damage-over-time statuses used to be the same status with three
+// different numbers on it. Each now does one thing the others do not:
+//
+//   Poison  corrodes — everything hits the target harder while it lasts
+//   Burn    sears    — the target cannot heal at all while it burns
+//   Bleed   stacks   — each new wound deepens it instead of refreshing it
+//
+// They apply both ways: a slime poisoned by a Venom Bite takes more damage, and
+// a slime set alight by a Fireball stops regenerating.
 export const STATUS_EFFECTS = {
-  poison:   { name: 'Poison',   icon: '🧪', color: '#22c55e', dmg: 2, dur: 5, harmful: true },
-  burn:     { name: 'Burn',     icon: '🔥', color: '#f97316', dmg: 3, dur: 4, harmful: true },
-  bleed:    { name: 'Bleed',    icon: '🩸', color: '#ef4444', dmg: 4, dur: 3, harmful: true },
-  stun:     { name: 'Stun',     icon: '💫', color: '#fbbf24', dmg: 0, dur: 1, harmful: true, skipsTurn: true },
-  weakened: { name: 'Weakened', icon: '⬇️', color: '#6b7280', dmg: 0, dur: 2, harmful: true, dmgMult: 0.75 },
-  slowed:   { name: 'Slowed',   icon: '🕸️', color: '#94a3b8', dmg: 0, dur: 2, harmful: true, speedMult: 0.5 },
-  enraged:  { name: 'Enraged',  icon: '😤', color: '#f97316', dmg: 0, dur: 2, harmful: false, dmgMult: 1.5 },
+  poison:   { name: 'Poison',   icon: '🧪', color: '#22c55e', dmg: 2, dur: 5, harmful: true,
+              dmgTakenMult: 1.25,
+              desc: 'Corrodes: takes 25% more damage from everything' },
+  burn:     { name: 'Burn',     icon: '🔥', color: '#f97316', dmg: 3, dur: 4, harmful: true,
+              noHeal: true,
+              desc: 'Sears: cannot heal — no regeneration, lifesteal or healing abilities' },
+  bleed:    { name: 'Bleed',    icon: '🩸', color: '#ef4444', dmg: 3, dur: 3, harmful: true,
+              maxStacks: 4,
+              desc: 'Deepens: each new wound adds a stack, up to 4' },
+  stun:     { name: 'Stun',     icon: '💫', color: '#fbbf24', dmg: 0, dur: 1, harmful: true, skipsTurn: true,
+              desc: 'Loses its next turn' },
+  weakened: { name: 'Weakened', icon: '⬇️', color: '#6b7280', dmg: 0, dur: 2, harmful: true, dmgMult: 0.75,
+              desc: 'Deals 25% less damage' },
+  slowed:   { name: 'Slowed',   icon: '🕸️', color: '#94a3b8', dmg: 0, dur: 2, harmful: true, speedMult: 0.5,
+              desc: 'Half slipperiness: acts later and dodges less' },
+  enraged:  { name: 'Enraged',  icon: '😤', color: '#f97316', dmg: 0, dur: 2, harmful: false, dmgMult: 1.5,
+              desc: 'Deals 50% more damage' },
 };
 
 // Personality traits - behavioral modifiers that slimes can acquire
@@ -499,6 +496,25 @@ export const TRAIT_RARITY_COLORS = {
   rare: '#a855f7',
   legendary: '#f59e0b',
 };
+
+// ── Mutagen items ────────────────────────────────────────────────────────────
+//
+// One mutagen per mutation, dropped by that mutation's monster. The item is
+// what the player collects and spends; the mutation is what it becomes.
+
+export const mutagenName = (mutationId) => {
+  const m = MUTATION_LIBRARY[mutationId];
+  return m ? `${m.name} Mutagen` : 'Unknown Mutagen';
+};
+
+/** Every mutagen, with the monster that drops it. Used by the Stores screen. */
+export const ALL_MUTAGENS = Object.entries(MUTATION_LIBRARY).map(([id, m]) => ({
+  id,
+  name: mutagenName(id),
+  icon: m.icon,
+  color: m.color,
+  monster: m.monster,
+}));
 
 // Helper function to get mutation description with current VISC value
 export const getMutationDesc = (mutationId, viscosity = 0) => {
