@@ -7,6 +7,7 @@ import { ELEMENTS } from '../data/gameConstants.js';
 import { TUTORIALS, TUTORIAL_ORDER, TUTORIAL_CATEGORIES } from '../data/tutorialData.js';
 import { renderEmphasis } from './TutorialModal.jsx';
 import { WARDENS, prerequisiteZone } from '../data/wardenData.js';
+import { AFFINITY_SCALE } from '../combat/hooks.js';
 
 const card = { background: 'rgba(0,0,0,0.3)', borderRadius: 10, padding: 15, marginBottom: 15 };
 const heading = (color) => ({ fontSize: 14, fontWeight: 'bold', marginBottom: 10, color });
@@ -114,10 +115,8 @@ function Reference() {
               <span style={{ opacity: 0.75 }}>
                 {' — '}{e.dur} round{e.dur === 1 ? '' : 's'}
                 {e.dmg ? `, ${e.dmg} damage each` : ''}
-                {e.skipsTurn ? ', loses its turn' : ''}
-                {e.dmgMult ? `, ×${e.dmgMult} outgoing damage` : ''}
-                {e.speedMult ? `, ×${e.speedMult} speed` : ''}
               </span>
+              {e.desc && <div style={{ fontSize: 11, opacity: 0.85, marginLeft: 20 }}>{e.desc}</div>}
             </div>
           ))}
         </div>
@@ -169,7 +168,7 @@ function Reference() {
 }
 
 const Compendium = ({ queen, monsterKills, mutagens = {}, wardenKills = {},
-                     mutationsUnlocked = false, seenTutorials = [] }) => {
+                     mutationsUnlocked = false, affinityUnlocked = false, seenTutorials = [] }) => {
   const [tab, setTab] = useState('zones'); // 'zones' | 'guide' | 'reference'
   const [zone, setZone] = useState('forest');
   const z = ZONES[zone];
@@ -209,7 +208,8 @@ const Compendium = ({ queen, monsterKills, mutagens = {}, wardenKills = {},
             </div>
             {z.element && (
               <div style={{ fontSize: 11, color: ELEMENTS[z.element]?.color, marginTop: 5 }}>
-                {ELEMENTS[z.element]?.icon} {ELEMENTS[z.element]?.name} Zone (+{z.elementGainRate}/kill)
+                {ELEMENTS[z.element]?.icon} {ELEMENTS[z.element]?.name} Zone
+                {affinityUnlocked && ` (+${z.elementGainRate} affinity/kill)`}
               </div>
             )}
           </div>
@@ -358,13 +358,18 @@ const Compendium = ({ queen, monsterKills, mutagens = {}, wardenKills = {},
                       {mutation.stat && mutation.bonus && `+${mutation.bonus} ${mutation.stat} (on spawn) • `}
                       {typeof mutation.passiveDesc === 'function' ? mutation.passiveDesc(10) : mutation.passiveDesc}
                     </div>
-                    {mutation.elementBonus && (
+                    {affinityUnlocked && (mutation.elementBonus || mutation.affinity) && (
                       <div style={{ fontSize: 10 }}>
-                        {Object.entries(mutation.elementBonus).map(([elem, bonus]) => (
+                        {Object.entries(mutation.elementBonus || {}).map(([elem, bonus]) => (
                           <span key={elem} style={{ color: ELEMENTS[elem]?.color, marginRight: 8 }}>
                             {ELEMENTS[elem]?.icon}+{bonus}% starting affinity
                           </span>
                         ))}
+                        {mutation.affinity && (
+                          <span style={{ color: ELEMENTS[mutation.affinity]?.color, fontWeight: 'bold' }}>
+                            · up to +{Math.round(AFFINITY_SCALE * 100)}% with {ELEMENTS[mutation.affinity]?.name} affinity
+                          </span>
+                        )}
                       </div>
                     )}
                   </div>

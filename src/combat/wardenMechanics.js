@@ -14,7 +14,7 @@
 //   ------   -----------------------------------   -------------------------
 //   forest   Thornskin — reflects each hit          Vinewebs (block), Sharp
 //                                                   (fewer, bigger hits)
-//   swamp    Fen Rot — regenerates each round       Spiny (bleed); any DoT
+//   swamp    Fen Rot — regenerates each round       Spiny (bleed); later, Burn
 //   caves    Refraction — crits are turned back     Drop crit, build Firmness
 //   ruins    Everburning — damage ramps each round  Ghastly Wail (stun) clears
 //   peaks    Stormlash — unblockable, only dodgeable  Slipperiness; Permafrost
@@ -26,6 +26,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { registerEffect } from './hooks.js';
+import { isBleeding } from './statuses.js';
 
 const warden = (id, hooks, extra = {}) =>
   registerEffect({ id, source: 'warden', hooks, ...extra });
@@ -52,15 +53,24 @@ warden('thornskin', {
 
 // ── Swamp: Fen Rot ───────────────────────────────────────────────────────────
 //
-// Heals every round unless something is actively rotting it. Spiny (bleed) is a
-// swamp drop; burn and poison work too, so the answer keeps working later.
+// Heals every round unless something keeps the wound open. Two answers, one per
+// stage of the game:
+//
+//   Bleed  — its own rule: the bog closes flesh, not an open wound. Spiny drops
+//            in the swamp itself, so the fight is solvable the moment you can
+//            provoke it.
+//   Burn   — the general rule: nothing heals while seared. That is enforced by
+//            the resolver for every heal in the game, so it is not repeated here.
+//
+// Poison used to count too, back when all three damage-over-time statuses were
+// the same thing. It corrodes now instead; it no longer stops healing.
 
 warden('fenRot', {
   onRoundStart: (ev, self) => {
     const pct = self.def?.regen ?? 0.08;
-    if (hasDot(ev.self)) {
-      ev.log.push({ m: `${ev.self.name} cannot knit — the rot holds. 🩸`, c: '#4ade80',
-                    v: 'Fen Rot suppressed by a damage-over-time status' });
+    if (isBleeding(ev.self)) {
+      ev.log.push({ m: `${ev.self.name} cannot close an open wound. 🩸`, c: '#4ade80',
+                    v: 'Fen Rot held open by Bleed' });
       return;
     }
     ev.heal += Math.floor(ev.self.maxHp * pct);

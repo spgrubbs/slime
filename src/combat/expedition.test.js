@@ -106,8 +106,9 @@ test('exploration events fire during travel', () => {
 });
 
 test('slimes accrue elemental affinity in an elemental zone', () => {
-  const exp = makeExpedition('forest', roster(), 15, ctx()); // nature zone
-  runToEnd(exp, 'forest', ctx(4));
+  const learned = (seed) => ({ ...ctx(seed), passives: ['affinity'] });
+  const exp = makeExpedition('forest', roster(), 15, learned(1)); // nature zone
+  runToEnd(exp, 'forest', learned(4));
   assert.ok(exp.slimes.some(c => (c.elementGains.nature || 0) > 0));
 });
 

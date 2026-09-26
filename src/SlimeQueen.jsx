@@ -758,7 +758,8 @@ export default function SlimeQueen() {
         mutations: [...(sl.mutations || []), mutationId],
         baseStats: { ...sl.baseStats, [mut.stat]: sl.baseStats[mut.stat] + mut.bonus },
       };
-      if (mut.elementBonus && !next.primaryElement) {
+      // A mutagen's elemental trace only takes once affinity exists at all.
+      if (mut.elementBonus && !next.primaryElement && hasPassive('affinity')) {
         const elements = { ...(next.elements || createDefaultElements()) };
         Object.entries(mut.elementBonus).forEach(([el, bonus]) => {
           elements[el] = Math.min(100, (elements[el] || 0) + bonus);
@@ -863,6 +864,7 @@ export default function SlimeQueen() {
     mutagenKinds: Object.keys(mutagens).length,
     mutationsUnlocked: skillEffects.passives.includes('mutagenesis'),
     buildingUnlocked: isFeatureUnlocked('building', purchasedSkills),
+    affinityUnlocked: skillEffects.passives.includes('affinity'),
     caravanUnlocked: isFeatureUnlocked('caravan', purchasedSkills),
     expeditionSlots,
     maxHeldBiomass: slimes.reduce((n, sl) => Math.max(n, sl.biomass || 0), 0),
@@ -2162,6 +2164,7 @@ export default function SlimeQueen() {
                 getMaxHp={getMaxHp}
                 mutationSlots={(x) => mutationSlots(x, combatBonuses.mutationSlots)}
                 mutagens={mutagens}
+                affinityUnlocked={hasPassive('affinity')}
                 onApplyMutagen={applyMutagen}
                 onWithdraw={withdrawBiomass}
               />
@@ -2461,6 +2464,7 @@ export default function SlimeQueen() {
             mutagens={mutagens}
             wardenKills={wardenKills}
             mutationsUnlocked={hasPassive('mutagenesis')}
+            affinityUnlocked={hasPassive('affinity')}
             seenTutorials={seenTutorials}
           />
         )}

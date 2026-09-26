@@ -61,7 +61,8 @@ export function computeStats(slime, pendingBiomass = 0, combatBonuses = {}, muta
   if (!slime) return { firmness: 0, slipperiness: 0, viscosity: 0 };
 
   const stats = baseStatsOf(slime, pendingBiomass);
-  const carrier = { stats: { ...stats }, effects: buildEffectList(slime) };
+  // `ref` so affinity-scaled statMods (Stoneskin) see the slime's element.
+  const carrier = { stats: { ...stats }, effects: buildEffectList(slime), ref: slime };
 
   runHooks(carrier, 'statMod', { stats, slime }, mutationPower);
 

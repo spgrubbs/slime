@@ -416,7 +416,7 @@ test('greedy and glutton stack additively across the party', () => {
 
 test('void blocks element gain, adaptable accelerates it', () => {
   const zone = { element: 'nature', elementGainRate: 1 };
-  const ctx = { rng: always(0.9) };
+  const ctx = { rng: always(0.9), passives: ['affinity'] };
 
   const plain = makeSlimeCombatant(slime({ id: 'p' }));
   const voided = makeSlimeCombatant(slime({ id: 'v', traits: ['void'] }));
@@ -426,6 +426,13 @@ test('void blocks element gain, adaptable accelerates it', () => {
   assert.equal(voided.elementGains.nature, undefined, 'void gained nothing');
   assert.ok(plain.elementGains.nature > 0);
   assert.ok(adapt.elementGains.nature > plain.elementGains.nature);
+});
+
+test('no affinity is gained before Porous Membrane', () => {
+  const zone = { element: 'nature', elementGainRate: 1 };
+  const plain = makeSlimeCombatant(slime({ id: 'p' }));
+  resolveKill(world([plain]), { rng: always(0.9) }, [], [], zone);
+  assert.equal(plain.elementGains.nature, undefined, 'affinity stays locked until learned');
 });
 
 // ═════════════════════════════════════════════════════════════════════════════

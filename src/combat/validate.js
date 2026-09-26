@@ -19,7 +19,8 @@ const HANDLED_ABILITY_EFFECTS = new Set([
 ]);
 
 // Statuses the resolver knows how to execute.
-const HANDLED_STATUS_FIELDS = ['dmg', 'skipsTurn', 'dmgMult', 'speedMult'];
+const HANDLED_STATUS_FIELDS = ['dmg', 'skipsTurn', 'dmgMult', 'speedMult',
+  'dmgTakenMult', 'noHeal', 'maxStacks'];
 
 /** Throws on the first inconsistency. Returns a summary when everything lines up. */
 export function validateRegistry({ throwOnError = true } = {}) {

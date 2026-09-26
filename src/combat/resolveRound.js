@@ -13,7 +13,8 @@ import {
   MONSTER_TYPES, MONSTER_ABILITIES, materialDropChance, mutagenDropChance,
 } from '../data/monsterData.js';
 import { WARDEN_TYPES } from '../data/wardenData.js';
-import { hasDot, WARDEN_MECHANICS, DOT_STATUSES } from './wardenMechanics.js';
+import { WARDEN_MECHANICS, DOT_STATUSES } from './wardenMechanics.js';
+import { isSeared, corrosion, stacksOf } from './statuses.js';
 import { calculateElementalDamage } from '../utils/helpers.js';
 import { runHooks } from './hooks.js';
 import { computeStats, computeMaxHp, buildEffectList } from './stats.js';
@@ -181,8 +182,12 @@ function applyStatus(target, type, ctx, records, sourceLabel = '') {
   if (existing) {
     existing.dur = Math.max(existing.dur, ev.dur);
     existing.appliedRound = ctx.round;
+    // Bleed deepens: a fresh wound adds a stack rather than just resetting the
+    // clock, which is what makes it the status for sustained pressure.
+    if (def.maxStacks) existing.stacks = Math.min(def.maxStacks, stacksOf(existing) + 1);
   } else {
-    target.status.push({ type, dur: ev.dur, harmful: def.harmful !== false, appliedRound: ctx.round });
+    target.status.push({ type, dur: ev.dur, harmful: def.harmful !== false, appliedRound: ctx.round,
+                         ...(def.maxStacks ? { stacks: 1 } : {}) });
   }
 
   records.push({
@@ -390,6 +395,8 @@ function resolveAttack(attacker, defender, world, ctx, records, opts = {}) {
   // ── 6. Defender-side mitigation ───────────────────────────────────────────
   const takenEv = { attacker, defender, trace, rng, world, crit, reflect: 0, refract: 0 };
   if (!opts.trueDamage) {
+    const corroded = corrosion(defender);
+    if (corroded !== 1) trace.mul('🧪 Corroded', corroded);
     runHooks(defender, 'onDamageTaken', takenEv, ctx.mutationPower);
     // A refracted crit never lands as a crit: the multiplier is taken back off.
     if (takenEv.refract > 0 && crit) trace.mul('refracted', 1 - takenEv.refract);
@@ -453,7 +460,7 @@ function resolveAttack(attacker, defender, world, ctx, records, opts = {}) {
   statusEv.apply.forEach(({ type, label }) => applyStatus(defender, type, ctx, records, label));
 
   // ── 8. Post-hit: lifesteal ────────────────────────────────────────────────
-  if (dealtEv.healPct > 0 && attacker.hp < attacker.maxHp) {
+  if (dealtEv.healPct > 0 && attacker.hp < attacker.maxHp && !isSeared(attacker)) {
     const heal = Math.max(1, Math.floor(dmg * dealtEv.healPct));
     attacker.hp = Math.min(attacker.maxHp, attacker.hp + heal);
     records.push({
@@ -483,12 +490,12 @@ function resolveEnemyTurn(enemy, world, ctx, records, aura) {
     switch (ability.effect) {
       case 'selfHeal': {
         // A monster that heals faster than you can hurt it is not a fight, it is
-        // a wall — unless there is an answer. Any damage-over-time stops it, so
-        // Spiny, Pyrolyze or a poison turns a wall into a puzzle.
-        if (hasDot(enemy)) {
+        // a wall — unless there is an answer. Burn is that answer: it sears, and
+        // nothing heals while it holds. Pyrolyze turns a wall into a puzzle.
+        if (isSeared(enemy)) {
           records.push({ kind: 'ability', actorId: enemy.id, actorName: enemy.name,
-            log: { m: `${enemy.name} tries to knit, but the rot holds. 🩸`, c: C.good,
-                   v: 'selfHeal suppressed by a damage-over-time status' } });
+            log: { m: `${enemy.name} tries to knit, but the burn will not let it. 🔥`, c: C.good,
+                   v: 'selfHeal blocked by Burn' } });
           return;
         }
         const heal = Math.floor(enemy.maxHp * ability.healPercent);
@@ -534,7 +541,7 @@ function resolveEnemyTurn(enemy, world, ctx, records, aura) {
           trueDamage: ability.effect === 'trueDamage',
           aura,
         });
-        if (ability.effect === 'lifesteal' && dmg > 0) {
+        if (ability.effect === 'lifesteal' && dmg > 0 && !isSeared(enemy)) {
           const heal = Math.floor(dmg * (ability.healPercent || 0.5));
           enemy.hp = Math.min(enemy.maxHp, enemy.hp + heal);
         }
@@ -612,7 +619,7 @@ function checkDeaths(world, ctx, records, sideEffects) {
 
     // Rally: the rest close ranks over the body.
     if (ctx.passives?.includes('rally')) {
-      const living = world.slimes.filter(sl => !sl.dead && sl.hp > 0);
+      const living = world.slimes.filter(sl => !sl.dead && sl.hp > 0 && !isSeared(sl));
       let healed = 0;
       living.forEach(sl => {
         const amount = Math.min(sl.maxHp - sl.hp, Math.ceil(sl.maxHp * 0.25));
@@ -684,7 +691,7 @@ export function resolveKill(world, ctx, records, sideEffects, zoneDef) {
     ev.matChance   += sEv.matChance;
     ev.log.push(...sEv.log);
 
-    if (sEv.heal > 0) {
+    if (sEv.heal > 0 && !isSeared(s)) {
       const heal = Math.min(Math.floor(sEv.heal), s.maxHp - s.hp);
       if (heal > 0) {
         s.hp += heal;
@@ -697,7 +704,10 @@ export function resolveKill(world, ctx, records, sideEffects, zoneDef) {
 
     // Element gain uses that slime's own multiplier, so Wise/Adaptable stack
     // per slime rather than across the party.
-    if (zoneDef?.element && zoneDef.elementGainRate > 0 && !s.ref?.primaryElement && !sEv.blockElement) {
+    // Affinity is learned (Porous Membrane). Before that a slime fights in a
+    // zone without taking anything of it on.
+    if (ctx.passives?.includes('affinity')
+        && zoneDef?.element && zoneDef.elementGainRate > 0 && !s.ref?.primaryElement && !sEv.blockElement) {
       let gain = zoneDef.elementGainRate * sEv.elementMult;
       if (ctx.hiveAbilities?.evolutionPulse) gain *= 1.5;
       s.elementGains[zoneDef.element] = (s.elementGains[zoneDef.element] || 0) + gain;
@@ -819,11 +829,14 @@ export function resolveRound(world, ctx = {}) {
     e.status.forEach(s => {
       const def = statusDef(s.type);
       if (!def.dmg) return;
-      e.hp -= def.dmg;
+      const stacks = stacksOf(s);
+      const dmg = def.dmg * stacks;
+      e.hp -= dmg;
       records.push({
-        kind: 'status', targetId: e.id, targetName: e.name, damage: def.dmg, status: s.type,
-        log: { m: `${e.name} takes ${def.dmg} ${def.name} damage ${def.icon}`, c: def.color,
-               v: `${def.name}: ${def.dmg}/round, ${s.dur} round(s) left` },
+        kind: 'status', targetId: e.id, targetName: e.name, damage: dmg, status: s.type,
+        log: { m: `${e.name} takes ${dmg} ${def.name} damage ${def.icon}${stacks > 1 ? ` ×${stacks}` : ''}`,
+               c: def.color,
+               v: `${def.name}: ${def.dmg}/round${stacks > 1 ? ` × ${stacks} stacks` : ''}, ${s.dur} round(s) left` },
       });
     });
 
@@ -836,7 +849,10 @@ export function resolveRound(world, ctx = {}) {
     if (ev.cleanse.length) {
       e.status = e.status.filter(s => !ev.cleanse.includes(s.type));
     }
-    if (ev.heal > 0 && e.hp > 0 && e.hp < e.maxHp) {
+    if (ev.heal > 0 && e.hp > 0 && e.hp < e.maxHp && isSeared(e)) {
+      records.push({ kind: 'effect', log: { m: `${e.name} is seared and cannot mend. 🔥`, c: '#f97316',
+        v: `${Math.floor(ev.heal)} healing blocked by Burn${ev.healLabel ? ` (${ev.healLabel})` : ''}` } });
+    } else if (ev.heal > 0 && e.hp > 0 && e.hp < e.maxHp) {
       const heal = Math.min(Math.floor(ev.heal), e.maxHp - e.hp);
       if (heal > 0) {
         e.hp += heal;

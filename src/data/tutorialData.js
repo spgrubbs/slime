@@ -183,11 +183,11 @@ export const TUTORIALS = {
     title: 'Elemental affinity',
     icon: '🔥',
     body: [
-      'Fighting in an elemental zone slowly stains a slime with that element.',
+      'Fighting in an elemental zone now slowly stains a slime with that element.',
       'At 100% it locks in for good: **Fire → Nature → Earth → Water → Fire**, each strong against the next.',
-      'A slime\'s element is a record of where it has been, not something you pick.',
+      'Some mutations **feed on it** — Pyrolyze burns hotter in a fire slime, Permafrost bites harder in a water one. A slime\'s element is a record of where it has been.',
     ],
-    when: (s) => s.maxElementAffinity >= 25,
+    when: (s) => s.affinityUnlocked,
   },
 
   skills: {

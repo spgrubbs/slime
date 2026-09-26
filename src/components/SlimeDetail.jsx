@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import { SLIME_TIERS, STAT_INFO } from '../data/slimeData.js';
 import { MUTATION_LIBRARY, SLIME_TRAITS, TRAIT_RARITY_COLORS, getMutationDesc } from '../data/traitData.js';
+import { affinityMult } from '../combat/hooks.js';
 import { ELEMENTS } from '../data/gameConstants.js';
 import SlimeSprite from './SlimeSprite.jsx';
 
 const SlimeDetail = ({
   slime, expState, getSlimeStats, getMaxHp, mutationSlots,
-  mutagens = {}, onApplyMutagen, onWithdraw,
+  mutagens = {}, onApplyMutagen, onWithdraw, affinityUnlocked = false,
 }) => {
   const tier = SLIME_TIERS[slime.tier];
   const [grafting, setGrafting] = useState(false);
@@ -74,7 +75,9 @@ const SlimeDetail = ({
         ))}
       </div>
 
-      {/* Element Affinity Section */}
+      {/* Element Affinity Section — absent until Porous Membrane, like every
+          other system the tree opens. */}
+      {affinityUnlocked && (
       <div style={{ marginBottom: 15 }}>
         <div style={{ fontSize: 11, opacity: 0.7, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
           Element Affinity
@@ -127,6 +130,7 @@ const SlimeDetail = ({
           })}
         </div>
       </div>
+      )}
 
       {/* Personality Traits Section */}
       {slime.traits?.length > 0 && (
@@ -203,8 +207,18 @@ const SlimeDetail = ({
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 12, fontWeight: 'bold' }}>{mut.name}</div>
                   <div style={{ fontSize: 10, color: mut.color }}>{getMutationDesc(m, currentStats.viscosity)}</div>
+                  {/* Elemental mutations feed on affinity; show what it is worth now. */}
+                  {affinityUnlocked && mut.affinity && (() => {
+                    const el = ELEMENTS[mut.affinity];
+                    const bonus = Math.round((affinityMult(mut, slime) - 1) * 100);
+                    return (
+                      <div style={{ fontSize: 9, marginTop: 2, color: el?.color, opacity: bonus > 0 ? 1 : 0.6 }}>
+                        {el?.icon} {bonus > 0 ? `+${bonus}% from ${el?.name} affinity` : `grows with ${el?.name} affinity`}
+                      </div>
+                    );
+                  })()}
                 </div>
-                {mut.elementBonus && (
+                {affinityUnlocked && mut.elementBonus && (
                   <div style={{ fontSize: 10 }}>
                     {Object.entries(mut.elementBonus).map(([elem, bonus]) => (
                       <span key={elem} style={{ color: ELEMENTS[elem]?.color }}>

@@ -1212,6 +1212,7 @@ and roster), The Wilds, Memory. No Buildings panel, no Pools, no Road.
 | **Calcified Frame** | 1 | the Buildings panel — and with it Tendrils and tiers |
 | **Cultivation Pools** | 2 | ranches and the Convalescence Pool; the Pools switch appears on The Spawn |
 | **Road Sense** | 2 | The Road — the caravan ambush tab appears |
+| **Porous Membrane** | 2 | elemental affinity — slimes soak up a zone's element |
 | **Split Column** | 3 | a second simultaneous expedition |
 | **Many Pseudopods** | 5 | a third |
 
@@ -1231,9 +1232,7 @@ throughput.
   as the *dominant* combat dial, far ahead of stats, so gating party slots would
   invalidate the entire early-game balance pass and need the whole curve
   re-tuned around two-slime parties. Worth doing one day, as its own pass.
-- **Elemental affinity.** The strongest remaining candidate. It is a whole
-  system that currently just happens to you, and "your slimes can now take on a
-  zone's element" is a good beat. Not built.
+- ~~**Elemental affinity.**~~ Built — see §21.
 
 ### The bug this pass exposed
 
@@ -1241,3 +1240,87 @@ throughput.
 reached the dot indicator and the swipe handler — so the `skillUnlock` filter on
 tabs had never done anything at all. It was written for the ranch tab, which was
 later folded into The Spawn, and nothing had used it since.
+
+
+---
+
+## 21. Affinity, and three statuses that finally differ
+
+### Affinity is learned
+
+**Porous Membrane** (2 points, off Unstable Genes) is where elemental affinity
+begins. Before it a slime fights in a zone without taking anything of it on:
+no per-kill staining, no starting affinity from a mutagen's elemental trace, and
+no affinity panel on the slime. The tutorial fires on the unlock.
+
+### Some mutations feed on it
+
+Eight mutations are elemental in their *effect*, not merely in their flavour,
+and they now grow with the slime's affinity for their element — linearly, up to
+**+60%** once the element locks in:
+
+| Element | Mutations |
+|---|---|
+| 🔥 Fire | Pyrolyze, Draconic Power |
+| 💧 Water | Permafrost, Whirlpool |
+| 🪨 Earth | Earthshaker, Stoneskin |
+| 🌿 Nature | Vinewebs, Digest |
+
+Each matches the element its own `elementBonus` already named, so the data was
+pointing at this pairing all along. It is read off the slime's *banked*
+affinity, not what the current expedition has gathered, and it scales both
+magnitude and proc chance. The slime screen shows what each is worth right now
+("🔥 +38% from Fire affinity").
+
+This is the first thing that makes *where you grind* a build decision rather
+than a loot decision: a Pyrolyze slime you raised in the Cinderspire is a better
+Pyrolyze slime.
+
+One fix fell out of it: `computeStats` builds its own hook carrier with no
+`ref`, so Stoneskin — the one statMod on the list — would have silently skipped
+affinity while every other hook used it. There is a test for exactly that.
+
+### Poison, burn and bleed are three different things
+
+They used to be one status wearing three sets of numbers. Each now does one
+thing the others do not:
+
+| | Rule | Why |
+|---|---|---|
+| 🧪 **Poison** | *Corrodes* — takes 25% more damage from everything | a debuff that pays off for the whole party, not just its own ticks |
+| 🔥 **Burn** | *Sears* — cannot heal at all: no regeneration, lifesteal, healing abilities, Rally | the answer to anything that out-heals you |
+| 🩸 **Bleed** | *Deepens* — each new wound adds a stack (up to 4) instead of refreshing | the status for sustained pressure; rewards high proc rates |
+
+They apply **both ways**. Venom Bite now corrodes your slimes; a Fireball sears
+them so Knitting Flesh and Lifesteal stop working until it burns out.
+
+Knock-on decisions:
+
+- **Burn is now the answer to regenerating monsters** (Boulder Troll), where
+  previously any damage-over-time was. That is crisper — "burn stops healing" is
+  one rule you can learn once.
+- **The Mire Warden keeps Spiny as its counter.** Burn does not drop until the
+  Cinderspire, so a burn-only answer would have made the swamp's Warden
+  unsolvable when you first reach it. Fen Rot is held open by *bleed* as its own
+  rule ("the bog closes flesh, not an open wound"), and burn stops it too via
+  the general rule. Poison no longer does.
+- **Bleed's base tick went 4 → 3**, since it now stacks to 4× — up to 12 a round
+  on a target that keeps getting cut.
+
+Travel recovery is deliberately untouched by burn: a status left over at the end
+of a fight would otherwise block all healing between fights until it expired,
+and statuses do not tick on the road.
+
+### The forest Warden, corrected
+
+The table in §17 was measured mid-tuning. The final values left the Verdant
+Warden beatable **59% of the time by a naive party** at 1.5× — Thornskin barely
+mattered, on the first boss anyone meets. Its HP had been cut 240 → 215 to clear
+a test threshold at a point when other things were also moving; back at 240, the
+naive party wins 17% and the Vinewebs/Sharp party 73%, which is the intended
+shape, and every Warden test passes.
+
+The Cinder Warden also sits lower than §17 claimed: its counter build wins about
+**51%** at 1.5×, not the 72% quoted. It remains solvable and the gap to the
+naive build (0%) is the largest of any Warden, so it is left as the hardest
+first-kill in the game rather than tuned down.

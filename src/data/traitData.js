@@ -20,6 +20,7 @@ export const MUTATION_LIBRARY = {
   },
   digest: {
     name: 'Digest',
+    affinity: 'nature',          // scales with nature affinity
     icon: '🌱',
     stat: 'viscosity',
     bonus: 2,
@@ -33,6 +34,7 @@ export const MUTATION_LIBRARY = {
   },
   stoneskin: {
     name: 'Stoneskin',
+    affinity: 'earth',          // scales with earth affinity
     icon: '🪨',
     stat: 'firmness',
     bonus: 2,
@@ -46,6 +48,7 @@ export const MUTATION_LIBRARY = {
   },
   vinewebs: {
     name: 'Vinewebs',
+    affinity: 'nature',          // scales with nature affinity
     icon: '🕸️',
     stat: 'slipperiness',
     bonus: 2,
@@ -87,6 +90,7 @@ export const MUTATION_LIBRARY = {
   },
   whirlpool: {
     name: 'Whirlpool',
+    affinity: 'water',          // scales with water affinity
     icon: '🌀',
     stat: 'viscosity',
     bonus: 3,
@@ -234,6 +238,7 @@ export const MUTATION_LIBRARY = {
   },
   pyrolyze: {
     name: 'Pyrolyze',
+    affinity: 'fire',          // scales with fire affinity
     icon: '🔥',
     stat: 'viscosity',
     bonus: 3,
@@ -260,6 +265,7 @@ export const MUTATION_LIBRARY = {
   },
   draconicPower: {
     name: 'Draconic Power',
+    affinity: 'fire',          // scales with fire affinity
     icon: '🐲',
     stat: 'firmness',
     bonus: 3,
@@ -288,6 +294,7 @@ export const MUTATION_LIBRARY = {
   },
   earthshaker: {
     name: 'Earthshaker',
+    affinity: 'earth',          // scales with earth affinity
     icon: '👹',
     stat: 'firmness',
     bonus: 4,
@@ -314,6 +321,7 @@ export const MUTATION_LIBRARY = {
   },
   permafrost: {
     name: 'Permafrost',
+    affinity: 'water',          // scales with water affinity
     icon: '❄️',
     stat: 'viscosity',
     bonus: 3,
@@ -417,14 +425,33 @@ export const TRAIT_LIBRARY = MUTATION_LIBRARY;
 //   dmgMult    multiplier on the carrier's OUTGOING damage
 //   speedMult  multiplier on the carrier's effective slipperiness
 //   harmful    eligible for cleansing (Slough Skin); false for buffs
+// The three damage-over-time statuses used to be the same status with three
+// different numbers on it. Each now does one thing the others do not:
+//
+//   Poison  corrodes — everything hits the target harder while it lasts
+//   Burn    sears    — the target cannot heal at all while it burns
+//   Bleed   stacks   — each new wound deepens it instead of refreshing it
+//
+// They apply both ways: a slime poisoned by a Venom Bite takes more damage, and
+// a slime set alight by a Fireball stops regenerating.
 export const STATUS_EFFECTS = {
-  poison:   { name: 'Poison',   icon: '🧪', color: '#22c55e', dmg: 2, dur: 5, harmful: true },
-  burn:     { name: 'Burn',     icon: '🔥', color: '#f97316', dmg: 3, dur: 4, harmful: true },
-  bleed:    { name: 'Bleed',    icon: '🩸', color: '#ef4444', dmg: 4, dur: 3, harmful: true },
-  stun:     { name: 'Stun',     icon: '💫', color: '#fbbf24', dmg: 0, dur: 1, harmful: true, skipsTurn: true },
-  weakened: { name: 'Weakened', icon: '⬇️', color: '#6b7280', dmg: 0, dur: 2, harmful: true, dmgMult: 0.75 },
-  slowed:   { name: 'Slowed',   icon: '🕸️', color: '#94a3b8', dmg: 0, dur: 2, harmful: true, speedMult: 0.5 },
-  enraged:  { name: 'Enraged',  icon: '😤', color: '#f97316', dmg: 0, dur: 2, harmful: false, dmgMult: 1.5 },
+  poison:   { name: 'Poison',   icon: '🧪', color: '#22c55e', dmg: 2, dur: 5, harmful: true,
+              dmgTakenMult: 1.25,
+              desc: 'Corrodes: takes 25% more damage from everything' },
+  burn:     { name: 'Burn',     icon: '🔥', color: '#f97316', dmg: 3, dur: 4, harmful: true,
+              noHeal: true,
+              desc: 'Sears: cannot heal — no regeneration, lifesteal or healing abilities' },
+  bleed:    { name: 'Bleed',    icon: '🩸', color: '#ef4444', dmg: 3, dur: 3, harmful: true,
+              maxStacks: 4,
+              desc: 'Deepens: each new wound adds a stack, up to 4' },
+  stun:     { name: 'Stun',     icon: '💫', color: '#fbbf24', dmg: 0, dur: 1, harmful: true, skipsTurn: true,
+              desc: 'Loses its next turn' },
+  weakened: { name: 'Weakened', icon: '⬇️', color: '#6b7280', dmg: 0, dur: 2, harmful: true, dmgMult: 0.75,
+              desc: 'Deals 25% less damage' },
+  slowed:   { name: 'Slowed',   icon: '🕸️', color: '#94a3b8', dmg: 0, dur: 2, harmful: true, speedMult: 0.5,
+              desc: 'Half slipperiness: acts later and dodges less' },
+  enraged:  { name: 'Enraged',  icon: '😤', color: '#f97316', dmg: 0, dur: 2, harmful: false, dmgMult: 1.5,
+              desc: 'Deals 50% more damage' },
 };
 
 // Personality traits - behavioral modifiers that slimes can acquire

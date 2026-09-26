@@ -33,7 +33,7 @@ export const SKILL_TREES = {
         cost: 0,
         requires: [],
         effect: { type: 'passive', desc: 'Enables expeditions' },
-        position: { x: 50, y: 8 },
+        position: { x: 50, y: 7 },
       },
 
       mutagenesis: {
@@ -44,7 +44,18 @@ export const SKILL_TREES = {
         cost: 1,
         requires: ['expeditionBasics'],
         effect: { type: 'passive', desc: 'Unlocks mutagen drops and mutation slots' },
-        position: { x: 22, y: 20 },
+        position: { x: 18, y: 19 },
+      },
+
+      affinity: {
+        id: 'affinity',
+        name: 'Porous Membrane',
+        icon: '🌈',
+        desc: 'Slimes soak up the element of wherever they fight',
+        cost: 2,
+        requires: ['mutagenesis'],
+        effect: { type: 'passive', desc: 'Unlocks elemental affinity' },
+        position: { x: 8, y: 32 },
       },
 
       secondWind: {
@@ -55,7 +66,7 @@ export const SKILL_TREES = {
         cost: 2,
         requires: ['expeditionBasics'],
         effect: { type: 'passive', desc: 'Clears one debuff per travel leg' },
-        position: { x: 50, y: 20 },
+        position: { x: 50, y: 19 },
       },
 
       salvage: {
@@ -66,7 +77,7 @@ export const SKILL_TREES = {
         cost: 3,
         requires: ['expeditionBasics'],
         effect: { type: 'passive', desc: 'Carried materials are kept on a wipe' },
-        position: { x: 78, y: 20 },
+        position: { x: 82, y: 19 },
       },
 
       vanguard: {
@@ -77,7 +88,7 @@ export const SKILL_TREES = {
         cost: 3,
         requires: ['secondWind'],
         effect: { type: 'passive', desc: 'Party wins initiative on round 1' },
-        position: { x: 36, y: 33 },
+        position: { x: 50, y: 32 },
       },
 
       dissection: {
@@ -88,7 +99,7 @@ export const SKILL_TREES = {
         cost: 3,
         requires: ['salvage'],
         effect: { type: 'passive', desc: 'Guarantees a material per kill' },
-        position: { x: 70, y: 33 },
+        position: { x: 82, y: 32 },
       },
 
       swiftExpeditionSkill: {
@@ -99,7 +110,7 @@ export const SKILL_TREES = {
         cost: 2,
         requires: ['mutagenesis'],
         effect: { type: 'pheromone', ability: 'swiftExpedition' },
-        position: { x: 10, y: 46 },
+        position: { x: 28, y: 32 },
       },
 
       thirdFront: {
@@ -108,9 +119,9 @@ export const SKILL_TREES = {
         icon: '🗺️',
         desc: 'Run a third expedition at the same time',
         cost: 5,
-        requires: ['secondFront', 'pathfinder'],
+        requires: ['secondFront', 'trophyHunter'],
         effect: { type: 'bonus', stat: 'expeditionSlots', value: 1 },
-        position: { x: 24, y: 88 },
+        position: { x: 34, y: 72 },
       },
 
       secondFront: {
@@ -121,7 +132,7 @@ export const SKILL_TREES = {
         cost: 3,
         requires: ['vanguard'],
         effect: { type: 'bonus', stat: 'expeditionSlots', value: 1 },
-        position: { x: 14, y: 33 },
+        position: { x: 40, y: 45 },
       },
 
       tacticalRetreat: {
@@ -132,7 +143,7 @@ export const SKILL_TREES = {
         cost: 4,
         requires: ['vanguard'],
         effect: { type: 'passive', desc: 'One death prevented per expedition' },
-        position: { x: 36, y: 46 },
+        position: { x: 60, y: 45 },
       },
 
       fieldTriage: {
@@ -143,7 +154,7 @@ export const SKILL_TREES = {
         cost: 4,
         requires: ['dissection'],
         effect: { type: 'passive', desc: 'Wounds no longer spill carried biomass' },
-        position: { x: 70, y: 46 },
+        position: { x: 82, y: 45 },
       },
 
       sharedVigorSkill: {
@@ -154,7 +165,7 @@ export const SKILL_TREES = {
         cost: 3,
         requires: ['swiftExpeditionSkill'],
         effect: { type: 'pheromone', ability: 'sharedVigor' },
-        position: { x: 14, y: 46 },
+        position: { x: 22, y: 45 },
       },
 
       trophyHunter: {
@@ -165,7 +176,7 @@ export const SKILL_TREES = {
         cost: 4,
         requires: ['tacticalRetreat'],
         effect: { type: 'passive', desc: 'Rare kills guarantee a mutagen' },
-        position: { x: 50, y: 59 },
+        position: { x: 58, y: 58 },
       },
 
       pathfinder: {
@@ -176,7 +187,7 @@ export const SKILL_TREES = {
         cost: 4,
         requires: ['fieldTriage'],
         effect: { type: 'passive', desc: 'Removes the travel pause' },
-        position: { x: 76, y: 59 },
+        position: { x: 82, y: 58 },
       },
 
       evolutionPulseSkill: {
@@ -187,7 +198,7 @@ export const SKILL_TREES = {
         cost: 4,
         requires: ['sharedVigorSkill'],
         effect: { type: 'pheromone', ability: 'evolutionPulse' },
-        position: { x: 18, y: 59 },
+        position: { x: 16, y: 58 },
       },
 
       rally: {
@@ -198,7 +209,7 @@ export const SKILL_TREES = {
         cost: 5,
         requires: ['trophyHunter'],
         effect: { type: 'passive', desc: 'Survivors heal 25% when one goes down' },
-        position: { x: 40, y: 74 },
+        position: { x: 54, y: 72 },
       },
 
       quarry: {
@@ -209,7 +220,7 @@ export const SKILL_TREES = {
         cost: 5,
         requires: ['pathfinder'],
         effect: { type: 'bonus', stat: 'rareSpawn', value: 150 },
-        position: { x: 68, y: 74 },
+        position: { x: 80, y: 72 },
       },
 
       relentless: {
@@ -220,7 +231,7 @@ export const SKILL_TREES = {
         cost: 6,
         requires: ['rally', 'quarry'],
         effect: { type: 'passive', desc: 'Kill streaks grant an extra round' },
-        position: { x: 54, y: 90 },
+        position: { x: 66, y: 87 },
       },
     },
   },
@@ -239,7 +250,7 @@ export const SKILL_TREES = {
         cost: 0,
         requires: [],
         effect: { type: 'passive', desc: 'Enables buildings' },
-        position: { x: 50, y: 8 },
+        position: { x: 50, y: 6 },
       },
 
       masonry: {
@@ -250,7 +261,7 @@ export const SKILL_TREES = {
         cost: 1,
         requires: ['hiveFoundation'],
         effect: { type: 'unlock', feature: 'building' },
-        position: { x: 50, y: 15 },
+        position: { x: 50, y: 17 },
       },
 
       jellyProduction: {
@@ -261,7 +272,7 @@ export const SKILL_TREES = {
         cost: 1,
         requires: ['masonry'],
         effect: { type: 'bonus', stat: 'maxJelly', value: 15 },
-        position: { x: 24, y: 20 },
+        position: { x: 20, y: 29 },
       },
 
       spawningVatUnlock: {
@@ -272,7 +283,7 @@ export const SKILL_TREES = {
         cost: 2,
         requires: ['masonry'],
         effect: { type: 'unlock', building: 'spawningVat' },
-        position: { x: 50, y: 20 },
+        position: { x: 50, y: 29 },
       },
 
       reclamation: {
@@ -283,7 +294,7 @@ export const SKILL_TREES = {
         cost: 2,
         requires: ['masonry'],
         effect: { type: 'passive', desc: 'Full biomass back on reabsorb' },
-        position: { x: 76, y: 20 },
+        position: { x: 80, y: 29 },
       },
 
       researchLabUnlock: {
@@ -294,7 +305,7 @@ export const SKILL_TREES = {
         cost: 2,
         requires: ['spawningVatUnlock'],
         effect: { type: 'unlock', building: 'researchLab' },
-        position: { x: 38, y: 33 },
+        position: { x: 38, y: 42 },
       },
 
       ranchBasics: {
@@ -305,7 +316,7 @@ export const SKILL_TREES = {
         cost: 2,
         requires: ['spawningVatUnlock'],
         effect: { type: 'unlock', feature: 'ranch' },
-        position: { x: 62, y: 33 },
+        position: { x: 64, y: 42 },
       },
 
       bountifulHarvestSkill: {
@@ -316,7 +327,7 @@ export const SKILL_TREES = {
         cost: 2,
         requires: ['jellyProduction'],
         effect: { type: 'pheromone', ability: 'bountifulHarvest' },
-        position: { x: 14, y: 33 },
+        position: { x: 12, y: 42 },
       },
 
       royalHatcheryUnlock: {
@@ -327,7 +338,7 @@ export const SKILL_TREES = {
         cost: 3,
         requires: ['researchLabUnlock'],
         effect: { type: 'unlock', building: 'royalHatchery' },
-        position: { x: 38, y: 46 },
+        position: { x: 38, y: 55 },
       },
 
       ranchExpansion: {
@@ -338,7 +349,7 @@ export const SKILL_TREES = {
         cost: 3,
         requires: ['ranchBasics'],
         effect: { type: 'bonus', stat: 'ranchSlots', value: 2 },
-        position: { x: 62, y: 46 },
+        position: { x: 68, y: 55 },
       },
 
       fieldDressing: {
@@ -349,7 +360,7 @@ export const SKILL_TREES = {
         cost: 3,
         requires: ['ranchExpansion'],
         effect: { type: 'passive', desc: 'Wounds heal at half rate with no slot' },
-        position: { x: 78, y: 59 },
+        position: { x: 72, y: 68 },
       },
 
       nurturingAuraSkill: {
@@ -360,7 +371,7 @@ export const SKILL_TREES = {
         cost: 3,
         requires: ['bountifulHarvestSkill'],
         effect: { type: 'pheromone', ability: 'nurturingAura' },
-        position: { x: 14, y: 46 },
+        position: { x: 12, y: 55 },
       },
 
       primordialChamberUnlock: {
@@ -371,7 +382,7 @@ export const SKILL_TREES = {
         cost: 5,
         requires: ['royalHatcheryUnlock'],
         effect: { type: 'unlock', building: 'primordialChamber' },
-        position: { x: 38, y: 59 },
+        position: { x: 38, y: 68 },
       },
 
       slimePitUnlock: {
@@ -382,7 +393,7 @@ export const SKILL_TREES = {
         cost: 4,
         requires: ['primordialChamberUnlock'],
         effect: { type: 'unlock', building: 'slimePit' },
-        position: { x: 30, y: 74 },
+        position: { x: 32, y: 80 },
       },
 
       dismantle: {
@@ -393,7 +404,7 @@ export const SKILL_TREES = {
         cost: 4,
         requires: ['fieldDressing'],
         effect: { type: 'passive', desc: 'Full refund on dismantling a building' },
-        position: { x: 66, y: 74 },
+        position: { x: 68, y: 80 },
       },
 
       economyMastery: {
@@ -404,7 +415,7 @@ export const SKILL_TREES = {
         cost: 6,
         requires: ['slimePitUnlock', 'dismantle'],
         effect: { type: 'bonus', stat: 'maxJelly', value: 30, also: { ranchSlots: 2 } },
-        position: { x: 48, y: 90 },
+        position: { x: 50, y: 92 },
       },
     },
   },
@@ -423,7 +434,7 @@ export const SKILL_TREES = {
         cost: 0,
         requires: [],
         effect: { type: 'passive', desc: 'Enables combat' },
-        position: { x: 50, y: 8 },
+        position: { x: 50, y: 6 },
       },
 
       raiding: {
@@ -434,7 +445,7 @@ export const SKILL_TREES = {
         cost: 2,
         requires: ['combatTraining'],
         effect: { type: 'unlock', feature: 'caravan' },
-        position: { x: 50, y: 14 },
+        position: { x: 86, y: 19 },
       },
 
       secondSkin: {
@@ -445,7 +456,7 @@ export const SKILL_TREES = {
         cost: 1,
         requires: ['combatTraining'],
         effect: { type: 'passive', desc: 'Blocks the first debuff per fight' },
-        position: { x: 24, y: 20 },
+        position: { x: 14, y: 19 },
       },
 
       opportunist: {
@@ -456,7 +467,7 @@ export const SKILL_TREES = {
         cost: 2,
         requires: ['combatTraining'],
         effect: { type: 'passive', desc: 'Killing blow grants an extra action' },
-        position: { x: 50, y: 20 },
+        position: { x: 38, y: 19 },
       },
 
       adaptiveCarapace: {
@@ -467,7 +478,7 @@ export const SKILL_TREES = {
         cost: 2,
         requires: ['combatTraining'],
         effect: { type: 'passive', desc: 'Stacking resistance to repeated elements' },
-        position: { x: 76, y: 20 },
+        position: { x: 62, y: 19 },
       },
 
       contagion: {
@@ -478,7 +489,7 @@ export const SKILL_TREES = {
         cost: 3,
         requires: ['secondSkin'],
         effect: { type: 'passive', desc: 'Debuffs persist across encounters' },
-        position: { x: 24, y: 34 },
+        position: { x: 14, y: 32 },
       },
 
       focusedVenom: {
@@ -489,7 +500,7 @@ export const SKILL_TREES = {
         cost: 3,
         requires: ['opportunist'],
         effect: { type: 'passive', desc: 'Doubles poison, burn and bleed duration' },
-        position: { x: 50, y: 34 },
+        position: { x: 38, y: 32 },
       },
 
       elementalCycling: {
@@ -500,7 +511,7 @@ export const SKILL_TREES = {
         cost: 3,
         requires: ['adaptiveCarapace'],
         effect: { type: 'passive', desc: 'Advantageous hits ignore resistance' },
-        position: { x: 76, y: 34 },
+        position: { x: 62, y: 32 },
       },
 
       spawnBoostSkill: {
@@ -511,7 +522,7 @@ export const SKILL_TREES = {
         cost: 3,
         requires: ['contagion'],
         effect: { type: 'pheromone', ability: 'spawnBoost' },
-        position: { x: 14, y: 48 },
+        position: { x: 14, y: 45 },
       },
 
       regeneration: {
@@ -522,7 +533,7 @@ export const SKILL_TREES = {
         cost: 3,
         requires: ['focusedVenom'],
         effect: { type: 'passive', desc: 'Passive healing each round' },
-        position: { x: 40, y: 48 },
+        position: { x: 38, y: 45 },
       },
 
       ambushSlots: {
@@ -531,9 +542,9 @@ export const SKILL_TREES = {
         icon: '🎯',
         desc: '+2 slimes in the caravan ambush squad',
         cost: 4,
-        requires: ['elementalCycling'],
+        requires: ['raiding'],
         effect: { type: 'bonus', stat: 'defenseSlots', value: 2 },
-        position: { x: 76, y: 48 },
+        position: { x: 86, y: 32 },
       },
 
       siegeEngineering: {
@@ -544,7 +555,7 @@ export const SKILL_TREES = {
         cost: 4,
         requires: ['ambushSlots'],
         effect: { type: 'unlock', building: 'slimeCatapult' },
-        position: { x: 84, y: 62 },
+        position: { x: 86, y: 45 },
       },
 
       decoySkill: {
@@ -555,7 +566,7 @@ export const SKILL_TREES = {
         cost: 3,
         requires: ['spawnBoostSkill'],
         effect: { type: 'pheromone', ability: 'decoy' },
-        position: { x: 14, y: 62 },
+        position: { x: 14, y: 58 },
       },
 
       lastStand: {
@@ -566,7 +577,7 @@ export const SKILL_TREES = {
         cost: 4,
         requires: ['regeneration'],
         effect: { type: 'passive', desc: 'Sole survivor gains an extra action' },
-        position: { x: 40, y: 62 },
+        position: { x: 38, y: 58 },
       },
 
       extraMutationSlot: {
@@ -577,7 +588,7 @@ export const SKILL_TREES = {
         cost: 5,
         requires: ['lastStand'],
         effect: { type: 'bonus', stat: 'mutationSlots', value: 1 },
-        position: { x: 40, y: 76 },
+        position: { x: 38, y: 71 },
       },
 
       renderingVat: {
@@ -588,7 +599,7 @@ export const SKILL_TREES = {
         cost: 6,
         requires: ['extraMutationSlot'],
         effect: { type: 'unlock', building: 'renderingVat' },
-        position: { x: 30, y: 90 },
+        position: { x: 26, y: 86 },
       },
 
       combatMastery: {
@@ -599,7 +610,7 @@ export const SKILL_TREES = {
         cost: 6,
         requires: ['extraMutationSlot', 'siegeEngineering'],
         effect: { type: 'passive', desc: 'Doubles mutation proc chances' },
-        position: { x: 62, y: 90 },
+        position: { x: 62, y: 86 },
       },
     },
   },
