@@ -37,7 +37,7 @@ import { makeExpedition, tickExpedition, hydrateExpedition } from './combat/expe
 import { makeAmbush, tickAmbush, retreatAmbush, hydrateAmbush, dehydrateAmbush } from './combat/caravan.js';
 import { nextTutorial, TUTORIALS, TUTORIAL_ORDER } from './data/tutorialData.js';
 import { MUTAGEN_PITY_KILLS } from './data/monsterData.js';
-import { mutagenName } from './data/traitData.js';
+import { mutagenName, traitValues } from './data/traitData.js';
 
 /**
  * Rebuild the live references a saved expedition dropped. Combatants are
@@ -66,8 +66,11 @@ import {
   WelcomeBackModal,
   SettingsTab,
   Ranch,
+  Merchant,
 } from './components';
+import { merchantVisit, rollMerchantDeals, canTakeDeal, MERCHANT, MATERIAL_TABLE } from './data/merchantData.js';
 import SkillTree from './components/SkillTree.jsx';
+import DevPanel from './components/DevPanel.jsx';
 
 // ============== OFFLINE PROGRESS ==============
 const calculateOfflineProgress = (saved, bonuses, offlineCtx = {}) => {
@@ -236,6 +239,8 @@ export default function SlimeQueen() {
   const [wardenKills, setWardenKills] = useState({}); // { [zone]: times felled }
   const [pityKills, setPityKills] = useState({});  // kills since the last pity mutagen
   const [purchasedSkills, setPurchasedSkills] = useState(['expeditionBasics', 'hiveFoundation', 'combatTraining']);
+  // Mossback's visits: { firstVisit, visit, deals, taken }. See merchantData.js.
+  const [merchant, setMerchant] = useState(null);
 
   // Ranch system state
   const [prisms, setPrisms] = useState(0);
@@ -537,6 +542,7 @@ export default function SlimeQueen() {
         setMutagens(saved.mutagens || {});
         setPityKills(saved.pityKills || {});
         setWardenKills(saved.wardenKills || {});
+        setMerchant(saved.merchant || null);
 
         setPurchasedSkills(saved.purchasedSkills || ['expeditionBasics', 'hiveFoundation', 'combatTraining']);
 
@@ -571,6 +577,7 @@ export default function SlimeQueen() {
         setMutagens(saved.mutagens || {});
         setPityKills(saved.pityKills || {});
         setWardenKills(saved.wardenKills || {});
+        setMerchant(saved.merchant || null);
         setPurchasedSkills(saved.purchasedSkills || ['expeditionBasics', 'hiveFoundation', 'combatTraining']);
         setPrisms(saved.prisms || 0);
         setRanchBuildings(saved.ranchBuildings || {});
@@ -586,56 +593,58 @@ export default function SlimeQueen() {
     setGameLoaded(true);
   }, []);
 
-  // Auto-save
+  // ── Saving ────────────────────────────────────────────────────────────────
+  //
+  // The autosave used to be an interval inside an effect that depended on every
+  // piece of state. A running expedition changes state every tick, so the
+  // effect tore the interval down and rebuilt it every second and the 30-second
+  // save never fired. Closing the app abruptly lost everything since the last
+  // manual save.
+  //
+  // Now the latest state sits in a ref, one interval reads it, and the game also
+  // saves the moment the page is hidden: switching apps, locking the phone, or
+  // swiping the app away. On Android the WebView reports all of those as the
+  // page going hidden before the process is killed.
+  const snapshot = () => ({ queen, bio, mats, slimes, exps, builds, research, activeRes, lastCaravan, caravanTier, ambush, seenTutorials, tutorialsOn, monsterKills, mutagens, pityKills, wardenKills, purchasedSkills, prisms, ranchBuildings, ranchAssignments, ranchProgress, mana, lastManaUpdate, activeHiveAbilities, merchant, lastSave: Date.now() });
+  const snapshotRef = useRef(null);
+  const deletedRef = useRef(false);
+  snapshotRef.current = gameLoaded && !deletedRef.current ? snapshot : null;
+
+  const saveNow = useCallback(() => {
+    const snap = snapshotRef.current;
+    if (!snap) return false;
+    const ok = saveGame(snap());
+    if (ok) setLastSave(Date.now());
+    return ok;
+  }, []);
+
   useEffect(() => {
     if (!gameLoaded) return;
-    const interval = setInterval(() => {
-      const state = { queen, bio, mats, slimes, exps, builds, research, activeRes, lastCaravan, caravanTier, ambush, seenTutorials, tutorialsOn, monsterKills, mutagens, pityKills, wardenKills, purchasedSkills, prisms, ranchBuildings, ranchAssignments, ranchProgress, mana, lastManaUpdate, activeHiveAbilities, lastSave: Date.now() };
-      if (saveGame(state)) {
-        setLastSave(Date.now());
-      }
-    }, AUTO_SAVE_INTERVAL);
-    return () => clearInterval(interval);
-  }, [gameLoaded, queen, bio, mats, slimes, exps, builds, research, activeRes, lastCaravan, caravanTier, ambush, seenTutorials, tutorialsOn, monsterKills, mutagens, pityKills, wardenKills, purchasedSkills, prisms, ranchBuildings, ranchAssignments, ranchProgress, mana, lastManaUpdate, activeHiveAbilities]);
+    const interval = setInterval(saveNow, AUTO_SAVE_INTERVAL);
+    const onHide = () => { if (document.visibilityState === 'hidden') saveNow(); };
+    document.addEventListener('visibilitychange', onHide);
+    window.addEventListener('pagehide', saveNow);
+    window.addEventListener('beforeunload', saveNow);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', onHide);
+      window.removeEventListener('pagehide', saveNow);
+      window.removeEventListener('beforeunload', saveNow);
+    };
+  }, [gameLoaded, saveNow]);
 
   const manualSave = () => {
-    const state = { queen, bio, mats, slimes, exps, builds, research, activeRes, lastCaravan, caravanTier, ambush, seenTutorials, tutorialsOn, monsterKills, mutagens, pityKills, wardenKills, purchasedSkills, prisms, ranchBuildings, ranchAssignments, ranchProgress, mana, lastManaUpdate, activeHiveAbilities, lastSave: Date.now() };
-    if (saveGame(state)) {
-      setLastSave(Date.now());
-      log('💾 Game saved!');
-    }
+    if (saveNow()) log('💾 Saved.');
   };
 
+  // Resetting thirty pieces of state by hand kept missing the newest ones, so a
+  // deleted save simply restarts the app from nothing. The ref is cleared first
+  // so the page-hide save on the way out cannot write the old game back.
   const handleDelete = () => {
+    deletedRef.current = true;
+    snapshotRef.current = null;
     deleteSave();
-    // Reset to defaults
-    setQueen({ level: 1 });
-    setBio(50);
-    setMats({});
-    setSlimes([]);
-    setExps({});
-    setBuilds({});
-    setResearch([]);
-    setActiveRes(null);
-    setLastSave(null);
-    setLastCaravan(0);
-    setCaravanTier(1);
-    setAmbush(null);
-    setSeenTutorials([]);
-    setTutorialsOn(true);
-    setMutagens({});
-    setPityKills({});
-    setMonsterKills({});
-    setPurchasedSkills(['expeditionBasics', 'hiveFoundation', 'combatTraining']);
-    setPrisms(0);
-    setRanchBuildings({});
-    setRanchAssignments({});
-    setRanchProgress({});
-    setRanchEvents([]);
-    setMana(0);
-    setLastManaUpdate(Date.now());
-    setActiveHiveAbilities({});
-    log('🗑️ Save deleted. Starting fresh!');
+    window.location.reload();
   };
 
   const log = useCallback((m) => setLogs(p => [...p.slice(-50), { t: new Date().toLocaleTimeString(), m }]), []);
@@ -654,10 +663,13 @@ export default function SlimeQueen() {
     touchX.current = null;
   };
 
-  const spawn = (tier, name, magCost) => {
+  // `free` is the dev panel's: no biomass, no plasm, and the slime takes no
+  // plasm while it lives, so test slimes never crowd the real roster.
+  const spawn = (tier, name, magCost, { free = false } = {}) => {
     const td = SLIME_TIERS[tier];
-    const bioCost = BASE_SLIME_COST;
-    if (bio < bioCost || freeJelly < magCost) return;
+    const bioCost = free ? 0 : BASE_SLIME_COST;
+    if (free) magCost = 0;
+    else if (bio < bioCost || freeJelly < magCost) return;
 
     // Slimes are born blank. Everything they become is applied afterwards.
     const spawnBoostMult = isHiveAbilityActive('spawnBoost') ? 1.10 : 1.0;
@@ -697,7 +709,7 @@ export default function SlimeQueen() {
       elements: createDefaultElements(),
       primaryElement: null,
     }]);
-    setBio(p => p - bioCost);
+    if (bioCost) setBio(p => p - bioCost);
     if (spawnTraits.length > 0) {
       const trait = SLIME_TRAITS[spawnTraits[0]];
       log(`${slimeName} emerges with ${trait.icon} ${trait.name} trait!`);
@@ -853,6 +865,134 @@ export default function SlimeQueen() {
   }, 0);
   const availableSkillPoints = totalSkillPoints - spentSkillPoints;
 
+  // ── Mossback ─────────────────────────────────────────────────────────────
+  // `stall` is derived from the clock every render; the deals are rolled once
+  // per visit, from what the player is carrying when the peddler turns up.
+  const merchantUnlocked = isFeatureUnlocked('merchant', purchasedSkills);
+  const stall = merchantUnlocked ? merchantVisit(merchant?.firstVisit, Date.now()) : null;
+
+  useEffect(() => {
+    if (!gameLoaded || !stall?.present) return;
+    if (merchant?.deals && merchant.visit === stall.index) return;
+    const firstVisit = merchant?.firstVisit || stall.arrivedAt;
+    const deals = rollMerchantDeals({
+      visit: stall.index * 7919 + (firstVisit % 104729),
+      mats, mutagens, builds,
+      mutationsUnlocked: hasPassive('mutagenesis'),
+      caravanUnlocked: isFeatureUnlocked('caravan', purchasedSkills),
+      buildingUnlocked: isFeatureUnlocked('building', purchasedSkills),
+    });
+    setMerchant({ firstVisit, visit: stall.index, deals, taken: [] });
+    log(`${MERCHANT.icon} ${MERCHANT.name} has come up the path, shop and all.`);
+  // Keyed on the visit only: a new stall per arrival, not per inventory change.
+  }, [gameLoaded, stall?.index, stall?.present]);
+
+  const takeDeal = (dealId) => {
+    const deal = merchant?.deals?.find(d => d.id === dealId);
+    if (!deal || !stall?.present || (merchant.taken || []).includes(dealId)) return;
+    if (!canTakeDeal(deal, { mats, mutagens })) return;
+    const move = (setter, item, sign) => setter(prev => {
+      const n = (prev[item.id] || 0) + sign * item.qty;
+      const next = { ...prev };
+      if (n > 0) next[item.id] = n; else delete next[item.id];
+      return next;
+    });
+    move(deal.give.kind === 'mutagen' ? setMutagens : setMats, deal.give, -1);
+    move(deal.get.kind === 'mutagen' ? setMutagens : setMats, deal.get, +1);
+    setMerchant(m => ({ ...m, taken: [...(m.taken || []), dealId] }));
+    log(`${MERCHANT.icon} Swapped ${deal.give.qty} ${deal.give.kind === 'mutagen' ? mutagenName(deal.give.id) : deal.give.id} for ${deal.get.qty} ${deal.get.kind === 'mutagen' ? mutagenName(deal.get.id) : deal.get.id}.`);
+  };
+
+  // ── Dev panel ────────────────────────────────────────────────────────────
+  // Everything a playtest needs to jump to any point in the game. Item lists
+  // are derived from the data files, never typed out, so they cannot go stale.
+  const devTools = {
+    addBio: (n) => setBio(b => b + n),
+    addLevels: (n) => setQueen(q => ({ ...q, level: q.level + n })),
+    addPrisms: (n) => setPrisms(p => p + n),
+    addMana: (n) => setMana(p => p + n),
+    addAllMaterials: (n) => setMats(m => {
+      const next = { ...m };
+      Object.keys(MATERIAL_TABLE).forEach(k => { next[k] = (next[k] || 0) + n; });
+      return next;
+    }),
+    addZoneMaterials: (zone, n) => setMats(m => {
+      const next = { ...m };
+      Object.entries(MATERIAL_TABLE).filter(([, i]) => i.zone === zone).forEach(([k]) => { next[k] = (next[k] || 0) + n; });
+      return next;
+    }),
+    addAllMutagens: (n) => setMutagens(m => {
+      const next = { ...m };
+      Object.keys(MUTATION_LIBRARY).forEach(k => { next[k] = (next[k] || 0) + n; });
+      return next;
+    }),
+    addSealsAndHearts: (n) => setMats(m => {
+      const next = { ...m };
+      ALL_SEALS.concat(ALL_HEARTS).forEach(k => { next[k] = (next[k] || 0) + n; });
+      return next;
+    }),
+    learnAllSkills: () => {
+      const all = Object.values(SKILL_TREES).flatMap(t => Object.keys(t.skills));
+      const cost = Object.values(SKILL_TREES).flatMap(t => Object.values(t.skills)).reduce((n, sk) => n + (sk.cost || 0), 0);
+      setPurchasedSkills(all);
+      setQueen(q => ({ ...q, level: Math.max(q.level, cost) }));
+    },
+    setTendrils: (level) => setBuilds(b => {
+      const next = { ...b };
+      TENDRILS.forEach(t => { next[t.id] = Math.max(next[t.id] || 0, level); });
+      return next;
+    }),
+    fellAllWardens: () => setWardenKills(k => {
+      const next = { ...k };
+      ZONE_ORDER.forEach(z => { next[z] = Math.max(1, next[z] || 0); });
+      return next;
+    }),
+    buildEverything: () => {
+      setBuilds(b => {
+        const next = { ...b };
+        Object.entries(BUILDINGS).forEach(([id, bd]) => {
+          if (bd.category === 'tendril' || bd.category === 'research') return;
+          next[id] = bd.max || 1;
+        });
+        return next;
+      });
+      setResearch(Object.keys(RESEARCH));
+      setActiveRes(null);
+      setRanchBuildings(Object.fromEntries(Object.keys(RANCH_TYPES).map(id => [id, { level: MAX_RANCH_LEVEL }])));
+    },
+    spawnFree: (tier) => spawn(tier, genName(), 0, { free: true }),
+    healAll: () => setSlimes(list => list.map(sl => ({ ...sl, wounded: false, woundedAt: null }))),
+    woundFirst: () => setSlimes(list => list.map((sl, i) => (i === 0 ? { ...sl, wounded: true, woundedAt: Date.now(), biomass: 0 } : sl))),
+    giveTraits: () => setSlimes(list => list.map(sl => {
+      const pool = Object.keys(SLIME_TRAITS).filter(t => !(sl.traits || []).includes(t) && t !== 'void');
+      return pool.length ? { ...sl, traits: [...(sl.traits || []), pool[Math.floor(Math.random() * pool.length)]] } : sl;
+    })),
+    summonMerchant: () => {
+      if (!purchasedSkills.includes('barter')) setPurchasedSkills(p => [...p, 'barter']);
+      setMerchant(null);
+    },
+    resetCaravan: () => { setLastCaravan(0); setAmbush(null); },
+    replayTutorials: () => { setSeenTutorials([]); setTutorialsOn(true); },
+    skipTutorials: () => setSeenTutorials(TUTORIAL_ORDER),
+    // Close the game "hours ago": every clock in the save is pushed back, then
+    // the app restarts and runs its real offline catch-up.
+    simulateOffline: (hours) => {
+      const ms = hours * 3600 * 1000;
+      const snap = snapshot();
+      const back = (t) => (t ? t - ms : t);
+      snap.ranchAssignments = Object.fromEntries(Object.entries(snap.ranchAssignments || {}).map(([id, list]) =>
+        [id, list.map(a => ({ ...a, startTime: back(a.startTime) }))]));
+      snap.slimes = snap.slimes.map(sl => ({ ...sl, woundedAt: back(sl.woundedAt) }));
+      snap.lastManaUpdate = back(snap.lastManaUpdate);
+      snap.lastCaravan = back(snap.lastCaravan);
+      if (snap.merchant) snap.merchant = { ...snap.merchant, firstVisit: back(snap.merchant.firstVisit) };
+      deletedRef.current = true;      // nothing may overwrite this save on the way out
+      snapshotRef.current = null;
+      saveGame(snap, Date.now() - ms);
+      window.location.reload();
+    },
+  };
+
   // Everything the tutorial triggers need, and nothing else.
   const tutorialState = {
     tab,
@@ -866,6 +1006,7 @@ export default function SlimeQueen() {
     buildingUnlocked: isFeatureUnlocked('building', purchasedSkills),
     affinityUnlocked: skillEffects.passives.includes('affinity'),
     caravanUnlocked: isFeatureUnlocked('caravan', purchasedSkills),
+    merchantHere: !!stall?.present,
     expeditionSlots,
     maxHeldBiomass: slimes.reduce((n, sl) => Math.max(n, sl.biomass || 0), 0),
     maxElementAffinity: slimes.reduce(
@@ -1596,7 +1737,7 @@ export default function SlimeQueen() {
                 if (timeInRanch >= RANCH_MAX_ACCUMULATION_TIME) return; // Capped
 
                 // Calculate lazy trait bonus and skill tree ranch yield bonus
-                const lazyBonus = slime.traits?.includes('lazy') ? 1.1 : 1;
+                const lazyBonus = slime.traits?.includes('lazy') ? 1 + traitValues('lazy').v / 100 : 1;
                 const ranchYieldBonus = 1 + (skillBonuses.ranchYield || 0) / 100;
                 const totalMult = effectMult * eventMult * lazyBonus * ranchYieldBonus;
 
@@ -2003,6 +2144,8 @@ export default function SlimeQueen() {
                 </div>
               )}
             </div>
+
+            <Merchant stall={stall} merchant={merchant} mats={mats} mutagens={mutagens} onTake={takeDeal} />
 
             {/* Buildings — hidden entirely until Calcified Frame. A locked panel
                 advertises what you are missing; an absent one lets the screen
@@ -2506,25 +2649,12 @@ export default function SlimeQueen() {
       />
 
       {dev && (
-        <div style={{ position: 'fixed', top: 60, right: 10, width: 220, background: 'rgba(0,0,0,0.95)', borderRadius: 10, padding: 15, zIndex: 200, border: '1px solid rgba(255,255,255,0.2)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}><span style={{ fontWeight: 'bold' }}>🛠️ Dev</span><button onClick={() => setDev(false)} style={{ background: 'none', border: 'none', color: '#fff', fontSize: 18, cursor: 'pointer' }}>×</button></div>
-          <div style={{ marginBottom: 10 }}><label style={{ fontSize: 12 }}>Speed: {speed}x</label><input type="range" min="1" max="50" value={speed} onChange={e => setSpeed(+e.target.value)} style={{ width: '100%' }} /></div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <button onClick={() => setBio(b => b + 100)} style={{ padding: 8, background: '#4ade80', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 12 }}>+100🧬</button>
-            <button onClick={() => setMats(m => ({ ...m, 'Wolf Fang': (m['Wolf Fang'] || 0) + 10, 'Wolf Pelt': (m['Wolf Pelt'] || 0) + 10, 'Spider Silk': (m['Spider Silk'] || 0) + 10, 'Mana Crystal': (m['Mana Crystal'] || 0) + 5, 'Snail Shell': (m['Snail Shell'] || 0) + 5, 'Wyrm Scale': (m['Wyrm Scale'] || 0) + 3, 'Storm Core': (m['Storm Core'] || 0) + 3, 'Void Essence': (m['Void Essence'] || 0) + 3, 'Human Bone': (m['Human Bone'] || 0) + 10, 'Iron Sword': (m['Iron Sword'] || 0) + 10, 'Champion Badge': (m['Champion Badge'] || 0) + 2 }))} style={{ padding: 8, background: '#f59e0b', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 12 }}>+Mats</button>
-            <button onClick={() => setMutagens(m => { const n = { ...m }; ['sharp','digest','stoneskin','vinewebs','resurrect','spiny','pyrolyze','lifesteal','theTouch','fracture','stormcaller','voidTouched'].forEach(k => { n[k] = (n[k] || 0) + 3; }); return n; })} style={{ padding: 8, background: '#a855f7', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 12 }}>+3 Each Mutagen</button>
-            <button onClick={() => setMonsterKills(k => ({ ...k, youngWolf: (k.youngWolf || 0) + 50, venusSlimetrap: (k.venusSlimetrap || 0) + 50, serratedCarp: (k.serratedCarp || 0) + 50, crystalBat: (k.crystalBat || 0) + 50, emberWyrm: (k.emberWyrm || 0) + 50, voidHollow: (k.voidHollow || 0) + 50 }))} style={{ padding: 8, background: '#22c55e', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 12 }}>+50 Kills</button>
-            <button onClick={() => setQueen(q => ({ ...q, level: q.level + 5 }))} style={{ padding: 8, background: '#ec4899', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 12 }}>+5 Queen Lv</button>
-            <button onClick={() => { setLastCaravan(0); setAmbush(null); log('🎯 Caravan timer reset!'); }} style={{ padding: 8, background: '#22d3ee', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 12 }}>Reset Caravan</button>
-            <button onClick={() => setPrisms(p => p + 100)} style={{ padding: 8, background: '#8b5cf6', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 12 }}>+100 Prisms</button>
-            <button onClick={() => setMana(p => p + 100)} style={{ padding: 8, background: '#10b981', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 12 }}>+100 Mana</button>
-            <button onClick={() => { setSeenTutorials([]); setTutorialsOn(true); }} style={{ padding: 8, background: '#a855f7', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 12 }}>Replay Tutorials</button>
-            <button onClick={() => { setSeenTutorials(TUTORIAL_ORDER); }} style={{ padding: 8, background: 'rgba(255,255,255,0.15)', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 12, color: '#fff' }}>Skip Tutorials</button>
-            <button onClick={() => setSlimes(list => list.map((sl, i) => (i === 0 ? { ...sl, wounded: true, woundedAt: Date.now(), biomass: 0 } : sl)))} style={{ padding: 8, background: '#ef4444', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 12 }}>Wound First Slime</button>
-            <button onClick={() => setBuilds(b => { const n = { ...b }; TENDRILS.forEach(t => { n[t.id] = Math.max(2, n[t.id] || 0); }); return n; })} style={{ padding: 8, background: '#f59e0b', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 12 }}>All Tendrils → Provoke</button>
-            <button onClick={() => setMats(m => { const n = { ...m }; TENDRILS.forEach(t => { Object.keys(t.levels[1].cost.mats || {}).forEach(k => { n[k] = (n[k] || 0) + 20; }); }); ALL_SEALS.concat(ALL_HEARTS).forEach(k => { n[k] = (n[k] || 0) + 2; }); return n; })} style={{ padding: 8, background: '#f59e0b', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 12 }}>+Tendril Mats &amp; Seals</button>
-          </div>
-        </div>
+        <DevPanel
+          tools={devTools}
+          speed={speed}
+          setSpeed={setSpeed}
+          onClose={() => setDev(false)}
+        />
       )}
     </div>
   );

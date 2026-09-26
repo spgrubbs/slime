@@ -82,10 +82,10 @@ export function computeMaxHp(slime, stats, bon = {}, combatBonuses = {}, mutatio
   const tier = SLIME_TIERS[slime.tier];
   const base = (tier?.baseHp || 30) + (stats?.firmness || 0) * 3;
 
-  const ev = { maxHp: base, mult: 1, slime };
-  runHooks({ stats, effects: buildEffectList(slime) }, 'hpMod', ev, mutationPower);
+  const ev = { maxHp: base, mult: 1, flat: 0, slime };
+  runHooks({ stats, effects: buildEffectList(slime), ref: slime }, 'hpMod', ev, mutationPower);
 
-  return Math.max(1, Math.floor(base * ev.mult * (bon.hp || 1) * (combatBonuses.maxHp || 1)));
+  return Math.max(1, Math.floor((base * ev.mult + ev.flat) * (bon.hp || 1) * (combatBonuses.maxHp || 1)));
 }
 
 /**

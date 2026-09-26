@@ -149,13 +149,13 @@ test('an expedition survives a save/load round trip', () => {
   // And it keeps running. Ticks only advance the round counter while a fight is
   // actually on, so walk out of any travel phase first rather than assuming a
   // particular fight length — that assumption broke the moment monster HP moved.
-  const before = restored.round;
+  const before = restored.totalRounds;
   let ticks = 0;
-  while (restored.round === before && ticks < 40) {
+  while (restored.totalRounds === before && ticks < 40) {
     tickExpedition(restored, ROUND_MS, ctx(8), 'forest');
     ticks++;
   }
-  assert.ok(restored.round > before, `round advanced within ${ticks} ticks`);
+  assert.ok(restored.totalRounds > before, `round advanced within ${ticks} ticks`);
 });
 
 test('a restored expedition drops combatants whose slime is gone', () => {

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { RANCH_TYPES, RANCH_UPGRADE_BONUSES, MAX_RANCH_LEVEL, RANCH_MAX_ACCUMULATION_TIME } from '../data/ranchData.js';
 import { ELEMENTS } from '../data/gameConstants.js';
 import { SLIME_TIERS } from '../data/slimeData.js';
+import { traitValues } from '../data/traitData.js';
 import SlimeSprite from './SlimeSprite.jsx';
 
 // CSS keyframes for bouncing animation
@@ -457,7 +458,7 @@ const Ranch = ({
                       </div>
                       {slime.traits?.includes('lazy') && (
                         <div style={{ fontSize: 9, color: '#4ade80', padding: '2px 6px', background: 'rgba(74,222,128,0.2)', borderRadius: 4 }}>
-                          +10% ranch
+                          +{traitValues('lazy').v}% here
                         </div>
                       )}
                     </div>

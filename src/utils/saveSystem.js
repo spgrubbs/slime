@@ -34,14 +34,16 @@ export const getDefaultState = () => ({
 const withDefaults = (data) => ({ ...getDefaultState(), ...data });
 
 // Save game to localStorage
-export const saveGame = (state) => {
+// `at` is the save's timestamp. Only the dev panel passes one, to pretend the
+// game was closed hours ago and exercise offline progress.
+export const saveGame = (state, at = Date.now()) => {
   try {
     // Combatants carry live references that must not be serialized.
     const exps = {};
     Object.entries(state.exps || {}).forEach(([zone, exp]) => {
       exps[zone] = dehydrateExpedition(exp);
     });
-    const saveData = { ...state, exps, ambush: dehydrateAmbush(state.ambush), lastSave: Date.now() };
+    const saveData = { ...state, exps, ambush: dehydrateAmbush(state.ambush), lastSave: at };
     localStorage.setItem(SAVE_KEY, JSON.stringify(saveData));
     return true;
   } catch (e) {

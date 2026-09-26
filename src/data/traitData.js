@@ -454,39 +454,115 @@ export const STATUS_EFFECTS = {
               desc: 'Deals 50% more damage' },
 };
 
-// Personality traits - behavioral modifiers that slimes can acquire
-// Separate from mutations (combat abilities)
-// All traits now have titles for slime naming
+// ── Personality traits ───────────────────────────────────────────────────────
+//
+// Traits used to be small percentages: "+5% damage", "+3% max HP". On a basic
+// slime with 5 Firmness and 45 HP that is a quarter of a point of damage and
+// one hit point, and after rounding it was usually nothing at all.
+//
+// Now each trait is an AFFIX with a fixed value per tier, written as flat
+// numbers sized to that tier's real stats. A Hardy basic slime gets +8 HP on a
+// 45 HP body; a Hardy royal gets +60 on 375. Both are about the same share of
+// the slime, and both are numbers you can see on its card.
+//
+//   values   the main number, one per tier: [basic, enhanced, elite, royal],
+//            or a single number when it does not depend on tier (chances)
+//   values2  a second number where the trait has a drawback
+//   desc     shown to the player; {v} and {w} are filled in with the numbers
+//            for that slime's tier
 export const SLIME_TRAITS = {
-  // Common positive traits
-  brave: { name: 'Brave', icon: '🦁', desc: '+5% damage when HP below 50%', rarity: 'common', title: ' the Brave' },
-  cautious: { name: 'Cautious', icon: '🛡️', desc: '+5% dodge when HP below 50%', rarity: 'common', title: ' the Cautious' },
-  hardy: { name: 'Hardy', icon: '💪', desc: '+3% max HP', rarity: 'common', title: ' the Mighty' },
-  swift: { name: 'Swift', icon: '⚡', desc: '+3% crit chance', rarity: 'common', title: ' the Swift' },
-  wise: { name: 'Wise', icon: '🧠', desc: '+5% element gain rate', rarity: 'common', title: ' the Wise' },
+  // Common
+  brave:     { name: 'Brave',     icon: '🦁', rarity: 'common',   title: ' the Brave',
+               values: [2, 3, 5, 8],
+               desc: '+{v} damage while below half health' },
+  cautious:  { name: 'Cautious',  icon: '🛡️', rarity: 'common',   title: ' the Cautious',
+               values: 15,
+               desc: '+{v}% dodge while below half health' },
+  hardy:     { name: 'Hardy',     icon: '💪', rarity: 'common',   title: ' the Mighty',
+               values: [8, 18, 35, 60],
+               desc: '+{v} max HP' },
+  swift:     { name: 'Swift',     icon: '⚡', rarity: 'common',   title: ' the Swift',
+               values: 8,
+               desc: '+{v}% crit chance' },
+  wise:      { name: 'Wise',      icon: '🧠', rarity: 'common',   title: ' the Wise',
+               values: 25,
+               desc: 'Soaks up elements {v}% faster' },
 
-  // Uncommon positive traits
-  lucky: { name: 'Lucky', icon: '🍀', desc: '+5% material drop rate', rarity: 'uncommon', title: ' the Lucky' },
-  greedy: { name: 'Greedy', icon: '💰', desc: '+5% biomass gain', rarity: 'uncommon', title: ' the Greedy' },
-  resilient: { name: 'Resilient', icon: '🔄', desc: 'Recover 1 HP per kill', rarity: 'uncommon', title: ' the Resilient' },
-  fierce: { name: 'Fierce', icon: '😤', desc: '+8% damage on first attack', rarity: 'uncommon', title: ' the Fierce' },
+  // Uncommon
+  lucky:     { name: 'Lucky',     icon: '🍀', rarity: 'uncommon', title: ' the Lucky',
+               values: 6,
+               desc: '+{v}% chance on every material drop' },
+  greedy:    { name: 'Greedy',    icon: '💰', rarity: 'uncommon', title: ' the Greedy',
+               values: [2, 3, 8, 18],
+               desc: '+{v} biomass from every kill' },
+  resilient: { name: 'Resilient', icon: '🔄', rarity: 'uncommon', title: ' the Resilient',
+               values: [3, 6, 12, 22],
+               desc: 'Heals {v} HP on every kill' },
+  fierce:    { name: 'Fierce',    icon: '😤', rarity: 'uncommon', title: ' the Fierce',
+               values: [4, 8, 14, 20],
+               desc: '+{v} damage on its first hit of each fight' },
 
-  // Common neutral/negative traits (add flavor)
-  lazy: { name: 'Lazy', icon: '😴', desc: '-5% damage, +10% ranch effectiveness', rarity: 'common', title: ' the Lazy' },
-  timid: { name: 'Timid', icon: '😰', desc: '+10% dodge, -5% damage', rarity: 'common', title: ' the Timid' },
-  curious: { name: 'Curious', icon: '🔍', desc: '+10% exploration event chance', rarity: 'common', title: ' the Curious' },
+  // Common, with a catch
+  lazy:      { name: 'Lazy',      icon: '😴', rarity: 'common',   title: ' the Lazy',
+               values: 20,
+               desc: 'Always acts last. Pools work {v}% better with it in them' },
+  timid:     { name: 'Timid',     icon: '😰', rarity: 'common',   title: ' the Timid',
+               values: 15, values2: [1, 2, 3, 5],
+               desc: '+{v}% dodge, but -{w} damage' },
+  curious:   { name: 'Curious',   icon: '🔍', rarity: 'common',   title: ' the Curious',
+               values: 50,
+               desc: 'Finds things on the road {v}% more often' },
 
-  // Uncommon mixed traits
-  reckless: { name: 'Reckless', icon: '💥', desc: '+10% damage, +5% damage taken', rarity: 'uncommon', title: ' the Reckless' },
-  glutton: { name: 'Glutton', icon: '🍖', desc: '+10% biomass gain, -3% max HP', rarity: 'uncommon', title: ' the Glutton' },
+  // Uncommon, with a catch
+  reckless:  { name: 'Reckless',  icon: '💥', rarity: 'uncommon', title: ' the Reckless',
+               values: [2, 3, 5, 8],
+               desc: '+{v} damage dealt, and +{v} damage taken' },
+  glutton:   { name: 'Glutton',   icon: '🍖', rarity: 'uncommon', title: ' the Glutton',
+               values: 20, values2: [5, 10, 20, 35],
+               desc: '+{v}% biomass from kills, but -{w} max HP' },
 
-  // Rare traits (from specific ranches only)
-  void: { name: 'Void', icon: '🕳️', desc: 'Cannot gain elemental affinity', rarity: 'rare', source: 'nullifier', title: ' the Void' },
-  adaptable: { name: 'Adaptable', icon: '🔀', desc: '+50% elemental affinity gain', rarity: 'rare', title: ' the Adaptable' },
+  // Rare (specific pools only)
+  void:      { name: 'Void',      icon: '🕳️', rarity: 'rare', source: 'nullifier', title: ' the Void',
+               desc: 'Never takes on an element' },
+  adaptable: { name: 'Adaptable', icon: '🔀', rarity: 'rare', title: ' the Adaptable',
+               values: 50,
+               desc: 'Soaks up elements {v}% faster' },
 
-  // Legendary traits (premium currency only)
-  ancient: { name: 'Ancient', icon: '📜', desc: '+1 mutation slot', rarity: 'legendary', title: ' the Ancient' },
-  primordial: { name: 'Primordial', icon: '🌟', desc: '+10% all stats', rarity: 'legendary', title: ' the Primordial' },
+  // Legendary (prisms only)
+  ancient:   { name: 'Ancient',   icon: '📜', rarity: 'legendary', title: ' the Ancient',
+               desc: '+1 mutation slot' },
+  primordial:{ name: 'Primordial', icon: '🌟', rarity: 'legendary', title: ' the Primordial',
+               values: [1, 2, 4, 6],
+               desc: '+{v} to every stat' },
+};
+
+const TIER_ORDER = ['basic', 'enhanced', 'elite', 'royal'];
+
+const pickTier = (vals, tier) => {
+  if (vals == null) return 0;
+  if (!Array.isArray(vals)) return vals;
+  return vals[Math.max(0, TIER_ORDER.indexOf(tier))] ?? vals[0];
+};
+
+/** A trait's numbers for a slime of `tier`: { v, w }. */
+export const traitValues = (traitOrId, tier) => {
+  const def = typeof traitOrId === 'string' ? SLIME_TRAITS[traitOrId] : traitOrId;
+  return { v: pickTier(def?.values, tier), w: pickTier(def?.values2, tier) };
+};
+
+/**
+ * The trait's description with numbers filled in. With a tier, the numbers for
+ * that tier; without one, every tier's number side by side ("2/3/5/8"), for the
+ * Compendium.
+ */
+export const traitDesc = (traitOrId, tier = null) => {
+  const def = typeof traitOrId === 'string' ? SLIME_TRAITS[traitOrId] : traitOrId;
+  if (!def) return '';
+  const fmt = (vals) => {
+    if (tier) return String(pickTier(vals, tier));
+    return Array.isArray(vals) ? vals.join('/') : String(vals ?? '');
+  };
+  return def.desc.replaceAll('{v}', fmt(def.values)).replaceAll('{w}', fmt(def.values2));
 };
 
 // Rarity colors for traits

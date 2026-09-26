@@ -16,7 +16,7 @@ import { WARDEN_TYPES } from '../data/wardenData.js';
 import { WARDEN_MECHANICS, DOT_STATUSES } from './wardenMechanics.js';
 import { isSeared, corrosion, stacksOf } from './statuses.js';
 import { calculateElementalDamage } from '../utils/helpers.js';
-import { runHooks } from './hooks.js';
+import { runHooks, getEffect } from './hooks.js';
 import { computeStats, computeMaxHp, buildEffectList } from './stats.js';
 import { makeTrace } from './trace.js';
 
@@ -213,7 +213,11 @@ export function turnOrder(world, ctx = {}) {
   const all = [...world.slimes.filter(s => !s.dead), ...(world.enemy && !world.enemy.dead ? [world.enemy] : [])];
   // Vanguard: the party opens every fight, whatever the speed numbers say.
   const vanguard = ctx.passives?.includes('vanguard') && (world.round || 0) <= 1;
+  // Lazy slimes act after everyone, whatever else applies.
+  const lazy = (c) => (c.effects || []).some(e => getEffect(e.source, e.id)?.actsLast);
   return all.sort((a, b) => {
+    const la = lazy(a), lb = lazy(b);
+    if (la !== lb) return la ? 1 : -1;
     if (vanguard && (a.side === 'slime') !== (b.side === 'slime')) {
       return a.side === 'slime' ? -1 : 1;
     }
@@ -715,7 +719,7 @@ export function resolveKill(world, ctx, records, sideEffects, zoneDef) {
   });
 
   if (ev.biomassMult !== 1) trace.mul('party traits', ev.biomassMult);
-  if (ev.biomassFlat > 0)   trace.add('🌱 Digest', ev.biomassFlat);
+  if (ev.biomassFlat > 0)   trace.add('per-kill bonuses (Digest, Greedy)', ev.biomassFlat);
 
   const total = Math.max(0, Math.floor(trace.value));
   const per   = living.length ? total / living.length : 0;

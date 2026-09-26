@@ -14,7 +14,7 @@ export const JELLY_PER_QUEEN_LEVEL = 5;  // Reduced from 10 - slower scaling
 
 
 // Save settings
-export const AUTO_SAVE_INTERVAL = 30000; // 30 seconds
+export const AUTO_SAVE_INTERVAL = 10000; // 10 seconds, plus a save whenever the app is backgrounded
 export const SAVE_KEY = 'slime_queen_save_v5'; // v5: Slime Queen rename, plasm replaces royal jelly
 
 // Caravan ambush — one opportunity per real-world day

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { SLIME_TIERS, STAT_INFO } from '../data/slimeData.js';
-import { MUTATION_LIBRARY, SLIME_TRAITS, TRAIT_RARITY_COLORS, getMutationDesc } from '../data/traitData.js';
+import { MUTATION_LIBRARY, SLIME_TRAITS, TRAIT_RARITY_COLORS, getMutationDesc, traitDesc } from '../data/traitData.js';
 import { affinityMult } from '../combat/hooks.js';
 import { ELEMENTS } from '../data/gameConstants.js';
 import SlimeSprite from './SlimeSprite.jsx';
@@ -148,7 +148,7 @@ const SlimeDetail = ({
                     <span style={{ fontSize: 12, fontWeight: 'bold' }}>{trait.name}</span>
                     <span style={{ fontSize: 9, padding: '1px 4px', background: `${color}33`, color: color, borderRadius: 3, textTransform: 'uppercase' }}>{trait.rarity}</span>
                   </div>
-                  <div style={{ fontSize: 10, opacity: 0.8 }}>{trait.desc}</div>
+                  <div style={{ fontSize: 10, opacity: 0.8 }}>{traitDesc(trait, slime.tier)}</div>
                 </div>
               </div>
             );

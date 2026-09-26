@@ -9,7 +9,7 @@ import {
   turnOrder, enemyActions, dodgeFromSlip, critFromSlip, DODGE_CAP,
 } from './resolveRound.js';
 import { effectPower, effectChance } from './hooks.js';
-import { MUTATION_LIBRARY } from '../data/traitData.js';
+import { MUTATION_LIBRARY, traitValues } from '../data/traitData.js';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -112,12 +112,14 @@ test('draconicPower raises all three stats', () => {
   assert.equal(drake.viscosity, plain.viscosity + bump);
 });
 
-test('primordial is +10% to all stats, not just damage', () => {
+test('primordial adds its tier value to every stat', () => {
   const plain = computeStats(slime());
   const prime = computeStats(slime({ traits: ['primordial'] }));
-  assert.equal(prime.firmness, Math.floor(plain.firmness * 1.1));
-  assert.equal(prime.slipperiness, Math.floor(plain.slipperiness * 1.1));
-  assert.equal(prime.viscosity, Math.floor(plain.viscosity * 1.1));
+  const { v } = traitValues('primordial', slime().tier);
+  assert.ok(v > 0);
+  assert.equal(prime.firmness, plain.firmness + v);
+  assert.equal(prime.slipperiness, plain.slipperiness + v);
+  assert.equal(prime.viscosity, plain.viscosity + v);
 });
 
 test('biomass growth raises stats and max HP together', () => {

@@ -297,6 +297,17 @@ export const SKILL_TREES = {
         position: { x: 80, y: 29 },
       },
 
+      barter: {
+        id: 'barter',
+        name: 'Trade Musk',
+        icon: '🐌',
+        desc: 'A scent that says "we have things." Mossback the peddler starts stopping by',
+        cost: 1,
+        requires: ['masonry'],
+        effect: { type: 'unlock', feature: 'merchant' },
+        position: { x: 92, y: 42 },
+      },
+
       researchLabUnlock: {
         id: 'researchLabUnlock',
         name: 'Culture Lab',

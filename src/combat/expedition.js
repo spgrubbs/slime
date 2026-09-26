@@ -317,6 +317,19 @@ export function tickExpedition(exp, dt, ctx = {}, zone) {
                 v: `Contagion carried ${exp.lingering.map(st => st.type).join(', ')}` });
         }
         exp.lingering = null;
+        // A new fight. Everything described as "each fight" or "first attack"
+        // re-arms here; before this, the round counter and every once-per-fight
+        // flag ran for the whole expedition, so Vanguard, Opportunist, Second
+        // Skin, Drop In and Fierce each fired once and never again.
+        // Resurrect and Survival Reflex are once per expedition and stay spent.
+        exp.round = 0;
+        exp.slimes.forEach(sl => {
+          const f = sl.flags || {};
+          sl.flags = {
+            ...(f.usedResurrect ? { usedResurrect: true } : {}),
+            ...(f.usedTacticalRetreat ? { usedTacticalRetreat: true } : {}),
+          };
+        });
         exp.enemy = enemy;
         exp.phase = 'battling';
         exp.intermission = null;
@@ -341,6 +354,8 @@ export function tickExpedition(exp, dt, ctx = {}, zone) {
   };
   const { records, sideEffects: roundEffects, wiped, enemyDead } = resolveRound(world, ctx);
 
+  // `round` counts within the current fight; `totalRounds` the whole outing.
+  exp.totalRounds = (exp.totalRounds || 0) + (world.round - (exp.round || 0));
   exp.round = world.round;
   exp.killStreak = world.killStreak || 0;
   exp.freeRoundAt = world.freeRoundAt;
@@ -402,7 +417,7 @@ export function tickExpedition(exp, dt, ctx = {}, zone) {
 
   // ── Party wipe ────────────────────────────────────────────────────────────
   if (wiped) {
-    log({ m: 'Party wiped! 💀', c: '#ef4444', v: `after ${exp.round} rounds, ${exp.kills} kills` });
+    log({ m: 'Party wiped! 💀', c: '#ef4444', v: `after ${exp.totalRounds} rounds, ${exp.kills} kills` });
     exp.phase = 'defeat';
     sideEffects.push({ type: 'expWipe', salvage: ctx.passives?.includes('salvage') ? { ...exp.materials } : null });
   }

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { ZONES } from '../data/zoneData.js';
 import { MONSTER_TYPES, MONSTER_ABILITIES, MATERIAL_RATES, MUTAGEN_RATES, MUTAGEN_PITY_KILLS } from '../data/monsterData.js';
-import { MUTATION_LIBRARY, SLIME_TRAITS, STATUS_EFFECTS, TRAIT_RARITY_COLORS } from '../data/traitData.js';
+import { MUTATION_LIBRARY, SLIME_TRAITS, STATUS_EFFECTS, TRAIT_RARITY_COLORS, traitDesc } from '../data/traitData.js';
 import { SLIME_TIERS, STAT_INFO } from '../data/slimeData.js';
 import { ELEMENTS } from '../data/gameConstants.js';
 import { TUTORIALS, TUTORIAL_ORDER, TUTORIAL_CATEGORIES } from '../data/tutorialData.js';
@@ -145,7 +145,7 @@ function Reference() {
               <span style={{ color: TRAIT_RARITY_COLORS[t.rarity], fontWeight: 'bold' }}>
                 {t.icon} {t.name}
               </span>
-              <span style={{ opacity: 0.75 }}> — {t.desc}</span>
+              <span style={{ opacity: 0.75 }}>: {traitDesc(t)}</span>
             </div>
           ))}
         </div>

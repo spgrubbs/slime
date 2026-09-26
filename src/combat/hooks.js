@@ -56,6 +56,8 @@ export const allEffects = () => [...registry.values()];
 /** Wipe the registry. Test-only — production registers once at import time. */
 export const _resetRegistry = () => registry.clear();
 
+import { traitValues } from '../data/traitData.js';
+
 // ── Magnitude ────────────────────────────────────────────────────────────────
 //
 // A mutation's power is `base + viscScale × viscosity`, where base is
@@ -106,14 +108,18 @@ export function collectHooks(combatant, hook, mutationPower = 1) {
   for (const { source, id, def } of (combatant?.effects || [])) {
     const effect = getEffect(source, id);
     if (!effect?.hooks?.[hook]) continue;
-    // Traits are flat by design; only mutation magnitudes scale with skills,
-    // and with the slime's affinity for the mutation's element.
+    // Only mutation magnitudes scale with skills, and with the slime's
+    // affinity for the mutation's element.
     const mult = source === 'mutation'
       ? mutationPower * affinityMult(def, combatant?.ref)
       : 1;
+    // Traits are tier affixes: flat numbers looked up by the slime's tier.
+    const tv = source === 'trait' ? traitValues(def, combatant?.ref?.tier) : null;
     out.push({
       effect,
       def,
+      v: tv?.v ?? 0,
+      w: tv?.w ?? 0,
       run: effect.hooks[hook],
       power:  effectPower(def, visc, mult),
       chance: effectChance(def, visc, mult),
