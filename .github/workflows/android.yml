@@ -60,6 +60,17 @@ jobs:
         working-directory: android
         run: ./gradlew --no-daemon assembleDebug
 
+      # Updates only install over a copy signed with the same key, so a build
+      # signed with anything else is useless to a playtester who already has the
+      # app. Fail here rather than ship an APK that says "App not installed".
+      # Replacing the keystore on purpose means updating this digest — and
+      # everyone uninstalling once.
+      - name: Check the APK carries the playtest signature
+        run: |
+          APKSIGNER="$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)apksigner"
+          "$APKSIGNER" verify --print-certs android/app/build/outputs/apk/debug/app-debug.apk | tee certs.txt
+          grep -qi "SHA-256 digest: 7c8406a34188aca6e1964f57778c5d53cfd26747fd791cf8c93b9c7f9a2cc8e2" certs.txt
+
       # A recognisable filename: the shortest thing that tells you which build
       # you are holding when three of them are in your Downloads folder.
       - name: Name the APK

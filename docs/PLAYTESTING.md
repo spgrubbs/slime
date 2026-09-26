@@ -52,8 +52,16 @@ phone and tap the `.apk` to download it.
 
 ### Updating
 
-Sideloaded APKs only install over an existing copy if the **versionCode goes
-up**. Before cutting a new playtest build, bump it in
+Two things must be true for an APK to install over the copy already on the
+phone, and Android reports either failure as the same unhelpful
+**"App not installed"**:
+
+1. **Same signing key.** Every build is signed with `android/app/playtest.keystore`,
+   and CI refuses to publish one that is not. Builds before 0.2.1 were each
+   signed with a random throwaway key, so if you have one of those installed you
+   must **uninstall it once** before installing 0.2.1 or later. After that,
+   updates install in place. Play Protect settings do not affect this check.
+2. **Higher versionCode.** Before cutting a new playtest build, bump it in
 `android/app/build.gradle`:
 
 ```gradle

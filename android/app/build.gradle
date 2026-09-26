@@ -9,8 +9,8 @@ android {
         targetSdkVersion rootProject.ext.targetSdkVersion
         // Bumped per playtest build. versionCode must increase for Android to
         // treat a sideloaded APK as an upgrade rather than refusing to install.
-        versionCode 2
-        versionName "0.2.0"
+        versionCode 3
+        versionName "0.2.1"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -18,7 +18,30 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    // Every playtest build is signed with the SAME key, committed alongside.
+    //
+    // Without this, Gradle signs debug builds with ~/.android/debug.keystore,
+    // which it generates on first use -- and every CI runner starts empty, so
+    // every build got a different random key. Android only installs an update
+    // signed by the key that signed the installed copy, so the second APK was
+    // refused outright ("App not installed"), and no Play Protect setting
+    // affects that check.
+    //
+    // This is a debug/playtest key, not a release key: it signs builds for
+    // sideloading only, which is why it can live in the repo. A Play Store
+    // release would need its own key kept out of source control.
+    signingConfigs {
+        playtest {
+            storeFile file('playtest.keystore')
+            storePassword 'android'
+            keyAlias 'playtest'
+            keyPassword 'android'
+        }
+    }
     buildTypes {
+        debug {
+            signingConfig signingConfigs.playtest
+        }
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
