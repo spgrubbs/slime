@@ -278,7 +278,7 @@ export default function SlimeQueen() {
     { id: 'hive', icon: '👑', label: 'The Nucleus' },
     { id: 'brood', icon: '🟢', label: 'The Spawn', badge: slimes.length },
     { id: 'wilds', icon: '🗺️', label: 'The Wilds' },
-    { id: 'road', icon: '🎯', label: 'The Road' },
+    { id: 'road', icon: '🎯', label: 'The Road', skillUnlock: 'caravan' },
     { id: 'memory', icon: '📖', label: 'Memory' },
     { id: 'settings', icon: '⚙️', label: 'Settings' },
   ];
@@ -287,6 +287,9 @@ export default function SlimeQueen() {
   const visibleTabs = tabs.filter(t => !t.skillUnlock || isFeatureUnlocked(t.skillUnlock, purchasedSkills));
 
   const woundedCount = slimes.filter(s => s.wounded).length;
+
+  // How many zones can be worked at once. One until Split Column.
+  const expeditionSlots = 1 + (skillBonuses.expeditionSlots || 0);
 
   const maxJelly = BASE_JELLY + (queen.level - 1) * JELLY_PER_QUEEN_LEVEL + (builds.slimePit || 0) * 10 + (skillBonuses.maxJelly || 0);
   const usedJelly = slimes.reduce((s, sl) => s + (sl.magCost || 0), 0);
@@ -859,6 +862,9 @@ export default function SlimeQueen() {
     woundedCount,
     mutagenKinds: Object.keys(mutagens).length,
     mutationsUnlocked: skillEffects.passives.includes('mutagenesis'),
+    buildingUnlocked: isFeatureUnlocked('building', purchasedSkills),
+    caravanUnlocked: isFeatureUnlocked('caravan', purchasedSkills),
+    expeditionSlots,
     maxHeldBiomass: slimes.reduce((n, sl) => Math.max(n, sl.biomass || 0), 0),
     maxElementAffinity: slimes.reduce(
       (n, sl) => Math.max(n, ...Object.values(sl.elements || { a: 0 })), 0),
@@ -1183,6 +1189,10 @@ export default function SlimeQueen() {
 
   const startExp = (zone, opts = {}) => {
     if (exps[zone] || !party.length) return;
+    if (Object.keys(exps).length >= expeditionSlots) {
+      log(`The nucleus can only hold ${expeditionSlots} expedition${expeditionSlots > 1 ? 's' : ''} at once.`);
+      return;
+    }
     const warden = opts.warden ? { zone, plus: wardenBeaten(zone) } : null;
     if (warden && !wardenUnlocked(zone, builds)) return;
 
@@ -1827,7 +1837,7 @@ export default function SlimeQueen() {
   return (
     <div onTouchStart={onTouch} onTouchEnd={onTouchEnd} style={{ fontFamily: 'system-ui', background: 'linear-gradient(135deg, #1a1a2e, #16213e)', minHeight: '100vh', color: '#e0e0e0' }}>
       {welcomeBack && <WelcomeBackModal data={welcomeBack} onClose={() => setWelcomeBack(null)} />}
-      <Menu open={menu} close={() => setMenu(false)} tab={tab} setTab={setTab} tabs={tabs} />
+      <Menu open={menu} close={() => setMenu(false)} tab={tab} setTab={setTab} tabs={visibleTabs} />
       
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 15px', background: 'rgba(0,0,0,0.3)', position: 'sticky', top: 0, zIndex: 100 }}>
         <button onClick={() => setMenu(true)} style={{ background: 'none', border: 'none', color: '#fff', fontSize: 24, cursor: 'pointer' }}>☰</button>
@@ -1992,7 +2002,10 @@ export default function SlimeQueen() {
               )}
             </div>
 
-            {/* Collapsible Buildings Section */}
+            {/* Buildings — hidden entirely until Calcified Frame. A locked panel
+                advertises what you are missing; an absent one lets the screen
+                grow, which is the feeling this ladder is built around. */}
+            {isFeatureUnlocked('building', purchasedSkills) && (
             <div style={{ background: 'rgba(0,0,0,0.2)', borderRadius: 10, marginBottom: 15, overflow: 'hidden' }}>
               <button
                 onClick={() => setExpandedSections(s => ({ ...s, buildings: !s.buildings }))}
@@ -2096,6 +2109,7 @@ export default function SlimeQueen() {
                 </div>
               )}
             </div>
+            )}
 
             {/* Stores — kept next to the buildings that eat them */}
             <details open={availableSkillPoints > 0} style={{ background: 'rgba(0,0,0,0.2)', borderRadius: 10, padding: 15, marginBottom: 15 }}>
@@ -2159,7 +2173,12 @@ export default function SlimeQueen() {
               <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
                 {[
                   { id: 'roster', icon: '🟢', label: 'Roster', badge: slimes.length },
-                  { id: 'pools', icon: '🏠', label: 'Pools', badge: woundedCount || undefined, locked: !isFeatureUnlocked('ranch', purchasedSkills) },
+                  // Absent until Cultivation Pools, not greyed out: the switch
+                  // appearing is the moment, and a lone Roster button reads as
+                  // a heading rather than a disabled choice.
+                  ...(isFeatureUnlocked('ranch', purchasedSkills)
+                    ? [{ id: 'pools', icon: '🏠', label: 'Pools', badge: woundedCount || undefined }]
+                    : []),
                 ].map(v => (
                   <button
                     key={v.id}

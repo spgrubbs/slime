@@ -99,6 +99,28 @@ export const SKILL_TREES = {
         cost: 2,
         requires: ['mutagenesis'],
         effect: { type: 'pheromone', ability: 'swiftExpedition' },
+        position: { x: 10, y: 46 },
+      },
+
+      thirdFront: {
+        id: 'thirdFront',
+        name: 'Many Pseudopods',
+        icon: '🗺️',
+        desc: 'Run a third expedition at the same time',
+        cost: 5,
+        requires: ['secondFront', 'pathfinder'],
+        effect: { type: 'bonus', stat: 'expeditionSlots', value: 1 },
+        position: { x: 24, y: 88 },
+      },
+
+      secondFront: {
+        id: 'secondFront',
+        name: 'Split Column',
+        icon: '🗺️',
+        desc: 'Run a second expedition at the same time',
+        cost: 3,
+        requires: ['vanguard'],
+        effect: { type: 'bonus', stat: 'expeditionSlots', value: 1 },
         position: { x: 14, y: 33 },
       },
 
@@ -220,13 +242,24 @@ export const SKILL_TREES = {
         position: { x: 50, y: 8 },
       },
 
+      masonry: {
+        id: 'masonry',
+        name: 'Calcified Frame',
+        icon: '🏗️',
+        desc: 'The nucleus hardens enough to carry structures — unlocks building',
+        cost: 1,
+        requires: ['hiveFoundation'],
+        effect: { type: 'unlock', feature: 'building' },
+        position: { x: 50, y: 15 },
+      },
+
       jellyProduction: {
         id: 'jellyProduction',
         name: 'Plasm Glands',
         icon: '🫧',
         desc: '+15 plasm — a bigger brood',
         cost: 1,
-        requires: ['hiveFoundation'],
+        requires: ['masonry'],
         effect: { type: 'bonus', stat: 'maxJelly', value: 15 },
         position: { x: 24, y: 20 },
       },
@@ -237,7 +270,7 @@ export const SKILL_TREES = {
         icon: '🧫',
         desc: 'Unlock the Spawning Vat',
         cost: 2,
-        requires: ['hiveFoundation'],
+        requires: ['masonry'],
         effect: { type: 'unlock', building: 'spawningVat' },
         position: { x: 50, y: 20 },
       },
@@ -248,7 +281,7 @@ export const SKILL_TREES = {
         icon: '♻️',
         desc: 'Reabsorbing a slime returns everything it cost, not a fraction',
         cost: 2,
-        requires: ['hiveFoundation'],
+        requires: ['masonry'],
         effect: { type: 'passive', desc: 'Full biomass back on reabsorb' },
         position: { x: 76, y: 20 },
       },
@@ -391,6 +424,17 @@ export const SKILL_TREES = {
         requires: [],
         effect: { type: 'passive', desc: 'Enables combat' },
         position: { x: 50, y: 8 },
+      },
+
+      raiding: {
+        id: 'raiding',
+        name: 'Road Sense',
+        icon: '🎯',
+        desc: 'Your slimes learn the human supply routes — opens The Road',
+        cost: 2,
+        requires: ['combatTraining'],
+        effect: { type: 'unlock', feature: 'caravan' },
+        position: { x: 50, y: 14 },
       },
 
       secondSkin: {

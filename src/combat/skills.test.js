@@ -35,7 +35,10 @@ test('every passive skill is actually read somewhere', () => {
 test('the tree is overwhelmingly rules, not numbers', () => {
   // The design rule: a skill should change how something works, not how big a
   // number is. Flat bonuses are allowed only for capacity.
-  const CAPACITY = new Set(['maxJelly', 'ranchSlots', 'mutationSlots', 'defenseSlots', 'rareSpawn']);
+  const CAPACITY = new Set([
+    'maxJelly', 'ranchSlots', 'mutationSlots', 'defenseSlots', 'rareSpawn',
+    'expeditionSlots',   // how many zones you can work at once
+  ]);
   const skills = allSkills();
   const bonuses = skills.filter(s => s.effect.type === 'bonus');
   for (const s of bonuses) {

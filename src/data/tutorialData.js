@@ -112,6 +112,32 @@ export const TUTORIALS = {
     when: (s) => s.tab === 'brood' && s.broodView === 'pools',
   },
 
+  building: {
+    id: 'building',
+    category: 'hive',
+    title: 'The nucleus hardens',
+    icon: '🏗️',
+    body: [
+      'It can carry **structures** now. Buildings are permanent and most of them cost materials, not just biomass.',
+      'They are how you unlock better slime tiers, more capacity, and the Tendrils that reach new zones.',
+      'Everything you build is on **The Nucleus** screen.',
+    ],
+    when: (s) => s.buildingUnlocked,
+  },
+
+  splitColumn: {
+    id: 'splitColumn',
+    category: 'expedition',
+    title: 'Two fronts',
+    icon: '🗺️',
+    body: [
+      'You can work **two zones at once** now — one party grinding materials while another pushes somewhere harder.',
+      'Each expedition needs its own slimes, so this is a real call on your roster, not free throughput.',
+      'Split Column again later for a third.',
+    ],
+    when: (s) => s.expeditionSlots > 1,
+  },
+
   caravan: {
     id: 'caravan',
     category: 'hive',
@@ -122,7 +148,7 @@ export const TUTORIALS = {
       'You are **paid per kill, immediately** — break off whenever you like and keep the lot.',
       'Wipe out a whole column and the road gets richer and more dangerous, permanently.',
     ],
-    when: (s) => s.tab === 'road',
+    when: (s) => s.caravanUnlocked,
   },
 
   wardens: {

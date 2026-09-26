@@ -1177,3 +1177,67 @@ Internal identifiers (`hiveFoundation`, `activeHiveAbilities`, the Android
 `appId`) are deliberately unchanged: they are not imagery, and the `appId`
 especially must stay, or the next APK installs as a second app beside the one
 already on the phone instead of upgrading it.
+
+
+---
+
+## 20. The unlock ladder
+
+Gating mutations behind a skill worked better than anything else in the tree, so
+the question became: what else should arrive rather than simply be there?
+
+### The rule
+
+**Gate verbs, never the core loop.** A first session must always contain: spawn
+a slime, send it somewhere, watch it fight, spend what it brings back. Anything
+that would leave a new player staring at one button is not a candidate, however
+tempting it is as a progression beat.
+
+And **hide, don't grey out.** A locked panel advertises what you are missing; an
+absent one lets the screen grow. The moment is the thing appearing.
+
+Every gate ships with a tutorial that fires on the unlock, not on first use — so
+the explanation arrives with the system instead of after a lucky drop.
+
+### What a fresh game now has
+
+Four screens: The Nucleus (level, plasm, Instincts, Stores), The Spawn (forge
+and roster), The Wilds, Memory. No Buildings panel, no Pools, no Road.
+
+### The ladder
+
+| Unlock | Cost | Opens |
+|---|---|---|
+| **Unstable Genes** | 1 | mutagen drops, the pity floor, mutation slots |
+| **Calcified Frame** | 1 | the Buildings panel — and with it Tendrils and tiers |
+| **Cultivation Pools** | 2 | ranches and the Convalescence Pool; the Pools switch appears on The Spawn |
+| **Road Sense** | 2 | The Road — the caravan ambush tab appears |
+| **Split Column** | 3 | a second simultaneous expedition |
+| **Many Pseudopods** | 5 | a third |
+
+Simultaneous expeditions were unlimited before and are now **one** by default.
+That is the most tangible of the new gates: it is not a bigger number, it is a
+second board to play on, and it costs roster depth rather than being free
+throughput.
+
+### Deliberately NOT gated
+
+- **Reabsorb and withdraw.** Both are outs from a bad position. Gating an escape
+  hatch punishes exactly the player who needs it.
+- **The Compendium.** It is the reference; locking knowledge behind progress
+  makes the early game more confusing, not more structured.
+- **Party size.** Tempting — going 2 → 3 → 4 slimes would be an enormous felt
+  power jump. That is exactly why it is dangerous: §11 measured action economy
+  as the *dominant* combat dial, far ahead of stats, so gating party slots would
+  invalidate the entire early-game balance pass and need the whole curve
+  re-tuned around two-slime parties. Worth doing one day, as its own pass.
+- **Elemental affinity.** The strongest remaining candidate. It is a whole
+  system that currently just happens to you, and "your slimes can now take on a
+  zone's element" is a good beat. Not built.
+
+### The bug this pass exposed
+
+`<Menu>` was being handed the unfiltered `tabs` array while `visibleTabs` only
+reached the dot indicator and the swipe handler — so the `skillUnlock` filter on
+tabs had never done anything at all. It was written for the ranch tab, which was
+later folded into The Spawn, and nothing had used it since.
