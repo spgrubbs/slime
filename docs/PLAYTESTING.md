@@ -102,9 +102,35 @@ project — run it after any source change, since the APK embeds a *snapshot* of
 
 ---
 
+## Dev tools
+
+The 🛠️ button in the top-right corner opens the playtest panel. Everything in
+it is generated from the game data, so it covers every material, mutagen, zone
+and skill without needing updates when content changes.
+
+| Section | What it does |
+|---|---|
+| Game speed | 1–50× for live fights and timers |
+| Currencies | biomass, Queen levels (skill points), prisms, musk |
+| Items | ×1 / ×10 / ×100 of every material, every mutagen, every Seal and Core, or one zone's materials |
+| Progression | learn every skill; build every building, all research and every pool; set every Tendril to Reach, Provoke or Root; mark every Warden beaten (the next hunt is Rekindled) |
+| Slimes | a free slime of any tier (no biomass or plasm); heal all; wound the first; +1 random trait each |
+| Time and visitors | **Close for 1h / 8h / 24h** saves as if the app had been shut that long ago and restarts, so the real offline catch-up runs; summon Mossback now; reset the caravan |
+| Tutorials | replay or skip every tutorial |
+
+To unlock a zone quickly: *Every Seal & Core*, then build its Tendril on The
+Nucleus (or just *Reach every zone*).
+
+## Saving
+
+The game saves every 10 seconds and whenever the app goes to the background
+(switching apps, locking the phone, swiping it away). Before 0.3.0 the timer
+never fired while an expedition was running, so closing the app abruptly lost
+everything since the last manual save.
+
 ## Where the save lives
 
-`localStorage`, under the key `hive_queen_save_v4`.
+`localStorage`, under the key `slime_queen_save_v5`.
 
 The three installs are **three separate saves** — the PWA, the APK, and the
 browser tab each get their own storage. Testing progression in one does not
@@ -118,7 +144,7 @@ use Chrome remote debugging (`chrome://inspect` on a desktop with the phone on
 USB debugging) and read the key from the console:
 
 ```js
-copy(localStorage.getItem('hive_queen_save_v4'))
+copy(localStorage.getItem('slime_queen_save_v5'))
 ```
 
 ## Regenerating icons

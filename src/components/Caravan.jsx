@@ -36,10 +36,10 @@ function ScoutReport({ tier, day, scouted }) {
           <span style={{ fontSize: 10, opacity: 0.6 }}>Tier {tier}</span>
         </div>
         <div style={{ fontSize: 11, opacity: 0.75, marginTop: 6 }}>
-          <strong>{caravan.units.length}</strong> in the column. Nothing else visible.
+          <strong>{caravan.units.length}</strong> in the column. We can't see more from here.
         </div>
         <div style={{ fontSize: 10, opacity: 0.55, marginTop: 8 }}>
-          🔭 Scout Camp reveals the manifest
+          🔭 A Scout Camp would tell us what they're carrying
         </div>
       </div>
     );
@@ -125,7 +125,7 @@ function Setup({ slimes, getSlimeStats, tier, scouted, squadSize, catapults, coo
               </button>
             );
           })}
-          {!slimes.length && <span style={{ fontSize: 11, opacity: 0.5 }}>No slimes free</span>}
+          {!slimes.length && <span style={{ fontSize: 11, opacity: 0.5 }}>Nobody's free</span>}
         </div>
       </div>
 
@@ -222,7 +222,7 @@ function Battle({ ambush, verboseLogs, setVerboseLogs, onRetreat }) {
       />
 
       <div style={{ ...panel, marginTop: 10, borderLeft: '3px solid #4ade80' }}>
-        <div style={label}>Banked — yours either way</div>
+        <div style={label}>Already ours, whatever happens</div>
         <div style={{ fontSize: 12, color: '#4ade80' }}>🧬 {ambush.banked.biomass} biomass</div>
         {matLine && <div style={{ fontSize: 11, opacity: 0.85 }}>📦 {matLine}</div>}
       </div>
@@ -273,7 +273,7 @@ function Result({ summary, onClose }) {
           <div key={m} style={{ fontSize: 11, opacity: 0.85 }}>📦 {c}× {m}</div>
         ))}
         {!banked.biomass && !Object.keys(banked.mats).length && (
-          <div style={{ fontSize: 11, opacity: 0.6 }}>Nothing — the column got clear before anything fell.</div>
+          <div style={{ fontSize: 11, opacity: 0.6 }}>Nothing. The column got past before we caught any of them.</div>
         )}
       </div>
 

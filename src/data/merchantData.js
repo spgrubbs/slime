@@ -215,7 +215,11 @@ export function rollMerchantDeals({
       return z && zoneReached(z, builds);
     });
     const mut = pick(reachedMuts, rng);
-    const payWith = surplus[0] || pick(pool, rng);
+    // Pay with the biggest pile, or failing that the cheapest thing from the
+    // wilds: something the player can go and get, never an unknown road item.
+    const zoneMats = pool.filter(m => MATERIAL_TABLE[m].zone)
+      .sort((a, b) => materialValue(a) - materialValue(b));
+    const payWith = surplus[0] || zoneMats[0];
     if (mut && payWith) {
       const value = mutagenValue(mut);
       const qty = Math.max(1, Math.ceil(value / ((materialValue(payWith) || 1) * MERCHANT_RATE)));

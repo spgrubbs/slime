@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { ZONES } from '../data/zoneData.js';
-import { MONSTER_TYPES, MONSTER_ABILITIES, MATERIAL_RATES, MUTAGEN_RATES, MUTAGEN_PITY_KILLS } from '../data/monsterData.js';
+import { MONSTER_TYPES, MONSTER_ABILITIES, MATERIAL_RATES, MUTAGEN_RATES, MUTAGEN_PITY_KILLS, materialDropChance } from '../data/monsterData.js';
 import { MUTATION_LIBRARY, SLIME_TRAITS, STATUS_EFFECTS, TRAIT_RARITY_COLORS, traitDesc } from '../data/traitData.js';
 import { SLIME_TIERS, STAT_INFO } from '../data/slimeData.js';
 import { ELEMENTS } from '../data/gameConstants.js';
@@ -24,8 +24,8 @@ function Guide({ seenTutorials = [] }) {
   return (
     <div>
       <div style={{ fontSize: 11, opacity: 0.6, marginBottom: 12 }}>
-        Everything the game has explained to you, kept for reference. Entries appear
-        as you meet them.
+        Everything I've told you so far, Mother, in case you forget. More shows up as
+        we find more things.
       </div>
       {Object.entries(byCategory).map(([catId, entries]) => {
         const cat = TUTORIAL_CATEGORIES[catId];
@@ -38,7 +38,7 @@ function Guide({ seenTutorials = [] }) {
                 return (
                   <div key={t.id} style={{ opacity: seen ? 1 : 0.35 }}>
                     <div style={{ fontSize: 12, fontWeight: 'bold', marginBottom: 4 }}>
-                      {seen ? t.icon : '🔒'} {seen ? t.title : 'Not yet discovered'}
+                      {seen ? t.icon : '🔒'} {seen ? t.title : 'Not yet'}
                     </div>
                     {seen && t.body.map((line, i) => (
                       <div key={i} style={{ fontSize: 11, opacity: 0.85, lineHeight: 1.5, marginLeft: 4 }}>
@@ -87,7 +87,7 @@ function Reference() {
           </table>
         </div>
         <div style={{ fontSize: 10, opacity: 0.6, marginTop: 8 }}>
-          Held cap is temporary power from carried biomass — lost if the slime goes down.
+          Held cap is extra strength from biomass a slime is carrying. It all spills if the slime falls.
         </div>
       </div>
 
@@ -97,12 +97,12 @@ function Reference() {
           {Object.entries(STAT_INFO).map(([k, v]) => (
             <div key={k}>
               <span style={{ color: v.color, fontWeight: 'bold' }}>{v.icon} {v.name}</span>
-              <span style={{ opacity: 0.8 }}> — {v.desc}</span>
+              <span style={{ opacity: 0.8 }}>: {v.desc}</span>
             </div>
           ))}
         </div>
         <div style={{ fontSize: 10, opacity: 0.6, marginTop: 8 }}>
-          Dodge and crit have diminishing returns; all evasion caps at 70%.
+          Dodge and crit get harder to raise the higher they go. Dodging tops out at 70%.
         </div>
       </div>
 
@@ -113,7 +113,7 @@ function Reference() {
             <div key={k}>
               <span style={{ color: e.color, fontWeight: 'bold' }}>{e.icon} {e.name}</span>
               <span style={{ opacity: 0.75 }}>
-                {' — '}{e.dur} round{e.dur === 1 ? '' : 's'}
+                {': '}{e.dur} round{e.dur === 1 ? '' : 's'}
                 {e.dmg ? `, ${e.dmg} damage each` : ''}
               </span>
               {e.desc && <div style={{ fontSize: 11, opacity: 0.85, marginLeft: 20 }}>{e.desc}</div>}
@@ -129,7 +129,7 @@ function Reference() {
             <div key={k}>
               <span style={{ color: e.color, fontWeight: 'bold' }}>{e.icon} {e.name}</span>
               <span style={{ opacity: 0.75 }}>
-                {' — strong vs '}{ELEMENTS[e.strong].icon}, weak vs {ELEMENTS[e.weak].icon}
+                {': strong vs '}{ELEMENTS[e.strong].icon}, weak vs {ELEMENTS[e.weak].icon}
               </span>
             </div>
           ))}
@@ -154,20 +154,20 @@ function Reference() {
       <div style={card}>
         <div style={heading('#f59e0b')}>📦 Material Drops</div>
         <div style={{ display: 'grid', gap: 5, fontSize: 11 }}>
-          <div><strong>Common</strong> — {Math.round(MATERIAL_RATES.common * 100)}% per kill</div>
-          <div><strong>Uncommon</strong> — {Math.round(MATERIAL_RATES.uncommon * 100)}%</div>
-          <div><strong>Gating</strong> — {Math.round(MATERIAL_RATES.gating * 100)}%, wanted in bulk by one building</div>
-          <div><strong>From a rare monster</strong> — {Math.round(MATERIAL_RATES.fromRare * 100)}%</div>
+          <div><strong>Common</strong>: {Math.round(MATERIAL_RATES.common * 100)}% per kill</div>
+          <div><strong>Uncommon</strong>: {Math.round(MATERIAL_RATES.uncommon * 100)}%</div>
+          <div><strong>Scarce</strong>: {Math.round(MATERIAL_RATES.gating * 100)}%, the ones a building wants lots of</div>
+          <div><strong>From a rare monster</strong>: {Math.round(MATERIAL_RATES.fromRare * 100)}%</div>
         </div>
         <div style={{ fontSize: 10, opacity: 0.6, marginTop: 8 }}>
-          Each material rolls on its own, so one kill can drop several or none.
+          Each material rolls on its own, so one kill can drop several things, or nothing.
         </div>
       </div>
     </div>
   );
 }
 
-const Compendium = ({ queen, monsterKills, mutagens = {}, wardenKills = {},
+const Compendium = ({ queen, monsterKills, mutagens = {}, wardenKills = {}, wardenTries = {},
                      mutationsUnlocked = false, affinityUnlocked = false, seenTutorials = [] }) => {
   const [tab, setTab] = useState('zones'); // 'zones' | 'guide' | 'reference'
   const [zone, setZone] = useState('forest');
@@ -178,13 +178,13 @@ const Compendium = ({ queen, monsterKills, mutagens = {}, wardenKills = {},
       {/* Tab Navigation */}
       <div style={{ display: 'flex', gap: 6, marginBottom: 15 }}>
         <button onClick={() => setTab('zones')} style={{ padding: '10px 16px', background: tab === 'zones' ? 'rgba(34,211,238,0.2)' : 'rgba(0,0,0,0.3)', border: `2px solid ${tab === 'zones' ? '#22d3ee' : 'transparent'}`, borderRadius: 8, color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 'bold' }}>
-          🗺️ Zones & Monsters
+          🗺️ Places
         </button>
         <button onClick={() => setTab('guide')} style={{ padding: '10px 16px', background: tab === 'guide' ? 'rgba(168,85,247,0.2)' : 'rgba(0,0,0,0.3)', border: `2px solid ${tab === 'guide' ? '#a855f7' : 'transparent'}`, borderRadius: 8, color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 'bold' }}>
-          📖 Guide
+          📖 Glub's notes
         </button>
         <button onClick={() => setTab('reference')} style={{ padding: '10px 16px', background: tab === 'reference' ? 'rgba(236,72,153,0.2)' : 'rgba(0,0,0,0.3)', border: `2px solid ${tab === 'reference' ? '#ec4899' : 'transparent'}`, borderRadius: 8, color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 'bold' }}>
-          📐 Reference
+          📐 The numbers
         </button>
       </div>
 
@@ -218,6 +218,7 @@ const Compendium = ({ queen, monsterKills, mutagens = {}, wardenKills = {},
             const w = WARDENS[zone];
             if (!w) return null;
             const felled = wardenKills?.[zone] || 0;
+            const tried = felled > 0 || (wardenTries?.[zone] || 0) > 0;
             return (
               <div style={{ background: 'rgba(245,158,11,0.10)', border: '1px solid rgba(245,158,11,0.35)', borderRadius: 10, padding: 12, marginBottom: 15 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -225,7 +226,7 @@ const Compendium = ({ queen, monsterKills, mutagens = {}, wardenKills = {},
                   <div style={{ flex: 1 }}>
                     <div style={{ fontWeight: 'bold', fontSize: 13, color: '#fbbf24' }}>{w.name}</div>
                     <div style={{ fontSize: 10, opacity: 0.7 }}>
-                      {felled ? `Felled ${felled}×` : 'Never felled'} · summoned, never met at random
+                      {felled ? `Beaten ${felled}×` : 'Never beaten'} · only comes when called
                     </div>
                   </div>
                   <div style={{ textAlign: 'right', fontSize: 10, opacity: 0.75 }}>
@@ -244,19 +245,19 @@ const Compendium = ({ queen, monsterKills, mutagens = {}, wardenKills = {},
                 </div>
                 {w.counter && (
                   <div style={{ marginTop: 8, padding: '6px 9px', background: 'rgba(74,222,128,0.10)', border: '1px solid rgba(74,222,128,0.3)', borderRadius: 6, fontSize: 11, color: '#86efac' }}>
-                    {felled ? `💡 ${w.counter}` : '💡 Fight it once and its weakness will be recorded here.'}
+                    {tried ? `💡 ${w.counter}` : '💡 Fight it once and I\'ll write down what I saw.'}
                   </div>
                 )}
 
                 <div style={{ fontSize: 10, marginTop: 8, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                  <span style={{ color: '#4ade80' }}>First kill → {w.seal}</span>
-                  <span style={{ color: '#a78bfa' }}>Rekindled → {w.heart}</span>
+                  <span style={{ color: '#4ade80' }}>First win: {w.seal}</span>
+                  <span style={{ color: '#a78bfa' }}>Rekindled: {w.heart}</span>
                 </div>
               </div>
             );
           })()}
 
-          <div style={{ fontSize: 14, fontWeight: 'bold', marginBottom: 10 }}>Monsters</div>
+          <div style={{ fontSize: 14, fontWeight: 'bold', marginBottom: 10 }}>What lives here</div>
           {z.monsters.map(mid => {
             const m = MONSTER_TYPES[mid];
             if (!m) return null;
@@ -274,7 +275,7 @@ const Compendium = ({ queen, monsterKills, mutagens = {}, wardenKills = {},
               return (
                 <div key={mid} style={{ background: 'rgba(0,0,0,0.3)', borderRadius: 10, padding: 15, marginBottom: 10, textAlign: 'center', opacity: 0.5 }}>
                   <div style={{ fontSize: 40 }}>❓</div>
-                  <div style={{ fontSize: 14, fontStyle: 'italic', marginTop: 8 }}>Defeat this monster to unlock its entry</div>
+                  <div style={{ fontSize: 14, fontStyle: 'italic', marginTop: 8 }}>We haven't eaten one of these yet.</div>
                 </div>
               );
             }
@@ -306,10 +307,10 @@ const Compendium = ({ queen, monsterKills, mutagens = {}, wardenKills = {},
                 </div>
                 {monAbility && (
                   <div style={{ marginBottom: 10, background: 'rgba(168,85,247,0.1)', borderRadius: 6, padding: 8 }}>
-                    <div style={{ fontSize: 10, opacity: 0.6, marginBottom: 4 }}>Special Ability</div>
+                    <div style={{ fontSize: 10, opacity: 0.6, marginBottom: 4 }}>Watch out for</div>
                     <div style={{ fontSize: 11 }}>
                       <span>{monAbility.icon} <strong>{monAbility.name}</strong></span>
-                      <span style={{ opacity: 0.7 }}> - {monAbility.desc}</span>
+                      <span style={{ opacity: 0.7 }}>: {monAbility.desc}</span>
                       <span style={{ opacity: 0.5, fontSize: 10 }}> ({Math.round(monAbility.chance * 100)}% chance)</span>
                     </div>
                   </div>
@@ -317,7 +318,7 @@ const Compendium = ({ queen, monsterKills, mutagens = {}, wardenKills = {},
                 <div style={{ marginBottom: 10 }}>
                   <div style={{ fontSize: 10, opacity: 0.6, marginBottom: 4 }}>Material Drops</div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                    {m.mats.map((mat,i) => <span key={i} style={{ fontSize: 10, padding: '3px 8px', background: 'rgba(245,158,11,0.2)', borderRadius: 4 }}>📦 {mat} <span style={{ opacity: 0.6 }}>(50%)</span></span>)}
+                    {m.mats.map((mat,i) => <span key={i} style={{ fontSize: 10, padding: '3px 8px', background: 'rgba(245,158,11,0.2)', borderRadius: 4 }}>📦 {mat} <span style={{ opacity: 0.6 }}>({Math.round(materialDropChance(mat, m) * 100)}%)</span></span>)}
                   </div>
                 </div>
 
@@ -335,7 +336,7 @@ const Compendium = ({ queen, monsterKills, mutagens = {}, wardenKills = {},
                         <span style={{ fontSize: 12, fontWeight: 'bold' }}>{mutation.name}</span>
                         {isUnlocked && <span style={{ fontSize: 10, color: '#4ade80', background: 'rgba(74,222,128,0.2)', padding: '2px 6px', borderRadius: 4 }}>×{held} HELD</span>}
                       </div>
-                      <span style={{ fontSize: 11, opacity: 0.8 }} title="Kills until a mutagen is guaranteed, whatever the drop rolls do">
+                      <span style={{ fontSize: 11, opacity: 0.8 }} title="Every 150 kills of this monster guarantees its mutagen, however the rolls go">
                         {kills % MUTAGEN_PITY_KILLS}/{MUTAGEN_PITY_KILLS}
                       </span>
                     </div>
@@ -355,8 +356,8 @@ const Compendium = ({ queen, monsterKills, mutagens = {}, wardenKills = {},
 
                     {/* Mutation Details */}
                     <div style={{ fontSize: 10, opacity: 0.8, marginBottom: 4 }}>
-                      {mutation.stat && mutation.bonus && `+${mutation.bonus} ${mutation.stat} (on spawn) • `}
-                      {typeof mutation.passiveDesc === 'function' ? mutation.passiveDesc(10) : mutation.passiveDesc}
+                      {mutation.stat && mutation.bonus && `+${mutation.bonus} ${STAT_INFO[mutation.stat]?.name || mutation.stat} when taken · `}
+                      {typeof mutation.passiveDesc === 'function' ? `${mutation.passiveDesc(10)} (at 10 Viscosity)` : mutation.passiveDesc}
                     </div>
                     {affinityUnlocked && (mutation.elementBonus || mutation.affinity) && (
                       <div style={{ fontSize: 10 }}>

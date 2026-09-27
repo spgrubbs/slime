@@ -125,7 +125,7 @@ warden('everburning', {
     const had = ev.self.flags.emberStacks || 0;
     if (had <= 0) return;
     ev.self.flags.emberStacks = Math.floor(had / 2);
-    ev.log?.push?.({ m: 'The Cinder Warden gutters — some of its heat scatters. 💫', c: '#f59e0b',
+    ev.log?.push?.({ m: 'The Cinder Warden gutters. Half its heat scatters. 💫', c: '#f59e0b',
                      v: `stun halved Everburning stacks ${had} → ${ev.self.flags.emberStacks}` });
   },
 });

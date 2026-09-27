@@ -88,6 +88,10 @@ const calculateOfflineProgress = (saved, bonuses, offlineCtx = {}) => {
     monstersKilled: 0,
     expeditionsWiped: [],
     wardensFelled: [],
+    mutagensFound: {},
+    prismsFound: 0,
+    salvaged: {},
+    completed: [],
     researchCompleted: null,
   };
 
@@ -114,20 +118,20 @@ const calculateOfflineProgress = (saved, bonuses, offlineCtx = {}) => {
     }
 
     const exp = hydrateExpedition(savedExp, slimes);
-    const budgetMs = Math.min(offlineSec * 1000, MAX_OFFLINE_ROUNDS * ROUND_MS);
+    // Swift Expedition runs offline too, for whatever part of the absence it
+    // was still active.
+    const swiftUntil = saved.activeHiveAbilities?.swiftExpedition || 0;
+    const swiftMs = Math.max(0, Math.min(offlineSec * 1000, swiftUntil - (saved.lastSave || now)));
+    const budgetMs = Math.min(offlineSec * 1000 + 0.5 * swiftMs, MAX_OFFLINE_ROUNDS * ROUND_MS);
     const step = ROUND_MS;
+
+    const killsBefore = exp.kills;
+    const countsBefore = { ...(exp.monsterKillCounts || {}) };
 
     for (let elapsed = 0; elapsed < budgetMs; elapsed += step) {
       if (exp.phase === 'defeat') break;
 
-      const before = exp.kills;
       const { sideEffects } = tickExpedition(exp, step, offlineCtx, zone);
-
-      if (exp.kills > before && exp.monsterKillCounts) {
-        const justKilled = Object.entries(exp.monsterKillCounts);
-        results.monstersKilled += exp.kills - before;
-        justKilled.forEach(([type, n]) => { results.monsterKillsGained[type] = n; });
-      }
 
       sideEffects.forEach(se => {
         if (se.type === 'slimeDown') {
@@ -145,12 +149,31 @@ const calculateOfflineProgress = (saved, bonuses, offlineCtx = {}) => {
             : sl);
         } else if (se.type === 'wardenDown') {
           results.wardensFelled.push({ zone: se.zone, plus: se.plus });
+        } else if (se.type === 'mutagen') {
+          results.mutagensFound[se.mutation] = (results.mutagensFound[se.mutation] || 0) + 1;
+        } else if (se.type === 'prism') {
+          results.prismsFound += 1;
+        } else if (se.type === 'expWipe') {
+          Object.entries(se.salvage || {}).forEach(([mat, n]) => {
+            results.salvaged[mat] = (results.salvaged[mat] || 0) + n;
+            mats[mat] = (mats[mat] || 0) + n;
+          });
+          if (se.decoy) results.decoyUsed = true;
         }
       });
 
       if (exp.phase === 'defeat') break;
-      if (exp.targetKills != null && exp.kills >= exp.targetKills) break;
+      if (exp.targetKills != null && exp.kills >= exp.targetKills) {
+        results.completed.push(zone);
+        break;
+      }
     }
+
+    results.monstersKilled += exp.kills - killsBefore;
+    Object.entries(exp.monsterKillCounts || {}).forEach(([type, n]) => {
+      const gained = n - (countsBefore[type] || 0);
+      if (gained > 0) results.monsterKillsGained[type] = (results.monsterKillsGained[type] || 0) + gained;
+    });
 
     if (exp.phase === 'defeat' || exp.slimes.every(c => c.dead)) {
       results.expeditionsWiped.push(zone);
@@ -182,9 +205,9 @@ const calculateOfflineProgress = (saved, bonuses, offlineCtx = {}) => {
     });
     exp.materials = {};
 
-    // Banked here, so clear them — otherwise recalling the party would count
-    // the same kills a second time toward mutation unlocks.
-    exp.monsterKillCounts = {};
+    // Kill counts are NOT banked here. They stay on the expedition and are
+    // counted, pity floor and all, when the party comes home, exactly as if
+    // the game had been open the whole time.
 
     exps[zone] = exp;
   });
@@ -227,7 +250,7 @@ export default function SlimeQueen() {
   const [builds, setBuilds] = useState({ forestTendril: 1 });
   const [research, setResearch] = useState([]);
   const [activeRes, setActiveRes] = useState(null);
-  const [logs, setLogs] = useState([{ t: new Date().toLocaleTimeString(), m: 'The nucleus stirs...' }]);
+  const [logs, setLogs] = useState([{ t: new Date().toLocaleTimeString(), m: 'The nucleus stirs. Glub is here.' }]);
   const [speed, setSpeed] = useState(1);
   const [lastTick, setLastTick] = useState(Date.now());
   const [lastSave, setLastSave] = useState(null);
@@ -237,6 +260,7 @@ export default function SlimeQueen() {
   const [monsterKills, setMonsterKills] = useState({});
   const [mutagens, setMutagens] = useState({});   // { [mutationId]: count }
   const [wardenKills, setWardenKills] = useState({}); // { [zone]: times felled }
+  const [wardenTries, setWardenTries] = useState({}); // { [zone]: hunts started } — reveals the counter
   const [pityKills, setPityKills] = useState({});  // kills since the last pity mutagen
   const [purchasedSkills, setPurchasedSkills] = useState(['expeditionBasics', 'hiveFoundation', 'combatTraining']);
   // Mossback's visits: { firstVisit, visit, deals, taken }. See merchantData.js.
@@ -309,7 +333,7 @@ export default function SlimeQueen() {
   const bon = {
     bio: 1 + (research.includes('efficientDigestion') ? 0.2 : 0),
     xp: 1 + (research.includes('enhancedAbsorption') ? 0.25 : 0),
-    spd: 1 + (research.includes('swiftSlimes') ? 0.2 : 0),
+    spd: 1 + (research.includes('swiftSlimes') ? 0.1 : 0),   // Training Arena: +10% damage
     travel: research.includes('extendedExpedition') ? 0.6 : 1,   // Expedition Depot
     mats: 1 + (research.includes('infiniteExpedition') ? 0.25 : 0), // Deep Exploration Hub
     hp: 1 + (research.includes('slimeVitality') ? 0.15 : 0),
@@ -355,6 +379,7 @@ export default function SlimeQueen() {
       ambushDamage: 0,       // % bonus to caravan ambush damage from warDen
       bonusManaPerHour: 0,   // Extra mana per hour from manaWell
       expeditionRewards: 0,  // % bonus to expedition rewards from scoutPost
+      expeditionRegen: 0,    // HP per round for every slime in the field, from healingSpring
     };
 
     Object.entries(ranchBuildings).forEach(([ranchId, building]) => {
@@ -380,6 +405,9 @@ export default function SlimeQueen() {
         } else if (ranch.effect === 'expeditionBonus' && ranch.buffType === 'rewards') {
           // scoutPost: +rewards% based on slipperiness
           bonuses.expeditionRewards += stats.slipperiness * ranch.effectValue * effectMult;
+        } else if (ranch.effect === 'expeditionBuff' && ranch.buffType === 'regen') {
+          // healingSpring: field regen based on viscosity
+          bonuses.expeditionRegen += stats.viscosity * ranch.effectValue * effectMult;
         }
       });
     });
@@ -404,7 +432,7 @@ export default function SlimeQueen() {
       ...prev,
       [abilityId]: Date.now() + ability.duration
     }));
-    log(`🧪 Activated ${ability.name}!`);
+    log(`${ability.icon} ${ability.name} fills the air.`);
   };
 
   const getAbilityTimeRemaining = (abilityId) => {
@@ -436,14 +464,14 @@ export default function SlimeQueen() {
         const newProg = prev.prog + addedProgress;
         if (newProg >= 100) {
           setResearch(r => [...r, prev.id]);
-          log(`✅ ${rd.name} completed!`);
+          log(`✅ ${rd.name} is finished.`);
           return null;
         }
         return { ...prev, prog: newProg };
       });
     }
 
-    log(`⏰ Time advanced by ${Math.round(ms / 3600000)} hours!`);
+    log(`⏰ The pools and the lab jump ahead ${Math.round(ms / 3600000)} hours.`);
   };
 
   const purchasePrismItem = (itemId, targetSlimeId = null) => {
@@ -466,7 +494,7 @@ export default function SlimeQueen() {
               ? { ...s, traits: [...(s.traits || []), 'ancient'] }
               : s
           ));
-          log(`📜 Granted Ancient trait!`);
+          log('📜 The Ancient trait takes hold.');
         }
         break;
       case 'primordialTrait':
@@ -476,7 +504,7 @@ export default function SlimeQueen() {
               ? { ...s, traits: [...(s.traits || []), 'primordial'] }
               : s
           ));
-          log(`🌟 Granted Primordial trait!`);
+          log('🌟 The Primordial trait takes hold.');
         }
         break;
       case 'mutationReset':
@@ -486,7 +514,7 @@ export default function SlimeQueen() {
               ? { ...s, mutations: [] }
               : s
           ));
-          log(`🔄 Mutations reset!`);
+          log('🔄 Every mutation is gone. A fresh start.');
         }
         break;
       case 'elementReset':
@@ -496,7 +524,7 @@ export default function SlimeQueen() {
               ? { ...s, elements: { fire: 0, water: 0, nature: 0, earth: 0 }, primaryElement: null }
               : s
           ));
-          log(`💫 Elements cleansed!`);
+          log('💫 Washed clean of every element.');
         }
         break;
       case 'instantMutation':
@@ -512,86 +540,75 @@ export default function SlimeQueen() {
     }
   };
 
-  // Load game on mount
+  // ── Loading ──────────────────────────────────────────────────────────────
+  //
+  // Two phases. The save is restored first, exactly as it was left; only on the
+  // next render, once skills, buildings and pheromones are back in state, does
+  // the offline catch-up run. It used to run in the same breath as the load,
+  // against a fresh game's context: no skills, no mutagen drops, no affinity,
+  // none of the bonuses the player had actually built.
+  const [pendingOffline, setPendingOffline] = useState(null);
+
   useEffect(() => {
     const saved = loadGame();
-    if (saved) {
-      const offline = calculateOfflineProgress(saved, bon, combatContext());
-      if (offline.hadProgress) {
-        // Apply offline progress
-        setBio(offline.newState.bio);
-        setSlimes(offline.newState.slimes);
-        setExps(rehydrateExps(offline.newState.exps, offline.newState.slimes));
-        setMats(offline.newState.mats);
-        setActiveRes(offline.newState.activeRes);
-        setResearch(offline.newState.research);
-        setQueen(saved.queen);
-        setBuilds(saved.builds || {});
-        setLastCaravan(saved.lastCaravan || 0);
-        setCaravanTier(saved.caravanTier || 1);
-        setAmbush(saved.ambush ? hydrateAmbush(saved.ambush, saved.slimes || [], buildEffectList) : null);
-        setSeenTutorials(saved.seenTutorials || []);
-        setTutorialsOn(saved.tutorialsOn !== false);
+    if (!saved) { setGameLoaded(true); return; }
+    setQueen(saved.queen || { level: 1 });
+    setBio(saved.bio || 50);
+    setMats(saved.mats || {});
+    setSlimes(saved.slimes || []);
+    setExps(rehydrateExps(saved.exps, saved.slimes));
+    setBuilds(saved.builds || {});
+    setResearch(saved.research || []);
+    setActiveRes(saved.activeRes);
+    setLastCaravan(saved.lastCaravan || 0);
+    setCaravanTier(saved.caravanTier || 1);
+    setAmbush(saved.ambush ? hydrateAmbush(saved.ambush, saved.slimes || [], buildEffectList) : null);
+    setSeenTutorials(saved.seenTutorials || []);
+    setTutorialsOn(saved.tutorialsOn !== false);
+    setMonsterKills(saved.monsterKills || {});
+    setMutagens(saved.mutagens || {});
+    setPityKills(saved.pityKills || {});
+    setWardenKills(saved.wardenKills || {});
+    setWardenTries(saved.wardenTries || {});
+    setMerchant(saved.merchant || null);
+    setPurchasedSkills(saved.purchasedSkills || ['expeditionBasics', 'hiveFoundation', 'combatTraining']);
+    setPrisms(saved.prisms || 0);
+    setRanchBuildings(saved.ranchBuildings || {});
+    setRanchAssignments(saved.ranchAssignments || {});
+    setRanchProgress(saved.ranchProgress || {});
+    setMana(saved.mana || 0);
+    setLastManaUpdate(saved.lastManaUpdate || Date.now());
+    setActiveHiveAbilities(saved.activeHiveAbilities || {});
+    setLastSave(saved.lastSave);
+    setLogs([{ t: new Date().toLocaleTimeString(), m: 'Glub waves a pseudopod. Everything is where you left it.' }]);
+    setPendingOffline(saved);
+  }, []);
 
-        // Apply monster kills gained from offline progress
-        const newMonsterKills = { ...(saved.monsterKills || {}) };
-        Object.entries(offline.results.monsterKillsGained || {}).forEach(([type, count]) => {
-          newMonsterKills[type] = (newMonsterKills[type] || 0) + count;
-        });
-        setMonsterKills(newMonsterKills);
-        setMutagens(saved.mutagens || {});
-        setPityKills(saved.pityKills || {});
-        setWardenKills(saved.wardenKills || {});
-        setMerchant(saved.merchant || null);
+  useEffect(() => {
+    if (!pendingOffline) return;
+    const saved = pendingOffline;
+    setPendingOffline(null);
 
-        setPurchasedSkills(saved.purchasedSkills || ['expeditionBasics', 'hiveFoundation', 'combatTraining']);
-
-        // Load ranch state
-        setPrisms(saved.prisms || 0);
-        setRanchBuildings(saved.ranchBuildings || {});
-        setRanchAssignments(saved.ranchAssignments || {});
-        setRanchProgress(saved.ranchProgress || {});
-
-        // Load mana/hive ability state
-        setMana(saved.mana || saved.pheromones || 0);
-        setLastManaUpdate(saved.lastManaUpdate || saved.lastPheromoneUpdate || Date.now());
-        setActiveHiveAbilities(saved.activeHiveAbilities || {});
-
-        setWelcomeBack(offline);
-      } else {
-        // Just load normally
-        setQueen(saved.queen || { level: 1 });
-        setBio(saved.bio || 50);
-        setMats(saved.mats || {});
-        setSlimes(saved.slimes || []);
-        setExps(rehydrateExps(saved.exps, saved.slimes));
-        setBuilds(saved.builds || {});
-        setResearch(saved.research || []);
-        setActiveRes(saved.activeRes);
-        setLastCaravan(saved.lastCaravan || 0);
-        setCaravanTier(saved.caravanTier || 1);
-        setAmbush(saved.ambush ? hydrateAmbush(saved.ambush, saved.slimes || [], buildEffectList) : null);
-        setSeenTutorials(saved.seenTutorials || []);
-        setTutorialsOn(saved.tutorialsOn !== false);
-        setMonsterKills(saved.monsterKills || {});
-        setMutagens(saved.mutagens || {});
-        setPityKills(saved.pityKills || {});
-        setWardenKills(saved.wardenKills || {});
-        setMerchant(saved.merchant || null);
-        setPurchasedSkills(saved.purchasedSkills || ['expeditionBasics', 'hiveFoundation', 'combatTraining']);
-        setPrisms(saved.prisms || 0);
-        setRanchBuildings(saved.ranchBuildings || {});
-        setRanchAssignments(saved.ranchAssignments || {});
-        setRanchProgress(saved.ranchProgress || {});
-        setMana(saved.mana || saved.pheromones || 0);
-        setLastManaUpdate(saved.lastManaUpdate || saved.lastPheromoneUpdate || Date.now());
-        setActiveHiveAbilities(saved.activeHiveAbilities || {});
-      }
-      setLastSave(saved.lastSave);
-      setLogs([{ t: new Date().toLocaleTimeString(), m: '💾 Game loaded!' }]);
+    const offline = calculateOfflineProgress(saved, bon, combatContext());
+    if (offline.hadProgress) {
+      const r = offline.results;
+      setBio(offline.newState.bio);
+      setSlimes(offline.newState.slimes);
+      setExps(rehydrateExps(offline.newState.exps, offline.newState.slimes));
+      setMats(offline.newState.mats);
+      setActiveRes(offline.newState.activeRes);
+      setResearch(offline.newState.research);
+      Object.entries(r.mutagensFound || {}).forEach(([id, n]) => grantMutagen(id, n));
+      if (r.prismsFound) setPrisms(p => p + r.prismsFound);
+      if (r.decoyUsed) setActiveHiveAbilities(a => { const n = { ...a }; delete n.decoy; return n; });
+      r.wardensFelled.forEach(w => recordWardenKill(w.zone, w.plus));
+      // A hunt that reached its target while the game was closed comes home
+      // now. Its "done" signal fired offline, where there was nobody to hear it.
+      if (r.completed.length) setTimeout(() => r.completed.forEach(z => stopExp(z)), 0);
+      setWelcomeBack(offline);
     }
     setGameLoaded(true);
-  }, []);
+  }, [pendingOffline]);
 
   // ── Saving ────────────────────────────────────────────────────────────────
   //
@@ -605,7 +622,7 @@ export default function SlimeQueen() {
   // saves the moment the page is hidden: switching apps, locking the phone, or
   // swiping the app away. On Android the WebView reports all of those as the
   // page going hidden before the process is killed.
-  const snapshot = () => ({ queen, bio, mats, slimes, exps, builds, research, activeRes, lastCaravan, caravanTier, ambush, seenTutorials, tutorialsOn, monsterKills, mutagens, pityKills, wardenKills, purchasedSkills, prisms, ranchBuildings, ranchAssignments, ranchProgress, mana, lastManaUpdate, activeHiveAbilities, merchant, lastSave: Date.now() });
+  const snapshot = () => ({ queen, bio, mats, slimes, exps, builds, research, activeRes, lastCaravan, caravanTier, ambush, seenTutorials, tutorialsOn, monsterKills, mutagens, pityKills, wardenKills, wardenTries, purchasedSkills, prisms, ranchBuildings, ranchAssignments, ranchProgress, mana, lastManaUpdate, activeHiveAbilities, merchant, lastSave: Date.now() });
   const snapshotRef = useRef(null);
   const deletedRef = useRef(false);
   snapshotRef.current = gameLoaded && !deletedRef.current ? snapshot : null;
@@ -712,9 +729,9 @@ export default function SlimeQueen() {
     if (bioCost) setBio(p => p - bioCost);
     if (spawnTraits.length > 0) {
       const trait = SLIME_TRAITS[spawnTraits[0]];
-      log(`${slimeName} emerges with ${trait.icon} ${trait.name} trait!`);
+      log(`🥚 ${slimeName} buds off, and it's ${trait.icon} ${trait.name}!`);
     } else {
-      log(`${slimeName} emerges!`);
+      log(`🥚 ${slimeName} buds off!`);
     }
   };
 
@@ -754,7 +771,7 @@ export default function SlimeQueen() {
     if ((slime.mutations || []).includes(mutationId)) return;
     if ((slime.mutations || []).length >= mutationSlots(slime, combatBonuses.mutationSlots)) return;
     if (Object.values(exps).some(e => (e.slimes || []).some(x => x.id === slimeId))) {
-      log('Recall them before you start cutting.');
+      log("Call them home first. I can't feed a slime that isn't here.");
       return;
     }
 
@@ -793,18 +810,18 @@ export default function SlimeQueen() {
     const held = Math.floor(sl.biomass || 0);
     if (held <= 0) return;
     if (Object.values(exps).some(e => (e.slimes || []).some(x => x.id === id))) {
-      log('Recall them first — you cannot withdraw from a slime in the field.');
+      log("Call them home first. I can't squeeze a slime that isn't here.");
       return;
     }
     setBio(p => p + held);
     setSlimes(list => list.map(x => (x.id === id ? { ...x, biomass: 0 } : x)));
-    log(`Drew ${held}🧬 from ${sl.name}.`);
+    log(`Squeezed ${held}🧬 out of ${sl.name}.`);
   };
 
   /** Dissolve a slime for good: its held biomass plus its body, and the jelly back. */
   const reabsorb = (id) => {
     const sl = slimes.find(s => s.id === id);
-    if (!sl || Object.values(exps).some(e => (e.slimes || []).some(s => s.id === id))) { log('Cannot reabsorb!'); return; }
+    if (!sl || Object.values(exps).some(e => (e.slimes || []).some(s => s.id === id))) { log("Can't reabsorb a slime that's out in the wilds."); return; }
     const held = Math.floor(sl.biomass || 0);
     const body = (SLIME_TIERS[sl.tier]?.jellyCost || 5) * 10
       * (hasPassive('reclamation') ? 2 : 1);
@@ -836,7 +853,7 @@ export default function SlimeQueen() {
       });
       return next;
     });
-    log(`Reabsorbed ${sl.name}! +${held + body}🧬 (${held} held, ${body} from the body)`);
+    log(`${sl.name} melts back into the nucleus. +${held + body}🧬 (${held} carried, ${body} from the body)`);
   };
 
   const levelUpQueen = () => {
@@ -844,13 +861,13 @@ export default function SlimeQueen() {
     if (bio < cost) return;
     setBio(p => p - cost);
     setQueen(q => ({ ...q, level: q.level + 1 }));
-    log(`Queen leveled up to ${queen.level + 1}! +${SKILL_POINTS_PER_LEVEL}✨ skill point`);
+    log(`👑 Queen level ${queen.level + 1}! +${SKILL_POINTS_PER_LEVEL} point for Instincts.`);
   };
 
   // Skill tree functions
   const purchaseSkill = (skillId, cost) => {
     setPurchasedSkills(prev => [...prev, skillId]);
-    log(`Learned ${skillId}! (-${cost}✨)`);
+    log(`🌳 We learned ${Object.values(SKILL_TREES).find(t => t.skills[skillId])?.skills[skillId].name || skillId}.`);
   };
 
   // Calculate available skill points
@@ -1067,7 +1084,7 @@ export default function SlimeQueen() {
     setRanchBuildings(p => ({ ...p, [ranchId]: { level: 1 } }));
     setRanchAssignments(p => ({ ...p, [ranchId]: [] }));
     setRanchProgress(p => ({ ...p, [ranchId]: 0 }));
-    log(`${ranch.icon} ${ranch.name} built!`);
+    log(`${ranch.icon} The ${ranch.name} is ready.`);
   };
 
   const canUpgradeRanch = (ranchId) => {
@@ -1151,7 +1168,7 @@ export default function SlimeQueen() {
       ...p,
       [ranchId]: [...(p[ranchId] || []), assignment]
     }));
-    log(`${slime.name} assigned to ${ranch.icon} ${ranch.name}`);
+    log(`${slime.name} slips into the ${ranch.icon} ${ranch.name}.`);
   };
 
   const removeFromRanch = (slimeId, ranchId) => {
@@ -1300,12 +1317,15 @@ export default function SlimeQueen() {
     passives: skillEffects.passives,
     mutationPower: combatBonuses.mutationPower || 1,
     ranchBonus: getRanchBonuses().expeditionRewards,
+    ranchRegen: getRanchBonuses().expeditionRegen,
     travelMult: bon.travel,
     roundMs: ROUND_MS,
     hiveAbilities: {
       sharedVigor:      isHiveAbilityActive('sharedVigor'),
       bountifulHarvest: isHiveAbilityActive('bountifulHarvest'),
       evolutionPulse:   isHiveAbilityActive('evolutionPulse'),
+      swiftExpedition:  isHiveAbilityActive('swiftExpedition'),
+      decoy:            isHiveAbilityActive('decoy'),
     },
   }), [combatBonuses, bon, builds, skillEffects, getRanchBonuses, activeHiveAbilities]);
 
@@ -1333,7 +1353,7 @@ export default function SlimeQueen() {
   const startExp = (zone, opts = {}) => {
     if (exps[zone] || !party.length) return;
     if (Object.keys(exps).length >= expeditionSlots) {
-      log(`The nucleus can only hold ${expeditionSlots} expedition${expeditionSlots > 1 ? 's' : ''} at once.`);
+      log(`We can only have ${expeditionSlots} part${expeditionSlots > 1 ? 'ies' : 'y'} out at once.`);
       return;
     }
     const warden = opts.warden ? { zone, plus: wardenBeaten(zone) } : null;
@@ -1347,9 +1367,10 @@ export default function SlimeQueen() {
     const exp = makeExpedition(zone, roster, targetKills, { ...combatContext(), warden });
 
     setExps(pr => ({ ...pr, [zone]: exp }));
+    if (warden) setWardenTries(t => ({ ...t, [zone]: (t[zone] || 0) + 1 }));
     log(warden
-      ? `The nucleus provokes ${WARDENS[zone]?.name || 'the Warden'}!`
-      : `Party sent to ${ZONES[zone].name}!`);
+      ? `${WARDENS[zone]?.icon || '👑'} We call out ${WARDENS[zone]?.name || 'the Warden'}. It answers.`
+      : `${ZONES[zone].icon} Off to ${ZONES[zone].name}!`);
     lastArenaTickRef.current = Date.now();
     setParty([]);
   };
@@ -1419,7 +1440,7 @@ export default function SlimeQueen() {
         return sl;
       }));
 
-      log(`Recalled from ${ZONES[zone].name}! Materials secured.`);
+      log(`${ZONES[zone].icon} The party is home from ${ZONES[zone].name}, with everything it carried.`);
 
       // Kills no longer unlock anything — they are the pity floor that
       // guarantees a mutagen eventually, however the rolls fall.
@@ -1442,7 +1463,7 @@ export default function SlimeQueen() {
         });
       });
     } else {
-      log(`Party wiped in ${ZONES[zone].name}! Materials lost.`);
+      log(`💀 The party in ${ZONES[zone].name} was wiped. What they carried is gone.`);
     }
 
     setExpSummaries(s => [...s, { ...summary, id: Date.now() }]);
@@ -1490,7 +1511,7 @@ export default function SlimeQueen() {
     });
     setBuilds(p => ({ ...p, [id]: (p[id] || 0) + 1 }));
     const lv = b.levels?.[level];
-    log(lv ? `${b.name} — ${lv.title}. ${lv.desc}.` : `Built ${b.name}!`);
+    log(lv ? `${b.icon} ${b.name}: ${lv.title}. ${lv.desc}.` : `${b.icon} The ${b.name} is up!`);
   };
 
   /**
@@ -1520,7 +1541,7 @@ export default function SlimeQueen() {
       });
     }
     setBuilds(p => ({ ...p, [id]: level - 1 }));
-    log(`🔨 ${b.name} dismantled — everything it cost comes back.`);
+    log(`🔨 ${b.name} pulled down. Everything it cost comes back.`);
   };
 
   // ── Caravan ambush ────────────────────────────────────────────────────────
@@ -1568,11 +1589,11 @@ export default function SlimeQueen() {
       setCaravanTier(t => Math.min(MAX_CARAVAN_TIER, t + 1));
       log(`💎 Caravan routed! +${banked.biomass}🧬, +1💎${matStr ? `, ${matStr}` : ''}. Caravans rise to tier ${summary.nextTier}.`);
     } else if (banked.biomass > 0) {
-      log(`🎯 Ambush over — ${summary.killed.length} killed. +${banked.biomass}🧬${matStr ? `, ${matStr}` : ''}`);
+      log(`🎯 Ambush over: ${summary.killed.length} down. +${banked.biomass}🧬${matStr ? `, ${matStr}` : ''}`);
     } else {
       log('🌫️ The caravan got clear before anything fell.');
     }
-    summary.lost.forEach(sl => log(`💔 ${sl.name} was lost in the ambush.`));
+    summary.lost.forEach(sl => log(`🩹 ${sl.name} got hurt in the ambush and needs to mend.`));
 
     setLastCaravan(Date.now());
   }, [log]);
@@ -1803,10 +1824,9 @@ export default function SlimeQueen() {
 
     const iv = setInterval(() => {
       const now = Date.now();
-      const dt = (now - lastArenaTickRef.current) * speed;
-      lastArenaTickRef.current = now;
-
       const ctx = combatContext();
+      const dt = (now - lastArenaTickRef.current) * speed * (ctx.hiveAbilities.swiftExpedition ? 1.5 : 1);
+      lastArenaTickRef.current = now;
 
       setExps(prev => {
         if (Object.keys(prev).length === 0) return prev;
@@ -1855,7 +1875,13 @@ export default function SlimeQueen() {
                       Object.entries(se.salvage).forEach(([mat, ct]) => { n[mat] = (n[mat] || 0) + ct; });
                       return n;
                     });
-                    log(`📦 Salvage rites recover ${Object.values(se.salvage).reduce((a, b) => a + b, 0)} material(s).`);
+                    const n = Object.values(se.salvage).reduce((a, b) => a + b, 0);
+                    log(se.decoy
+                      ? `🎭 The decoy takes the blame. ${n} material${n === 1 ? '' : 's'} made it home.`
+                      : `📦 Salvage Rites: ${n} material${n === 1 ? '' : 's'} made it home.`);
+                  }
+                  if (se.decoy) {
+                    setActiveHiveAbilities(a => { const n = { ...a }; delete n.decoy; return n; });
                   }
                   setExps(cur => { const n = { ...cur }; delete n[se.zone]; return n; });
                   break;
@@ -1987,13 +2013,13 @@ export default function SlimeQueen() {
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'rgba(0,0,0,0.3)', padding: '4px 10px', borderRadius: 12, fontSize: 12 }}>🧬 <strong>{Math.floor(bio)}</strong></div>
           <div
-            title={`Plasm is your population cap — ${slimes.length} slime(s) alive${woundedCount ? `, ${woundedCount} wounded and still holding a slot` : ''}. Raise it with Queen levels, the Slime Pit, and skills.`}
+            title={`Plasm: how many of us the nucleus can hold. ${slimes.length} slime${slimes.length === 1 ? '' : 's'} now${woundedCount ? `, ${woundedCount} wounded and still taking up room` : ''}. Queen levels, the Slime Pit and Instincts raise it.`}
             style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'rgba(0,0,0,0.3)', padding: '4px 10px', borderRadius: 12, fontSize: 12 }}
           >
             🫧 <strong>{freeJelly}/{maxJelly}</strong>
             {woundedCount > 0 && <span style={{ color: '#f87171', fontSize: 10 }}>🩹{woundedCount}</span>}
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'rgba(0,0,0,0.3)', padding: '4px 10px', borderRadius: 12, fontSize: 12 }}>🔮 <strong>{mana}</strong></div>
+          <div title="Musk. Pheromones cost it, and every slime makes 1 an hour." style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'rgba(0,0,0,0.3)', padding: '4px 10px', borderRadius: 12, fontSize: 12 }}>🔮 <strong>{mana}</strong></div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'rgba(0,0,0,0.3)', padding: '4px 10px', borderRadius: 12, fontSize: 12 }}>💎 <strong>{prisms}</strong></div>
         </div>
         <button onClick={() => setDev(!dev)} style={{ background: 'none', border: 'none', color: '#fff', fontSize: 20, cursor: 'pointer' }}>🛠️</button>
@@ -2068,13 +2094,13 @@ export default function SlimeQueen() {
               {expandedSections.mana && (
                 <div style={{ padding: '0 20px 20px' }}>
                   <div style={{ fontSize: 11, opacity: 0.6, marginBottom: 15 }}>
-                    +{slimes.length} mana/hour ({slimes.length} slimes × 1/hour)
+                    +{slimes.length} musk an hour (1 per slime). Release a pheromone to change how the nucleus works for a while.
                   </div>
 
                   {/* Active Abilities */}
               {Object.keys(activeHiveAbilities).length > 0 && (
                 <div style={{ background: 'rgba(74,222,128,0.1)', borderRadius: 8, padding: 12, marginBottom: 15 }}>
-                  <div style={{ fontSize: 12, fontWeight: 'bold', marginBottom: 8, color: '#4ade80' }}>✨ Active Abilities</div>
+                  <div style={{ fontSize: 12, fontWeight: 'bold', marginBottom: 8, color: '#4ade80' }}>✨ In the air</div>
                   <div style={{ display: 'grid', gap: 8 }}>
                     {Object.entries(activeHiveAbilities).filter(([_, exp]) => exp > Date.now()).map(([id, expiration]) => {
                       const ability = HIVE_ABILITIES[id];
@@ -2110,11 +2136,11 @@ export default function SlimeQueen() {
                           <span style={{ fontSize: 13, fontWeight: 'bold' }}>{ability.name}</span>
                           {isActive && <span style={{ fontSize: 10, marginLeft: 8, padding: '2px 6px', background: 'rgba(74,222,128,0.3)', borderRadius: 4, color: '#4ade80' }}>ACTIVE</span>}
                         </div>
-                        <span style={{ fontSize: 12, color: canAfford ? '#a855f7' : '#ef4444' }}>🧪 {ability.cost}</span>
+                        <span style={{ fontSize: 12, color: canAfford ? '#a855f7' : '#ef4444' }}>🔮 {ability.cost}</span>
                       </div>
                       <div style={{ fontSize: 11, opacity: 0.7, marginBottom: 8 }}>{ability.desc}</div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontSize: 10, opacity: 0.5 }}>Duration: {Math.round(ability.duration / 3600000)}h</span>
+                        <span style={{ fontSize: 10, opacity: 0.5 }}>Lasts {Math.round(ability.duration / 3600000)}h</span>
                         <button
                           onClick={() => activateHiveAbility(id)}
                           disabled={!canAfford || isActive}
@@ -2129,7 +2155,7 @@ export default function SlimeQueen() {
                             cursor: !canAfford || isActive ? 'not-allowed' : 'pointer'
                           }}
                         >
-                          {isActive ? 'Active' : 'Activate'}
+                          {isActive ? 'In the air' : 'Release'}
                         </button>
                       </div>
                     </div>
@@ -2137,7 +2163,7 @@ export default function SlimeQueen() {
                 })}
                 {Object.entries(HIVE_ABILITIES).filter(([id]) => !isPheromoneUnlocked(id, purchasedSkills)).length > 0 && (
                   <div style={{ opacity: 0.5, fontSize: 11, textAlign: 'center', padding: 10 }}>
-                    🔒 {Object.entries(HIVE_ABILITIES).filter(([id]) => !isPheromoneUnlocked(id, purchasedSkills)).length} more abilities locked - unlock via Skill Tree
+                    🔒 {Object.entries(HIVE_ABILITIES).filter(([id]) => !isPheromoneUnlocked(id, purchasedSkills)).length} more pheromones to learn in Instincts
                   </div>
                 )}
                   </div>
@@ -2214,7 +2240,7 @@ export default function SlimeQueen() {
                               {b.levels && <span style={{ fontSize: 11, opacity: 0.6, fontWeight: 'normal' }}> · {lvl}/{b.max}</span>}
                             </div>
                             <div style={{ fontSize: 12, opacity: 0.7 }}>
-                              {nextLvl ? `${nextLvl.title} — ${nextLvl.desc}` : (b.levels ? b.levels[b.levels.length - 1].desc : b.desc)}
+                              {nextLvl ? `Next, ${nextLvl.title}: ${nextLvl.desc}` : (b.levels ? b.levels[b.levels.length - 1].desc : b.desc)}
                             </div>
                             {isResearch && b.time && (
                               <div style={{ fontSize: 11, opacity: 0.5, marginTop: 4 }}>Build time: {Math.floor(b.time / 60)}:{(b.time % 60).toString().padStart(2, '0')}</div>
@@ -2288,7 +2314,7 @@ export default function SlimeQueen() {
                 ))}
                 {!Object.keys(mats).length && (
                   <div style={{ opacity: 0.5, fontStyle: 'italic', gridColumn: '1/-1', fontSize: 12 }}>
-                    Nothing yet — monsters and caravans drop it.
+                    Nothing yet. Monsters drop things when we eat them.
                   </div>
                 )}
               </div>
@@ -2374,8 +2400,8 @@ export default function SlimeQueen() {
             ) : (
               <div style={{ textAlign: 'center', padding: 40 }}>
                 <div style={{ fontSize: 48, marginBottom: 15 }}>🏠</div>
-                <div style={{ fontSize: 16, fontWeight: 'bold', marginBottom: 10 }}>Slime Ranch</div>
-                <div style={{ opacity: 0.7, marginBottom: 15 }}>🔒 Unlock via Skill Tree (Deep Culture → Cultivation Pools)</div>
+                <div style={{ fontSize: 16, fontWeight: 'bold', marginBottom: 10 }}>The Pools</div>
+                <div style={{ opacity: 0.7, marginBottom: 15 }}>🔒 Learn Cultivation Pools in Instincts</div>
               </div>
             ))}
 
@@ -2445,7 +2471,7 @@ export default function SlimeQueen() {
                   );
                 })}
               </div>
-              ) : <div style={{ textAlign: 'center', padding: 40, opacity: 0.5 }}><div style={{ fontSize: 48 }}>🥚</div><div>No slimes yet!</div></div>
+              ) : <div style={{ textAlign: 'center', padding: 40, opacity: 0.5 }}><div style={{ fontSize: 48 }}>🥚</div><div>No slimes yet. Bud one above!</div></div>
               }
               </>)}
             </div>
@@ -2461,7 +2487,7 @@ export default function SlimeQueen() {
                   <div key={summary.id} style={{ background: summary.survivors.length > 0 ? 'rgba(74,222,128,0.1)' : 'rgba(239,68,68,0.1)', border: `2px solid ${summary.survivors.length > 0 ? '#4ade80' : '#ef4444'}`, borderRadius: 10, padding: 15, marginBottom: 10 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
                       <div style={{ fontSize: 14, fontWeight: 'bold', color: summary.survivors.length > 0 ? '#4ade80' : '#ef4444' }}>
-                        {summary.survivors.length > 0 ? '✅ Expedition Complete' : '💀 Party Wiped'} - {summary.zone}
+                        {summary.survivors.length > 0 ? '✅ Home safe' : '💀 Wiped'}: {summary.zone}
                       </div>
                       <button onClick={() => setExpSummaries(s => s.filter((_, i) => i !== idx))} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 4, color: '#fff', cursor: 'pointer', padding: '4px 8px', fontSize: 12 }}>✕</button>
                     </div>
@@ -2498,7 +2524,7 @@ export default function SlimeQueen() {
                   {!ok && (
                     <div style={{ fontSize: 9, color: '#f59e0b' }} title={
                       prerequisiteZone(k)
-                        ? `Fell ${WARDENS[prerequisiteZone(k)].name} for its ${WARDENS[prerequisiteZone(k)].seal}, then grow the ${BUILDINGS[tendrilFor(k)].name}`
+                        ? `Beat ${WARDENS[prerequisiteZone(k)].name} for the ${WARDENS[prerequisiteZone(k)].seal}, then grow the ${BUILDINGS[tendrilFor(k)].name}`
                         : 'Grow this zone\'s Tendril'
                     }>
                       🔒 {prerequisiteZone(k) ? WARDENS[prerequisiteZone(k)].seal : 'Tendril'}
@@ -2518,7 +2544,7 @@ export default function SlimeQueen() {
               setVerboseLogs={setVerboseLogs}
             />
             {exps[selZone] ? (
-              <button onClick={() => stopExp(selZone)} style={{ width: '100%', marginTop: 15, padding: 12, background: 'linear-gradient(135deg, #ef4444, #f59e0b)', border: 'none', borderRadius: 8, color: '#fff', fontWeight: 'bold', cursor: 'pointer' }}>🛑 Recall</button>
+              <button onClick={() => stopExp(selZone)} style={{ width: '100%', marginTop: 15, padding: 12, background: 'linear-gradient(135deg, #ef4444, #f59e0b)', border: 'none', borderRadius: 8, color: '#fff', fontWeight: 'bold', cursor: 'pointer' }}>🛑 Call them home</button>
             ) : (
               <div style={{ marginTop: 15 }}>
                 <div style={{ fontSize: 12, marginBottom: 8, opacity: 0.7 }}>Party</div>
@@ -2533,9 +2559,9 @@ export default function SlimeQueen() {
                 </div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 15, maxHeight: 100, overflowY: 'auto' }}>
                   {avail.map(s => <div key={s.id} onClick={() => party.length < 4 && setParty(p => [...p, s.id])} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: 6, background: 'rgba(0,0,0,0.3)', borderRadius: 6, cursor: 'pointer', fontSize: 9 }}><SlimeSprite tier={s.tier} size={24} mutations={s.mutations} primaryElement={s.primaryElement} /><span style={{ marginTop: 2 }}>{s.name.split(' ')[0]}</span></div>)}
-                  {!avail.length && slimes.length > 0 && <div style={{ opacity: 0.5, fontSize: 11 }}>All busy</div>}
+                  {!avail.length && slimes.length > 0 && <div style={{ opacity: 0.5, fontSize: 11 }}>Everyone's busy</div>}
                 </div>
-                <button onClick={() => startExp(selZone)} disabled={!party.length} style={{ width: '100%', padding: 12, background: party.length ? 'linear-gradient(135deg, #4ade80, #22d3ee)' : 'rgba(100,100,100,0.5)', border: 'none', borderRadius: 8, color: '#fff', fontWeight: 'bold', cursor: party.length ? 'pointer' : 'not-allowed' }}>⚔️ Start</button>
+                <button onClick={() => startExp(selZone)} disabled={!party.length} style={{ width: '100%', padding: 12, background: party.length ? 'linear-gradient(135deg, #4ade80, #22d3ee)' : 'rgba(100,100,100,0.5)', border: 'none', borderRadius: 8, color: '#fff', fontWeight: 'bold', cursor: party.length ? 'pointer' : 'not-allowed' }}>⚔️ Send them</button>
 
                 {/* The Warden is opted into here, never met by accident. */}
                 {(() => {
@@ -2549,8 +2575,8 @@ export default function SlimeQueen() {
                       onClick={() => ready && startExp(selZone, { warden: true })}
                       disabled={!ready}
                       title={provoked
-                        ? `${beaten ? `${w.name}, Rekindled` : w.name} — one fight, then the party comes home`
-                        : `Grow the ${BUILDINGS[tendrilFor(selZone)].name} to Provoke on the Hive screen`}
+                        ? `${beaten ? `${w.name}, Rekindled` : w.name}: one fight, then the party comes home`
+                        : `Grow the ${BUILDINGS[tendrilFor(selZone)].name} to Provoke, on The Nucleus`}
                       style={{
                         width: '100%', marginTop: 8, padding: 12, borderRadius: 8, color: '#fff',
                         fontWeight: 'bold', border: '1px solid rgba(245,158,11,0.5)',
@@ -2564,7 +2590,7 @@ export default function SlimeQueen() {
                           ? `Needs ${BUILDINGS[tendrilFor(selZone)].name} · Provoke`
                           : beaten
                             ? `Drops ${w.heart}`
-                            : `Drops ${w.seal} — opens the next zone`}
+                            : `Drops the ${w.seal}, which opens the next place`}
                       </div>
                     </button>
                   );
@@ -2573,7 +2599,7 @@ export default function SlimeQueen() {
             )}
             {Object.keys(exps).length > 1 && (
               <div style={{ marginTop: 20 }}>
-                <div style={{ fontSize: 12, marginBottom: 8, opacity: 0.7 }}>All Expeditions</div>
+                <div style={{ fontSize: 12, marginBottom: 8, opacity: 0.7 }}>Parties out</div>
                 {Object.entries(exps).map(([z, e]) => <div key={z} onClick={() => setSelZone(z)} style={{ display: 'flex', justifyContent: 'space-between', padding: 10, background: z === selZone ? 'rgba(34,211,238,0.1)' : 'rgba(0,0,0,0.3)', borderRadius: 8, marginBottom: 6, cursor: 'pointer' }}><span>{ZONES[z].icon} {ZONES[z].name}</span><span>💀{e.kills} 👥{(e.slimes||[]).filter(s=>!s.dead).length}/{(e.slimes||[]).length}</span></div>)}
               </div>
             )}
@@ -2606,6 +2632,7 @@ export default function SlimeQueen() {
             monsterKills={monsterKills}
             mutagens={mutagens}
             wardenKills={wardenKills}
+            wardenTries={wardenTries}
             mutationsUnlocked={hasPassive('mutagenesis')}
             affinityUnlocked={hasPassive('affinity')}
             seenTutorials={seenTutorials}

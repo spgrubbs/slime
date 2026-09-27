@@ -1324,3 +1324,117 @@ The Cinder Warden also sits lower than §17 claimed: its counter build wins abou
 **51%** at 1.5×, not the 72% quoted. It remains solvable and the gap to the
 naive build (0%) is the largest of any Warden, so it is left as the hardest
 first-kill in the game rather than tuned down.
+
+
+## 22. Playtest round two: saving, traits, Mossback, and Glub
+
+### Saving was broken while anything was happening
+
+The autosave was an interval inside an effect keyed on every piece of state. A
+running expedition changes state every tick, so the effect tore the interval
+down and rebuilt it every second, and the 30-second save never fired. Closing
+the app abruptly lost everything since the last manual save.
+
+State now lives in a ref read by a single interval (10 s), and the game also
+saves on `visibilitychange` → hidden, `pagehide` and `beforeunload`. On Android
+the WebView reports app switches, screen locks and swipe-aways as the page going
+hidden before the process dies. Deleting a save reloads the app instead of
+resetting thirty pieces of state by hand.
+
+### Offline progress ran against a fresh game
+
+The offline catch-up ran in the same breath as the load, with the combat context
+of the *default* state: no skills, no mutagen drops, no affinity, no buildings.
+It also dropped mutagens and prisms found offline, lost Salvage on a wipe, never
+recorded Warden kills, left a completed Warden hunt stuck forever (its "done"
+signal fired with nobody listening), and banked kills in a way that skipped the
+pity counter.
+
+Loading is now two phases: restore the save, then on the next render run the
+catch-up with the real context. Every side effect is collected and applied;
+kills stay on the expedition and count, pity floor included, when the party
+comes home.
+
+### Once-per-fight effects fired once per expedition
+
+The round counter and every per-fight flag (Vanguard, Opportunist, Second Skin,
+Drop In, Fierce, Adaptive Carapace) ran for the whole expedition. They reset now
+whenever a new monster appears. Resurrect and Survival Reflex stay once per
+expedition, as described.
+
+### Traits are tier affixes
+
+"+5% damage" on a basic slime with 5 Firmness is a quarter of a point and
+rounds to nothing. Every trait now carries a fixed value per tier, sized to that
+tier's actual numbers:
+
+| Trait | Basic | Enhanced | Elite | Royal |
+|---|---|---|---|---|
+| Hardy (max HP) | +8 | +18 | +35 | +60 |
+| Brave (dmg below half HP) | +2 | +3 | +5 | +8 |
+| Fierce (first hit each fight) | +4 | +8 | +14 | +20 |
+| Greedy (biomass per kill) | +2 | +3 | +8 | +18 |
+| Resilient (HP per kill) | +3 | +6 | +12 | +22 |
+| Reckless (dmg dealt and taken) | +2 | +3 | +5 | +8 |
+| Primordial (every stat) | +1 | +2 | +4 | +6 |
+
+Chances (Swift, Cautious, Timid, Lucky) do not depend on tier and were simply
+too small to notice; they are now 6–15 points. Lazy became a behavior: it always
+acts last, and pools work 20% better with it in them.
+
+### Mossback
+
+Players pile up common materials with nothing to spend them on. Mossback is a
+peddler snail, unlocked by **Trade Musk** (Deep Culture, 1 point after Calcified
+Frame), who visits every 8 hours and stays for 5. The schedule is anchored to
+the first visit, so it turns up the moment it is unlocked.
+
+Each visit rolls a stall of up to four deals from what the player is carrying
+at that moment:
+
+1. Two **clear-outs**: half of your biggest piles for what the next Tendril
+   (first) or building (second) is short of, capped at the shortfall.
+2. A **mutagen** from a reached zone, paid in your biggest pile.
+3. A **swap** of two duplicate mutagens for a different one.
+4. A **trade-up** from the commonest material, if the stall is thin.
+
+Value is zone tier × rarity (common forest material = 1, each zone ≈ ×2, a
+scarce drop ≈ ×4, a rare-monster drop ×6; a mutagen is 40× its zone value, 80×
+if rare). Mossback returns 70% of what you hand over. Seals and Cores are never
+traded, and nothing comes from a zone you have not reached, so the peddler is a
+way around a bad-luck drought, never a way past a Warden.
+
+### Dead features found and wired up
+
+- **Swift Expedition** was never read. It now speeds parties 50%, offline too.
+- **Slime Decoy** referred to a Tower Defense mode that no longer exists. It now
+  brings a wiped party's materials home, once.
+- **Bountiful Harvest** claimed material drops and only did biomass. It does both.
+- **Healing Spring** computed nothing. It now gives field regen from Viscosity.
+- **Training Arena** said "+20% attack frequency" and was a ×1.04 damage
+  multiplier. It is an honest +10% damage.
+- **Trophy Hunter** with Quarry Scent made one kill in eight a guaranteed rare
+  mutagen: 364 Resurrect mutagens in a simulated night. It now guarantees only
+  the first rare kill of each expedition.
+- The Compendium quoted every material at 50%; it shows the real rate. A
+  Warden's counter is revealed after the first *attempt*, not the first win,
+  since the hint is for the fight you just lost.
+
+### Voice: Glub
+
+Player text is narrated by **Glub**, the Queen's firstborn, who stays home and
+explains things. Glub calls the player "Mother" and speaks as one of the brood
+("we", "us").
+
+- Short, plain sentences. Concrete and bodily: slimes eat, squish, soak, ooze.
+- Earnest and a little literal. No sarcasm, no winking at the player.
+- Mechanics stay exact. Numbers, names and **bold** key terms are never fudged
+  for flavor.
+- No em dashes in player text; periods and colons instead. No "not X, but Y"
+  constructions, no three-beat rhythm for its own sake.
+- Buttons and stat names stay plain and functional ("Send them", "Call them
+  home"). The voice lives in tutorials, descriptions, logs and empty states.
+- The verbose combat trace is a technical readout and keeps its terse
+  `Label — explanation` form.
+
+The resource called `mana` in code is **musk** in the game; pheromones cost it.

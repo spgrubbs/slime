@@ -143,6 +143,17 @@ function buildAnim(records, roundMs) {
 
 // ── Intermission events ──────────────────────────────────────────────────────
 
+/**
+ * A wiped party loses what it was carrying, unless Salvage Rites (always) or
+ * an active Slime Decoy (once) brings it home. The decoy is only spent when
+ * Salvage would not have covered it anyway.
+ */
+function wipeEffect(exp, ctx) {
+  const salvage = !!ctx.passives?.includes('salvage');
+  const decoy = !salvage && !!ctx.hiveAbilities?.decoy;
+  return { type: 'expWipe', salvage: salvage || decoy ? { ...exp.materials } : null, decoy };
+}
+
 function rollIntermissionEvent(exp, zone, ctx) {
   const rng = ctx.rng || Math.random;
   const zoneFlavor = INTERMISSION_EVENTS[zone] || INTERMISSION_EVENTS.forest;
@@ -265,13 +276,13 @@ export function tickExpedition(exp, dt, ctx = {}, zone) {
       exp.slimes.forEach(s => {
         if (!s.dead && s.hp <= 0) {
           s.dead = true;
-          log({ m: `${s.name} succumbs on the road 💔`, c: '#ef4444', v: 'died during travel' });
+          log({ m: `${s.name} collapses on the road 💔`, c: '#ef4444', v: 'wounded while travelling' });
           sideEffects.push({ type: 'slimeDown', id: s.id });
         }
       });
       if (exp.slimes.every(s => s.dead)) {
         exp.phase = 'defeat';
-        sideEffects.push({ type: 'expWipe', salvage: ctx.passives?.includes('salvage') ? { ...exp.materials } : null });
+        sideEffects.push(wipeEffect(exp, ctx));
         return { exp, sideEffects };
       }
     }
@@ -303,7 +314,7 @@ export function tickExpedition(exp, dt, ctx = {}, zone) {
           healed += amount;
         });
         if (healed > 0) {
-          log({ m: 'The party reknits on the road.', c: '#4ade80',
+          log({ m: 'We knit back together on the road.', c: '#4ade80',
                 v: `travel recovery +${Math.round(regen * 100)}% max HP each · ${healed} total` });
         }
       }
@@ -351,6 +362,7 @@ export function tickExpedition(exp, dt, ctx = {}, zone) {
   const world = {
     round: exp.round, slimes: exp.slimes, enemy: exp.enemy, zone,
     killStreak: exp.killStreak || 0, freeRoundAt: exp.freeRoundAt,
+    trophyTaken: !!exp.trophyTaken,
   };
   const { records, sideEffects: roundEffects, wiped, enemyDead } = resolveRound(world, ctx);
 
@@ -359,6 +371,7 @@ export function tickExpedition(exp, dt, ctx = {}, zone) {
   exp.round = world.round;
   exp.killStreak = world.killStreak || 0;
   exp.freeRoundAt = world.freeRoundAt;
+  exp.trophyTaken = !!world.trophyTaken;
   sideEffects.push(...roundEffects);
   records.forEach(r => { if (r.log) log(r.log); });
   exp.anim = buildAnim(records, roundMs);
@@ -397,7 +410,7 @@ export function tickExpedition(exp, dt, ctx = {}, zone) {
     exp.enemy = null;
 
     if (exp.targetKills != null && exp.kills >= exp.targetKills) {
-      log({ m: 'Target reached! Recalling party...', c: '#4ade80',
+      log({ m: 'Done here. Heading home.', c: '#4ade80',
             v: `${exp.kills}/${exp.targetKills} kills` });
       sideEffects.push({ type: 'expComplete' });
     } else {
@@ -417,9 +430,9 @@ export function tickExpedition(exp, dt, ctx = {}, zone) {
 
   // ── Party wipe ────────────────────────────────────────────────────────────
   if (wiped) {
-    log({ m: 'Party wiped! 💀', c: '#ef4444', v: `after ${exp.totalRounds} rounds, ${exp.kills} kills` });
+    log({ m: 'Everyone is down. 💀', c: '#ef4444', v: `after ${exp.totalRounds} rounds, ${exp.kills} kills` });
     exp.phase = 'defeat';
-    sideEffects.push({ type: 'expWipe', salvage: ctx.passives?.includes('salvage') ? { ...exp.materials } : null });
+    sideEffects.push(wipeEffect(exp, ctx));
   }
 
   return { exp, sideEffects };

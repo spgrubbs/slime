@@ -49,7 +49,7 @@ export default function TutorialModal({ tutorial, onDismiss, onDisableAll }) {
         </div>
 
         <div style={{ fontSize: 10, opacity: 0.45, marginBottom: 14 }}>
-          📖 Kept in the Compendium if you want it again.
+          Glub · 📖 I'll say it again in Memory if you forget.
         </div>
 
         <div style={{ display: 'flex', gap: 8 }}>
@@ -61,7 +61,7 @@ export default function TutorialModal({ tutorial, onDismiss, onDisableAll }) {
               background: 'linear-gradient(135deg, #a855f7, #6366f1)',
             }}
           >
-            Got it
+            Got it, Glub
           </button>
           <button
             onClick={onDisableAll}

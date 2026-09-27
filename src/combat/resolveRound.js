@@ -277,7 +277,7 @@ function resolveAttack(attacker, defender, world, ctx, records, opts = {}) {
     if (attacker.hp < attacker.maxHp * 0.3 && cb.lowHpDamage > 1)   trace.mul('Last Stand', cb.lowHpDamage);
     if (defender.maxHp > attacker.maxHp && cb.damageVsHighHp > 1)   trace.mul('Giant Slayer', cb.damageVsHighHp);
     if (defender.hp < defender.maxHp * 0.25 && cb.executeDamage > 1) trace.mul('Execute', cb.executeDamage);
-    if (ctx.bon?.spd > 1) trace.mul('Training Arena', 1 + (ctx.bon.spd - 1) * 0.2);
+    if (ctx.bon?.spd > 1) trace.mul('Training Arena', ctx.bon.spd);
   }
 
   // ── 2. Hit determination ──────────────────────────────────────────────────
@@ -613,7 +613,7 @@ function checkDeaths(world, ctx, records, sideEffects) {
     s.hp = 0;
     records.push({
       kind: 'death', actorId: s.id, actorName: s.name,
-      log: { m: `${s.name} fell! 💔`, c: C.death, v: `${s.name} removed from the party` },
+      log: { m: `${s.name} falls! 💔`, c: C.death, v: `${s.name} is out of the fight, wounded` },
     });
     // Field Triage: what it was carrying comes home even though it does not.
     sideEffects.push({
@@ -679,6 +679,7 @@ export function resolveKill(world, ctx, records, sideEffects, zoneDef) {
   if (cb.biomassGain > 1)        trace.mul('Biomass skill', cb.biomassGain);
   if (ctx.ranchBonus > 0)        trace.mul('Scout Post', 1 + ctx.ranchBonus);
   if (ctx.hiveAbilities?.bountifulHarvest) trace.mul('🌾 Bountiful Harvest', 1.25);
+  if (ctx.hiveAbilities?.bountifulHarvest) ev.matMult *= 1.25;
 
   // Per-slime onKill hooks. Contributions are additive across the party —
   // two Greedy slimes are worth two bonuses, as the trait text implies.
@@ -730,7 +731,7 @@ export function resolveKill(world, ctx, records, sideEffects, zoneDef) {
     kind: 'kill',
     targetId: enemy.id, targetName: enemy.name,
     log: {
-      m: `${enemy.name} defeated! +${Math.floor(per)}🧬 each`,
+      m: `${enemy.name} eaten! +${Math.floor(per)}🧬 each`,
       c: C.reward,
       v: `${trace.render()}  →  split ${living.length} ways`,
     },
@@ -747,11 +748,14 @@ export function resolveKill(world, ctx, records, sideEffects, zoneDef) {
   // player cannot use and has had nothing explained about, so it should not
   // drop at all rather than pile up unexplained.
   if (md.mutation && ctx.passives?.includes('mutagenesis')) {
-    // Trophy Hunter: a rare monster never keeps its mutagen.
-    if (md.rare && ctx.passives?.includes('trophyHunter')) {
+    // Trophy Hunter: the first rare monster each expedition always gives up
+    // its mutagen. It used to be every rare kill, and with Quarry Scent
+    // raising rare spawns to one in eight that was hundreds of mutagens a night.
+    if (md.rare && ctx.passives?.includes('trophyHunter') && !world.trophyTaken) {
+      world.trophyTaken = true;
       sideEffects.push({ type: 'mutagen', mutation: md.mutation });
-      records.push({ kind: 'reward', log: { m: `🏆 The ${md.name} yields its mutagen.`, c: '#a855f7',
-        v: 'Trophy Hunter — rare kills always drop' } });
+      records.push({ kind: 'reward', log: { m: `🏆 The ${md.name} gives up its mutagen.`, c: '#a855f7',
+        v: 'Trophy Hunter: first rare kill of the expedition always drops' } });
       return;
     }
     const chance = Math.min(0.95, mutagenDropChance(md) * ev.matMult);
@@ -849,6 +853,7 @@ export function resolveRound(world, ctx = {}) {
 
     if (c.passives?.includes('regeneration') && e.side === 'slime') ev.heal += 1;
     if (c.hiveAbilities?.sharedVigor && e.side === 'slime')        ev.heal += 2;
+    if (c.ranchRegen > 0 && e.side === 'slime')                    ev.heal += c.ranchRegen;
 
     if (ev.cleanse.length) {
       e.status = e.status.filter(s => !ev.cleanse.includes(s.type));

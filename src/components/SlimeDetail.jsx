@@ -56,8 +56,8 @@ const SlimeDetail = ({
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, marginBottom: 2 }}><span>🧬 Biomass</span><span>{Math.floor(biomass)} (+{cappedPercent.toFixed(1)}%)</span></div>
             <div style={{ fontSize: 9, opacity: 0.6, marginTop: 2 }}>
               {atCap
-                ? `Carrying all it can — capped at +${tier.maxBiomassBonus}%.`
-                : `Next 1%: ${Math.ceil(tier.biomassPerPercent - (biomass % tier.biomassPerPercent))} more`}
+                ? `Full. It can't carry more than +${tier.maxBiomassBonus}%.`
+                : `${Math.ceil(tier.biomassPerPercent - (biomass % tier.biomassPerPercent))} more for the next 1%`}
             </div>
           </div>
         </div>
@@ -165,7 +165,7 @@ const SlimeDetail = ({
             🩹 Wounded
           </div>
           <div style={{ fontSize: 10, opacity: 0.8 }}>
-            Cannot be deployed. Mends in a Convalescence Pool.
+            Can't go out until it mends. Put it in a Convalescence Pool.
           </div>
         </div>
       )}
@@ -178,7 +178,7 @@ const SlimeDetail = ({
         }}>
           <div style={{ fontSize: 10, opacity: 0.8, marginBottom: 8 }}>
             Carrying <strong style={{ color: '#4ade80' }}>{Math.floor(biomass)}🧬</strong>
-            {' '}(+{cappedPercent.toFixed(1)}% stats) — forfeit if it goes down.
+            {' '}(+{cappedPercent.toFixed(1)}% stats). It spills all of it if it falls.
           </div>
           <button
             onClick={() => onWithdraw(slime.id)}
@@ -187,7 +187,7 @@ const SlimeDetail = ({
               cursor: 'pointer', background: 'linear-gradient(135deg, #4ade80, #22d3ee)',
             }}
           >
-            🧬 Draw out {Math.floor(biomass)} biomass
+            🧬 Squeeze out {Math.floor(biomass)} biomass
           </button>
         </div>
       )}
@@ -231,7 +231,7 @@ const SlimeDetail = ({
             );
           })}
           {!mutations.length && (
-            <div style={{ fontSize: 11, opacity: 0.5, fontStyle: 'italic' }}>No mutations</div>
+            <div style={{ fontSize: 11, opacity: 0.5, fontStyle: 'italic' }}>No mutations yet</div>
           )}
         </div>
 
@@ -243,13 +243,13 @@ const SlimeDetail = ({
             </div>
 
             {inTheField ? (
-              <div style={{ fontSize: 10, opacity: 0.6 }}>Recall them first.</div>
+              <div style={{ fontSize: 10, opacity: 0.6 }}>Call it home first.</div>
             ) : !usable.length ? (
-              <div style={{ fontSize: 10, opacity: 0.6 }}>No mutagens on hand.</div>
+              <div style={{ fontSize: 10, opacity: 0.6 }}>No mutagens to feed it.</div>
             ) : (
               <>
                 <div style={{ fontSize: 10, opacity: 0.7, marginBottom: 8 }}>
-                  Permanent. The mutagen is spent.
+                  It's forever, and the mutagen gets used up.
                 </div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, maxHeight: 170, overflowY: 'auto' }}>
                   {usable.map(id => {

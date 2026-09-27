@@ -1,8 +1,8 @@
 // Stat definitions and display info
 export const STAT_INFO = {
-  firmness: { name: 'Firmness', icon: '💪', desc: 'Attack damage & max HP', color: '#ef4444' },
-  slipperiness: { name: 'Slipperiness', icon: '💨', desc: 'Dodge & crit chance', color: '#22d3ee' },
-  viscosity: { name: 'Viscosity', icon: '🌀', desc: 'Effect damage & proc chance', color: '#a855f7' },
+  firmness: { name: 'Firmness', icon: '💪', desc: 'How hard we hit, and how much health we have', color: '#ef4444' },
+  slipperiness: { name: 'Slipperiness', icon: '💨', desc: 'Dodging, crits, and who moves first', color: '#22d3ee' },
+  viscosity: { name: 'Viscosity', icon: '🌀', desc: 'How often and how hard our mutations go off', color: '#a855f7' },
 };
 
 // Slime tier definitions

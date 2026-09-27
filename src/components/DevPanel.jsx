@@ -50,7 +50,7 @@ export default function DevPanel({ tools, speed, setSpeed, onClose }) {
         <B color="#db2777" onClick={() => tools.addLevels(1)}>+1 Queen Lv</B>
         <B color="#db2777" onClick={() => tools.addLevels(10)}>+10 Queen Lv</B>
         <B color="#7c3aed" onClick={() => tools.addPrisms(100)}>+100 💎</B>
-        <B color="#059669" onClick={() => tools.addMana(100)}>+100 mana</B>
+        <B color="#059669" onClick={() => tools.addMana(100)}>+100 musk</B>
       </Section>
 
       <Section title="Items">

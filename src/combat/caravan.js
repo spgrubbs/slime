@@ -69,7 +69,7 @@ export function makeAmbush(squadSlimes, tier, ctx = {}, day = caravanDay()) {
     killed: [],
     logs: [
       {
-        m: `A tier ${tier} caravan is on the road — ${caravan.units.length} in the column.`,
+        m: `A tier ${tier} caravan comes down the road. ${caravan.units.length} in the column.`,
         c: C.road,
         v: `unit HP ×${scaling.hpMultiplier.toFixed(2)}, damage ×${scaling.damageMultiplier.toFixed(2)}, loot ×${scaling.lootMultiplier.toFixed(2)} · ${caravan.escapeRounds} rounds before they are clear`,
       },
@@ -130,7 +130,7 @@ function bankUnit(ambush, unit) {
 
   const matStr = Object.entries(def.mats).map(([m, c]) => `${c}× ${m}`).join(', ');
   ambush.logs.push({
-    m: `${def.icon} ${def.name} down — +${biomass}🧬${matStr ? `, ${matStr}` : ''}`,
+    m: `${def.icon} ${def.name} down. +${biomass}🧬${matStr ? `, ${matStr}` : ''}`,
     c: C.loot,
     v: `banked immediately · ${def.biomass} base × ${mult.toFixed(2)} tier loot`,
   });
@@ -218,25 +218,25 @@ const OUTCOMES = {
   rout: {
     phase: 'victory',
     title: 'Caravan routed',
-    msg: 'The whole column is down. 💎',
+    msg: 'Every last one of them is down. 💎',
     color: C.rout,
   },
   escaped: {
     phase: 'over',
-    title: 'They broke through',
-    msg: 'The survivors got clear of the ambush.',
+    title: 'They got away',
+    msg: 'The rest of the column made it past us.',
     color: C.road,
   },
   retreated: {
     phase: 'over',
-    title: 'Withdrew',
-    msg: 'The squad melted back into the treeline with what it took.',
+    title: 'We slipped away',
+    msg: 'The squad oozed back into the trees with what it took.',
     color: C.road,
   },
   wiped: {
     phase: 'over',
-    title: 'Squad lost',
-    msg: 'The ambush failed.',
+    title: 'Squad down',
+    msg: 'Every one of us is hurt. They need to mend.',
     color: C.loss,
   },
 };
@@ -251,9 +251,9 @@ function finish(ambush, reason) {
   const remaining = ambush.units.filter(u => !u.dead).length;
 
   ambush.logs.push({
-    m: `${outcome.title} — ${outcome.msg}`,
+    m: `${outcome.title}. ${outcome.msg}`,
     c: outcome.color,
-    v: `${ambush.killed.length} killed, ${remaining} escaped, ${lost.length} slime(s) lost over ${ambush.round} rounds`,
+    v: `${ambush.killed.length} killed, ${remaining} escaped, ${lost.length} slime(s) wounded over ${ambush.round} rounds`,
   });
 
   ambush.summary = {

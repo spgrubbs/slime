@@ -5,6 +5,7 @@ import path from 'node:path';
 
 import './index.js';
 import { SKILL_TREES, getSkillEffects, canPurchaseSkill } from '../data/skillTreeData.js';
+import { makeSlimeCombatant, makeEnemyCombatant, resolveKill } from './resolveRound.js';
 
 const ROOT_SKILLS = new Set(['expeditionBasics', 'hiveFoundation', 'combatTraining']);
 
@@ -106,4 +107,13 @@ test('a capstone raising two capacities credits both', () => {
 test('skill ids are unique across all three trees', () => {
   const ids = allSkills().map(s => s.id);
   assert.equal(new Set(ids).size, ids.length, 'duplicate skill id');
+});
+
+test('Trophy Hunter guarantees only the first rare mutagen of an expedition', () => {
+  const ctx = { rng: () => 0.99, passives: ['mutagenesis', 'trophyHunter'] };
+  const world = { round: 1, slimes: [makeSlimeCombatant({ id: 'a', name: 'A', tier: 'basic', mutations: [], traits: [],
+    baseStats: { firmness: 5, slipperiness: 5, viscosity: 5 } })], enemy: makeEnemyCombatant('lifeFairy') };
+  const drops = () => { const se = []; resolveKill(world, ctx, [], se, null); return se.filter(e => e.type === 'mutagen').length; };
+  assert.equal(drops(), 1, 'first rare kill always drops');
+  assert.equal(drops(), 0, 'the second one rolls normally (and this roll misses)');
 });

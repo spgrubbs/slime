@@ -19,7 +19,7 @@ export const CARAVAN_UNITS = {
   porter: {
     id: 'porter', name: 'Porter', icon: '🎒', tier: 1,
     hp: 34, dmg: 4,
-    desc: 'Loaded down and barely armed. Kill these first — they carry the goods.',
+    desc: 'Loaded down and barely armed. Get these first. They carry the good stuff.',
     biomass: 22,
     mats: { 'Human Bone': 1, 'Iron Sword': 1 },
     weight: 34,
@@ -27,7 +27,7 @@ export const CARAVAN_UNITS = {
   outrider: {
     id: 'outrider', name: 'Outrider', icon: '🐎', tier: 2,
     hp: 42, dmg: 8, slippery: 6,
-    desc: 'Fast and hard to pin down. Slippery slimes catch them; slow ones flail.',
+    desc: 'Fast and hard to pin down. Slippery slimes catch them. Slow ones just flail.',
     biomass: 30,
     mats: { 'Human Bone': 1, 'Saddle Leather': 1 },
     weight: 24,
@@ -35,7 +35,7 @@ export const CARAVAN_UNITS = {
   guard: {
     id: 'guard', name: 'Caravan Guard', icon: '🛡️', tier: 2,
     hp: 88, dmg: 7,
-    desc: 'Shielded and patient. A wall of HP that punishes a squad with no damage.',
+    desc: 'Big shield, lots of health. A squad that can\'t hit hard will be here all day.',
     biomass: 38,
     mats: { 'Human Bone': 2, 'Tower Shield': 1 },
     weight: 26,
@@ -43,7 +43,7 @@ export const CARAVAN_UNITS = {
   zealot: {
     id: 'zealot', name: 'Zealot', icon: '🕯️', tier: 3,
     hp: 60, dmg: 13, statusImmune: true,
-    desc: 'Immune to every status. Proc-heavy squads have to hit it the honest way.',
+    desc: 'Nothing sticks to it. No poison, no burn, no stun. You have to just hit it.',
     biomass: 44,
     mats: { 'Human Bone': 1, 'Sacred Ash': 2 },
     weight: 16,
@@ -51,7 +51,7 @@ export const CARAVAN_UNITS = {
   quartermaster: {
     id: 'quartermaster', name: 'Quartermaster', icon: '📜', tier: 3,
     hp: 70, dmg: 9,
-    desc: 'Keeps the ledger and the good steel. Worth killing before the column scatters.',
+    desc: 'Keeps the books and the good swords. Worth getting before the column scatters.',
     biomass: 60,
     mats: { 'Human Bone': 2, 'Iron Sword': 3, 'Fine Ledger': 1 },
     weight: 12,
@@ -59,7 +59,7 @@ export const CARAVAN_UNITS = {
   captain: {
     id: 'captain', name: 'Caravan Captain', icon: '👑', tier: 4,
     hp: 190, dmg: 17, critImmune: true, isBoss: true,
-    desc: 'Rides at the rear in good armour. Shrugs off crits and hits like a cart.',
+    desc: 'Rides at the back in good armor. Crits bounce off it, and it hits like a cart.',
     biomass: 130,
     mats: { 'Human Bone': 3, 'Iron Sword': 2, 'Champion Badge': 1 },
     weight: 0, // never rolled — placed deliberately at higher tiers

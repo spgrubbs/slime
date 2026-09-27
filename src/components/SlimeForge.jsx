@@ -87,7 +87,7 @@ const SlimeForge = ({ biomass, freeJelly, tiers, onSpawn }) => {
           background: canSpawn ? 'linear-gradient(135deg, #4ade80, #22d3ee)' : 'rgba(100,100,100,0.5)',
         }}
       >
-        {canSpawn ? `🥚 Spawn — 🧬${bioCost} · 🫧${jellyCost}` : `Need 🧬${bioCost} · 🫧${jellyCost}`}
+        {canSpawn ? `🥚 Bud a slime: 🧬${bioCost} · 🫧${jellyCost}` : `Need 🧬${bioCost} · 🫧${jellyCost}`}
       </button>
     </div>
   );

@@ -11,7 +11,7 @@ export const RANCH_TYPES = {
     id: 'feedingPool',
     name: 'Feeding Pool',
     icon: '🥣',
-    desc: 'A nutrient-rich pool where slimes passively absorb biomass.',
+    desc: 'A warm, soupy pool. Slimes sit in it and get fatter.',
     effect: 'biomass',
     effectValue: 2,                     // Biomass gained per cycle
     cycleTime: 30 * 60,                 // 30 minutes (in real seconds)
@@ -25,7 +25,7 @@ export const RANCH_TYPES = {
     id: 'fireGrove',
     name: 'Fire Grove',
     icon: '🔥',
-    desc: 'A volcanic garden where slimes attune to fire energy.',
+    desc: 'A garden that never stops smoldering. Slimes here slowly turn to fire.',
     effect: 'element',
     element: 'fire',
     effectValue: 1,                     // Element affinity gained per cycle
@@ -40,7 +40,7 @@ export const RANCH_TYPES = {
     id: 'tidalPool',
     name: 'Tidal Pool',
     icon: '🌊',
-    desc: 'A mystical pool connected to ocean currents. Attunes slimes to water.',
+    desc: 'A pool with a current running through it. Slimes here slowly turn to water.',
     effect: 'element',
     element: 'water',
     effectValue: 1,
@@ -55,7 +55,7 @@ export const RANCH_TYPES = {
     id: 'earthenDen',
     name: 'Earthen Den',
     icon: '🪨',
-    desc: 'A deep cavern filled with mineral-rich clay. Attunes slimes to earth.',
+    desc: 'A cave full of wet clay. Slimes here slowly turn to earth.',
     effect: 'element',
     element: 'earth',
     effectValue: 1,
@@ -70,7 +70,7 @@ export const RANCH_TYPES = {
     id: 'verdantNest',
     name: 'Verdant Nest',
     icon: '🌿',
-    desc: 'A lush garden bursting with life energy. Attunes slimes to nature.',
+    desc: 'A nest of leaves and moss. Slimes here slowly turn to nature.',
     effect: 'element',
     element: 'nature',
     effectValue: 1,
@@ -85,7 +85,7 @@ export const RANCH_TYPES = {
     id: 'healingSpring',
     name: 'Healing Spring',
     icon: '💚',
-    desc: 'A restorative hot spring. Slimes here grant expedition regen based on total Viscosity.',
+    desc: 'A hot spring. Every slime out in the field mends a little each round, more for each point of Viscosity soaking here.',
     effect: 'expeditionBuff',
     buffType: 'regen',
     effectValue: 0.1,                   // 0.1 HP regen per Viscosity point per slime
@@ -100,7 +100,7 @@ export const RANCH_TYPES = {
     id: 'warDen',
     name: 'War Den',
     icon: '⚔️',
-    desc: 'A training barracks. Slimes here boost caravan ambush damage based on total Firmness.',
+    desc: 'Somewhere to practice hitting. Slimes here make the ambush squad hit harder, more for each point of Firmness.',
     effect: 'defenseBonus',
     buffType: 'damage',
     effectValue: 0.02,                   // +2% ambush damage per Firmness point per slime
@@ -113,9 +113,9 @@ export const RANCH_TYPES = {
   },
   manaWell: {
     id: 'manaWell',
-    name: 'Mana Well',
+    name: 'Musk Well',
     icon: '🔮',
-    desc: 'A mystical fountain. Slimes here generate bonus mana based on total Viscosity.',
+    desc: 'A deep, smelly well. Slimes here make extra musk, more for each point of Viscosity.',
     effect: 'manaBonus',
     effectValue: 0.1,                   // +0.1 mana per hour per Viscosity point per slime
     cycleTime: 60 * 60,                 // 1 hour
@@ -129,7 +129,7 @@ export const RANCH_TYPES = {
     id: 'scoutPost',
     name: 'Scout Post',
     icon: '🔭',
-    desc: 'A lookout tower. Slimes here boost expedition rewards based on total Slipperiness.',
+    desc: 'A lookout. Slimes here help every party find more biomass and materials, more for each point of Slipperiness.',
     effect: 'expeditionBonus',
     buffType: 'rewards',
     effectValue: 0.01,                   // +1% expedition rewards per Slipperiness point per slime
@@ -144,7 +144,7 @@ export const RANCH_TYPES = {
     id: 'nullifier',
     name: 'Nullifier Chamber',
     icon: '🕳️',
-    desc: 'A void-touched room that strips elemental affinity and grants the Void trait.',
+    desc: 'A room where nothing is anything. Strips a slime\'s elements and gives it the Void trait.',
     effect: 'trait',
     grantsTrait: 'void',
     effectValue: 1,
@@ -159,7 +159,7 @@ export const RANCH_TYPES = {
     id: 'convalescencePool',
     name: 'Convalescence Pool',
     icon: '🩹',
-    desc: 'Wounded slimes knit themselves back together here. One per slot, 24 hours.',
+    desc: 'Wounded slimes knit back together here. One per slot. Takes a day, less with upgrades.',
     effect: 'recover',
     effectValue: 1,
     cycleTime: 24 * 60 * 60,            // 24 hours; upgrades cut it toward 12
@@ -175,7 +175,7 @@ export const RANCH_TYPES = {
     id: 'luxuryLounge',
     name: 'Luxury Lounge',
     icon: '✨',
-    desc: 'A premium spa that has a chance to grant rare personality traits.',
+    desc: 'A fancy pool. Now and then a slime comes out with a rare trait.',
     effect: 'trait',
     grantsTrait: null,
     traitPool: ['lucky', 'resilient', 'adaptable'],
@@ -194,7 +194,7 @@ export const RANCH_TYPES = {
 export const RANCH_EVENTS = [
   {
     id: 'bountifulHarvest',
-    msg: 'A bountiful harvest! Extra biomass gained.',
+    msg: 'A good feed! Extra biomass.',
     type: 'bonus',
     effect: 'biomass',
     value: 5,                           // Extra biomass
@@ -203,7 +203,7 @@ export const RANCH_EVENTS = [
   },
   {
     id: 'elementalSurge',
-    msg: 'An elemental surge! Rapid affinity gain.',
+    msg: 'The element surges. Double affinity this time.',
     type: 'bonus',
     effect: 'elementBoost',
     value: 2,                           // Double element gain this cycle
@@ -212,7 +212,7 @@ export const RANCH_EVENTS = [
   },
   {
     id: 'tacticalInsight',
-    msg: 'A flash of tactical insight!',
+    msg: 'A clever idea! The bonus is stronger this time.',
     type: 'bonus',
     effect: 'buffBoost',
     value: 1.5,                         // 50% stronger buff effect
@@ -221,7 +221,7 @@ export const RANCH_EVENTS = [
   },
   {
     id: 'healingWaters',
-    msg: 'The spring pulses with life energy!',
+    msg: 'The spring bubbles harder than usual!',
     type: 'bonus',
     effect: 'healingBoost',
     value: 2,                           // Double healing effect
@@ -239,28 +239,28 @@ export const RANCH_EVENTS = [
   },
   {
     id: 'napTime',
-    msg: 'Took a peaceful nap.',
+    msg: 'Took a nap.',
     type: 'flavor',
     weight: 15,
     ranchTypes: null,
   },
   {
     id: 'playTime',
-    msg: 'Spent time playing together.',
+    msg: 'Played with the others.',
     type: 'flavor',
     weight: 15,
     ranchTypes: null,
   },
   {
     id: 'meditation',
-    msg: 'A moment of quiet meditation.',
+    msg: 'Sat very still and thought about nothing.',
     type: 'flavor',
     weight: 10,
     ranchTypes: ['nullifier', 'luxuryLounge'],
   },
   {
     id: 'disruption',
-    msg: 'A disturbance disrupted the session.',
+    msg: 'Something spooked them. Half gains this time.',
     type: 'penalty',
     effect: 'reducedGains',
     value: 0.5,                         // 50% reduced gains
