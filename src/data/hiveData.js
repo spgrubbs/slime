@@ -24,7 +24,7 @@ export const HIVE_ABILITIES = {
   sharedVigor: {
     name: 'Shared Vigor',
     icon: '❤️‍🩹',
-    desc: 'Every slime out in the field mends 2 HP each round',
+    desc: 'Every slime out in the field mends 3% of its health each round',
     cost: 50,
     duration: 7200000, // 2 hours
   },

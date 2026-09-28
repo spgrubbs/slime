@@ -5,7 +5,7 @@ import { BASE_SLIME_COST, TRAIT_JELLY_COST, ELEMENTS } from '../data/gameConstan
 import { genName } from '../utils/helpers.js';
 import SlimeSprite from './SlimeSprite.jsx';
 
-const SlimeForge = ({ biomass, freeJelly, tiers, onSpawn }) => {
+const SlimeForge = ({ biomass, freeJelly, tiers, onSpawn, mutationsUnlocked = false }) => {
   const [tier, setTier] = useState('basic');
   const [name, setName] = useState(genName());
 
@@ -41,7 +41,7 @@ const SlimeForge = ({ biomass, freeJelly, tiers, onSpawn }) => {
               🎲
             </button>
             <span style={{ fontSize: 11, opacity: 0.6 }}>
-              {td.name} · {td.traitSlots} mutation slot{td.traitSlots === 1 ? '' : 's'}
+              {td.name}{mutationsUnlocked ? ` · ${td.traitSlots} mutation slot${td.traitSlots === 1 ? '' : 's'}` : ''}
             </span>
           </div>
         </div>

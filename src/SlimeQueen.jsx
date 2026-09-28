@@ -27,7 +27,7 @@ import { SKILL_TREES, SKILL_POINTS_PER_LEVEL, getSkillEffects, isBuildingUnlocke
 
 // Utility imports
 import { genName, genId, formatTime, calculateElementalDamage, createDefaultElements, canGainElement, calculateElementGain } from './utils/helpers.js';
-import { saveGame, loadGame, deleteSave } from './utils/saveSystem.js';
+import { saveGame, loadGame, deleteSave, getDefaultState, SAVED_KEYS, exportSave, importSave } from './utils/saveSystem.js';
 
 // Importing the combat module registers every mutation/trait effect and
 // validates the registry — a passive with no implementation fails here.
@@ -237,55 +237,54 @@ const calculateOfflineProgress = (saved, bonuses, offlineCtx = {}) => {
 
 // ============== MAIN GAME ==============
 export default function SlimeQueen() {
+  // A new game's state. Everything saved starts from here; see saveSystem.js.
+  const [D] = useState(getDefaultState);
   const [gameLoaded, setGameLoaded] = useState(false);
   const [welcomeBack, setWelcomeBack] = useState(null);
   
-  const [queen, setQueen] = useState({ level: 1 });
-  const [bio, setBio] = useState(50);
-  const [mats, setMats] = useState({});
-  const [slimes, setSlimes] = useState([]);
-  const [exps, setExps] = useState({});
+  const [queen, setQueen] = useState(D.queen);
+  const [bio, setBio] = useState(D.bio);
+  const [mats, setMats] = useState(D.mats);
+  const [slimes, setSlimes] = useState(D.slimes);
+  const [exps, setExps] = useState(D.exps);
   const [bLogs, setBLogs] = useState({});
-  // The forest tendril is already grown — the first zone is never gated.
-  const [builds, setBuilds] = useState({ forestTendril: 1 });
-  const [research, setResearch] = useState([]);
-  const [activeRes, setActiveRes] = useState(null);
+  const [builds, setBuilds] = useState(D.builds);
+  const [research, setResearch] = useState(D.research);
+  const [activeRes, setActiveRes] = useState(D.activeRes);
   const [logs, setLogs] = useState([{ t: new Date().toLocaleTimeString(), m: 'The nucleus stirs. Glub is here.' }]);
   const [speed, setSpeed] = useState(1);
   const [lastTick, setLastTick] = useState(Date.now());
   const [lastSave, setLastSave] = useState(null);
-  const [lastCaravan, setLastCaravan] = useState(0);
-  const [caravanTier, setCaravanTier] = useState(1);
-  const [ambush, setAmbush] = useState(null);
-  const [monsterKills, setMonsterKills] = useState({});
-  const [mutagens, setMutagens] = useState({});   // { [mutationId]: count }
-  const [wardenKills, setWardenKills] = useState({}); // { [zone]: times felled }
-  const [wardenTries, setWardenTries] = useState({}); // { [zone]: hunts started } — reveals the counter
-  const [pityKills, setPityKills] = useState({});  // kills since the last pity mutagen
-  const [purchasedSkills, setPurchasedSkills] = useState(['expeditionBasics', 'hiveFoundation', 'combatTraining']);
-  // Mossback's visits: { firstVisit, visit, deals, taken }. See merchantData.js.
-  const [merchant, setMerchant] = useState(null);
+  const [lastCaravan, setLastCaravan] = useState(D.lastCaravan);
+  const [caravanTier, setCaravanTier] = useState(D.caravanTier);
+  const [ambush, setAmbush] = useState(D.ambush);
+  const [monsterKills, setMonsterKills] = useState(D.monsterKills);
+  const [mutagens, setMutagens] = useState(D.mutagens);
+  const [wardenKills, setWardenKills] = useState(D.wardenKills);
+  const [wardenTries, setWardenTries] = useState(D.wardenTries);
+  const [pityKills, setPityKills] = useState(D.pityKills);
+  const [purchasedSkills, setPurchasedSkills] = useState(D.purchasedSkills);
+  const [merchant, setMerchant] = useState(D.merchant);
 
   // Ranch system state
-  const [prisms, setPrisms] = useState(0);
-  const [ranchBuildings, setRanchBuildings] = useState({});
-  const [ranchAssignments, setRanchAssignments] = useState({});
-  const [ranchProgress, setRanchProgress] = useState({});
+  const [prisms, setPrisms] = useState(D.prisms);
+  const [ranchBuildings, setRanchBuildings] = useState(D.ranchBuildings);
+  const [ranchAssignments, setRanchAssignments] = useState(D.ranchAssignments);
+  const [ranchProgress, setRanchProgress] = useState(D.ranchProgress);
   const [ranchEvents, setRanchEvents] = useState([]);
 
   // Mana and Hive Ability system
-  const [mana, setMana] = useState(0);
-  const [lastManaUpdate, setLastManaUpdate] = useState(Date.now());
-  const [activeHiveAbilities, setActiveHiveAbilities] = useState({});
-  // Format: { abilityId: expirationTimestamp, ... }
+  const [mana, setMana] = useState(D.mana);
+  const [lastManaUpdate, setLastManaUpdate] = useState(D.lastManaUpdate);
+  const [activeHiveAbilities, setActiveHiveAbilities] = useState(D.activeHiveAbilities);
 
   const [tab, setTab] = useState('hive');
   // The Spawn screen holds both the roster and the pools the slimes rest in.
   const [broodView, setBroodView] = useState('roster');
   const [menu, setMenu] = useState(false);
   const [dev, setDev] = useState(false);
-  const [seenTutorials, setSeenTutorials] = useState([]);
-  const [tutorialsOn, setTutorialsOn] = useState(true);
+  const [seenTutorials, setSeenTutorials] = useState(D.seenTutorials);
+  const [tutorialsOn, setTutorialsOn] = useState(D.tutorialsOn);
   const [selZone, setSelZone] = useState('forest');
   const [party, setParty] = useState([]);
   const [selSlime, setSelSlime] = useState(null);
@@ -549,36 +548,49 @@ export default function SlimeQueen() {
   // none of the bonuses the player had actually built.
   const [pendingOffline, setPendingOffline] = useState(null);
 
+  // ── The saved state, in one place ──────────────────────────────────────
+  // Every saved key paired with its value and setter. Save, load and export
+  // are all built from this table, and it must list exactly SAVED_KEYS.
+  const persisted = {
+    queen: [queen, setQueen], bio: [bio, setBio], mats: [mats, setMats],
+    slimes: [slimes, setSlimes], exps: [exps, setExps], builds: [builds, setBuilds],
+    research: [research, setResearch], activeRes: [activeRes, setActiveRes],
+    lastCaravan: [lastCaravan, setLastCaravan], caravanTier: [caravanTier, setCaravanTier],
+    ambush: [ambush, setAmbush], seenTutorials: [seenTutorials, setSeenTutorials],
+    tutorialsOn: [tutorialsOn, setTutorialsOn], monsterKills: [monsterKills, setMonsterKills],
+    mutagens: [mutagens, setMutagens], pityKills: [pityKills, setPityKills],
+    wardenKills: [wardenKills, setWardenKills], wardenTries: [wardenTries, setWardenTries],
+    purchasedSkills: [purchasedSkills, setPurchasedSkills], merchant: [merchant, setMerchant],
+    prisms: [prisms, setPrisms], ranchBuildings: [ranchBuildings, setRanchBuildings],
+    ranchAssignments: [ranchAssignments, setRanchAssignments], ranchProgress: [ranchProgress, setRanchProgress],
+    mana: [mana, setMana], lastManaUpdate: [lastManaUpdate, setLastManaUpdate],
+    activeHiveAbilities: [activeHiveAbilities, setActiveHiveAbilities],
+  };
+  if (process.env.NODE_ENV !== 'production') {
+    const wired = Object.keys(persisted).sort().join(',');
+    const listed = [...SAVED_KEYS].sort().join(',');
+    if (wired !== listed) throw new Error(`Saved state is out of sync.\n  wired:  ${wired}\n  listed: ${listed}`);
+  }
+
+  // Keys whose saved form is not their live form: combatants carry live
+  // references that are stripped on save and rebuilt here.
+  const HYDRATE = {
+    exps: (v, saved) => rehydrateExps(v, saved.slimes),
+    ambush: (v, saved) => (v ? hydrateAmbush(v, saved.slimes || [], buildEffectList) : null),
+  };
+
+  /** Put a whole saved game (already filled from defaults) into state. */
+  const applySave = (saved) => {
+    SAVED_KEYS.forEach(k => {
+      const set = persisted[k][1];
+      set(HYDRATE[k] ? HYDRATE[k](saved[k], saved) : saved[k]);
+    });
+  };
+
   useEffect(() => {
     const saved = loadGame();
     if (!saved) { setGameLoaded(true); return; }
-    setQueen(saved.queen || { level: 1 });
-    setBio(saved.bio || 50);
-    setMats(saved.mats || {});
-    setSlimes(saved.slimes || []);
-    setExps(rehydrateExps(saved.exps, saved.slimes));
-    setBuilds(saved.builds || {});
-    setResearch(saved.research || []);
-    setActiveRes(saved.activeRes);
-    setLastCaravan(saved.lastCaravan || 0);
-    setCaravanTier(saved.caravanTier || 1);
-    setAmbush(saved.ambush ? hydrateAmbush(saved.ambush, saved.slimes || [], buildEffectList) : null);
-    setSeenTutorials(saved.seenTutorials || []);
-    setTutorialsOn(saved.tutorialsOn !== false);
-    setMonsterKills(saved.monsterKills || {});
-    setMutagens(saved.mutagens || {});
-    setPityKills(saved.pityKills || {});
-    setWardenKills(saved.wardenKills || {});
-    setWardenTries(saved.wardenTries || {});
-    setMerchant(saved.merchant || null);
-    setPurchasedSkills(saved.purchasedSkills || ['expeditionBasics', 'hiveFoundation', 'combatTraining']);
-    setPrisms(saved.prisms || 0);
-    setRanchBuildings(saved.ranchBuildings || {});
-    setRanchAssignments(saved.ranchAssignments || {});
-    setRanchProgress(saved.ranchProgress || {});
-    setMana(saved.mana || 0);
-    setLastManaUpdate(saved.lastManaUpdate || Date.now());
-    setActiveHiveAbilities(saved.activeHiveAbilities || {});
+    applySave(saved);
     setLastSave(saved.lastSave);
     setLogs([{ t: new Date().toLocaleTimeString(), m: 'Glub waves a pseudopod. Everything is where you left it.' }]);
     setPendingOffline(saved);
@@ -622,7 +634,10 @@ export default function SlimeQueen() {
   // saves the moment the page is hidden: switching apps, locking the phone, or
   // swiping the app away. On Android the WebView reports all of those as the
   // page going hidden before the process is killed.
-  const snapshot = () => ({ queen, bio, mats, slimes, exps, builds, research, activeRes, lastCaravan, caravanTier, ambush, seenTutorials, tutorialsOn, monsterKills, mutagens, pityKills, wardenKills, wardenTries, purchasedSkills, prisms, ranchBuildings, ranchAssignments, ranchProgress, mana, lastManaUpdate, activeHiveAbilities, merchant, lastSave: Date.now() });
+  const snapshot = () => ({
+    ...Object.fromEntries(SAVED_KEYS.map(k => [k, persisted[k][0]])),
+    lastSave: Date.now(),
+  });
   const snapshotRef = useRef(null);
   const deletedRef = useRef(false);
   snapshotRef.current = gameLoaded && !deletedRef.current ? snapshot : null;
@@ -652,6 +667,18 @@ export default function SlimeQueen() {
 
   const manualSave = () => {
     if (saveNow()) log('💾 Saved.');
+  };
+
+  // Backups. Export saves first so the code is the game as it is right now.
+  const exportBackup = () => { saveNow(); return exportSave(); };
+  // A restore replaces the save and restarts. The guard goes up BEFORE the
+  // write so the page-hide save on the way out cannot overwrite the import.
+  const importBackup = (code) => {
+    deletedRef.current = true;
+    snapshotRef.current = null;
+    if (!importSave(code)) { deletedRef.current = false; return false; }
+    window.location.reload();
+    return true;
   };
 
   // Resetting thirty pieces of state by hand kept missing the newest ones, so a
@@ -2406,7 +2433,7 @@ export default function SlimeQueen() {
             ))}
 
               {broodView === 'roster' && (<>
-              <SlimeForge biomass={bio} freeJelly={freeJelly} tiers={unlockedTiers} onSpawn={spawn} />
+              <SlimeForge biomass={bio} freeJelly={freeJelly} tiers={unlockedTiers} onSpawn={spawn} mutationsUnlocked={hasPassive('mutagenesis')} />
               {Object.keys(mutagens).length > 0 && (
                 <details open style={{ background: 'rgba(168,85,247,0.08)', border: '1px solid rgba(168,85,247,0.25)', borderRadius: 10, padding: 12, marginBottom: 12 }}>
                   <summary style={{ fontSize: 13, fontWeight: 'bold', cursor: 'pointer', color: '#c084fc' }}>
@@ -2643,6 +2670,8 @@ export default function SlimeQueen() {
           <SettingsTab
             onSave={manualSave}
             onDelete={handleDelete}
+            onExport={exportBackup}
+            onImport={importBackup}
             lastSave={lastSave}
             prisms={prisms}
             slimes={slimes}

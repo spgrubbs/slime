@@ -851,8 +851,10 @@ export function resolveRound(world, ctx = {}) {
     const ev = { self: e, world, heal: 0, healLabel: '', cleanse: [], log: [], rng: c.rng };
     runHooks(e, 'onRoundStart', ev, c.mutationPower);
 
-    if (c.passives?.includes('regeneration') && e.side === 'slime') ev.heal += 1;
-    if (c.hiveAbilities?.sharedVigor && e.side === 'slime')        ev.heal += 2;
+    // Share of max HP rather than a flat point or two, which was a real heal
+    // on a 45 HP basic slime and nothing at all on a 375 HP royal.
+    if (c.passives?.includes('regeneration') && e.side === 'slime') ev.heal += Math.max(1, e.maxHp * 0.02);
+    if (c.hiveAbilities?.sharedVigor && e.side === 'slime')        ev.heal += Math.max(1, e.maxHp * 0.03);
     if (c.ranchRegen > 0 && e.side === 'slime')                    ev.heal += c.ranchRegen;
 
     if (ev.cleanse.length) {

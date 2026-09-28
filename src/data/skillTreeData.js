@@ -540,10 +540,10 @@ export const SKILL_TREES = {
         id: 'regeneration',
         name: 'Knitting Flesh',
         icon: '💚',
-        desc: 'We mend 1 HP at the start of every round.',
+        desc: 'We mend 2% of our health at the start of every round.',
         cost: 3,
         requires: ['focusedVenom'],
-        effect: { type: 'passive', desc: '+1 HP each round' },
+        effect: { type: 'passive', desc: '2% max HP each round' },
         position: { x: 38, y: 45 },
       },
 

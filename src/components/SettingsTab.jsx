@@ -1,18 +1,33 @@
 import React, { useState } from 'react';
-import { PRISM_PACKAGES } from '../data/ranchData.js';
 import { PRISM_SHOP } from '../data/hiveData.js';
 import SlimeSprite from './SlimeSprite.jsx';
 
-const SettingsTab = ({ onSave, onDelete, lastSave, prisms, slimes, purchasePrismItem,
+const SettingsTab = ({ onSave, onDelete, onExport, onImport, lastSave, prisms, slimes, purchasePrismItem,
   tutorialsOn, setTutorialsOn, seenTutorials = [], resetTutorials, totalTutorials = 0 }) => {
   const [showConfirm, setShowConfirm] = useState(false);
-  const [showPurchaseMessage, setShowPurchaseMessage] = useState(false);
+  const [backup, setBackup] = useState('');
+  const [backupNote, setBackupNote] = useState('');
+  const [restoreCode, setRestoreCode] = useState('');
+
+  const makeBackup = async () => {
+    const code = onExport?.();
+    if (!code) { setBackupNote('Nothing to back up yet.'); return; }
+    setBackup(code);
+    try {
+      await navigator.clipboard.writeText(code);
+      setBackupNote('Copied. Paste it somewhere safe, like a note or a message to yourself.');
+    } catch {
+      setBackupNote('Select the code below and copy it somewhere safe.');
+    }
+  };
+
+  const restore = () => {
+    if (!restoreCode.trim()) return;
+    if (!window.confirm('Replace this game with the backup? The current game will be gone.')) return;
+    if (!onImport?.(restoreCode)) setBackupNote("That code didn't work. It may have been cut off when it was copied.");
+  };
   const [selectedShopItem, setSelectedShopItem] = useState(null);
 
-  const handlePurchase = (pkg) => {
-    setShowPurchaseMessage(true);
-    setTimeout(() => setShowPurchaseMessage(false), 3000);
-  };
 
   const handleShopPurchase = (itemId, slimeId = null) => {
     const item = PRISM_SHOP[itemId];
@@ -38,7 +53,7 @@ const SettingsTab = ({ onSave, onDelete, lastSave, prisms, slimes, purchasePrism
           </div>
         </div>
         <div style={{ fontSize: 11, opacity: 0.7, marginBottom: 15 }}>
-          Prisms are rare and shiny. Spend them on things you can't get any other way.
+          Prisms are rare and shiny. They turn up about once in every 1,000 kills, and every time we wipe out a whole caravan.
         </div>
 
         {/* Slime Selector Modal */}
@@ -123,69 +138,6 @@ const SettingsTab = ({ onSave, onDelete, lastSave, prisms, slimes, purchasePrism
         </div>
       </div>
 
-      {/* Get Prisms */}
-      <div style={{ background: 'linear-gradient(135deg, rgba(245,158,11,0.15), rgba(245,158,11,0.05))', borderRadius: 10, padding: 15, marginBottom: 15, border: '2px solid #f59e0b' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 }}>
-          <div style={{ fontSize: 16, fontWeight: 'bold' }}>💎 Get More Prisms</div>
-        </div>
-        <div style={{ fontSize: 11, opacity: 0.7, marginBottom: 15 }}>
-          Prisms turn up about once in every 1,000 kills, and every time we wipe out a whole caravan.
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 10 }}>
-          {PRISM_PACKAGES.map(pkg => (
-            <div
-              key={pkg.id}
-              style={{
-                background: 'rgba(0,0,0,0.3)',
-                borderRadius: 8,
-                padding: 12,
-                border: '1px solid rgba(245,158,11,0.3)',
-                textAlign: 'center',
-              }}
-            >
-              <div style={{ fontSize: 24, marginBottom: 6 }}>💎</div>
-              <div style={{ fontSize: 13, fontWeight: 'bold', marginBottom: 2 }}>{pkg.name}</div>
-              <div style={{ fontSize: 18, color: '#f59e0b', marginBottom: 2 }}>{pkg.prisms}</div>
-              {pkg.bonus && (
-                <div style={{ fontSize: 10, color: '#4ade80', marginBottom: 6 }}>{pkg.bonus}</div>
-              )}
-              <button
-                onClick={() => handlePurchase(pkg)}
-                style={{
-                  width: '100%',
-                  padding: '8px 12px',
-                  background: 'linear-gradient(135deg, #f59e0b, #d97706)',
-                  border: 'none',
-                  borderRadius: 6,
-                  color: '#1a1a2e',
-                  fontWeight: 'bold',
-                  cursor: 'pointer',
-                  fontSize: 12,
-                }}
-              >
-                {pkg.price}
-              </button>
-            </div>
-          ))}
-        </div>
-
-        {showPurchaseMessage && (
-          <div style={{
-            marginTop: 15,
-            padding: 12,
-            background: 'rgba(34,211,238,0.2)',
-            borderRadius: 8,
-            textAlign: 'center',
-            border: '1px solid #22d3ee'
-          }}>
-            <div style={{ fontSize: 12, color: '#22d3ee' }}>
-              💫 Nothing is for sale yet. This is a placeholder.
-            </div>
-          </div>
-        )}
-      </div>
-
       {/* Tutorials */}
       <div style={{ background: 'rgba(0,0,0,0.3)', borderRadius: 10, padding: 15, marginBottom: 15 }}>
         <div style={{ fontSize: 14, fontWeight: 'bold', marginBottom: 10 }}>📖 Tutorials</div>
@@ -231,6 +183,27 @@ const SettingsTab = ({ onSave, onDelete, lastSave, prisms, slimes, purchasePrism
             🗑️ Delete Save
           </button>
         </div>
+      </div>
+
+      {/* Backup */}
+      <div style={{ background: 'rgba(0,0,0,0.3)', borderRadius: 10, padding: 15, marginBottom: 15 }}>
+        <div style={{ fontSize: 14, fontWeight: 'bold', marginBottom: 6 }}>📤 Backup</div>
+        <div style={{ fontSize: 11, opacity: 0.7, marginBottom: 10 }}>
+          The save lives inside the app. Uninstalling it deletes the save. A backup code is the whole game as text you can keep anywhere.
+        </div>
+        <button onClick={makeBackup} style={{ padding: '8px 14px', background: '#22d3ee', border: 'none', borderRadius: 6, color: '#1a1a2e', fontWeight: 'bold', cursor: 'pointer', marginBottom: 8 }}>
+          Make a backup code
+        </button>
+        {backup && (
+          <textarea readOnly value={backup} onFocus={e => e.target.select()}
+            style={{ width: '100%', height: 60, fontSize: 9, fontFamily: 'monospace', background: 'rgba(0,0,0,0.4)', color: '#9ca3af', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 6, padding: 6, marginBottom: 8 }} />
+        )}
+        {backupNote && <div style={{ fontSize: 11, color: '#86efac', marginBottom: 8 }}>{backupNote}</div>}
+        <textarea value={restoreCode} onChange={e => setRestoreCode(e.target.value)} placeholder="Paste a backup code here to restore it"
+          style={{ width: '100%', height: 50, fontSize: 10, fontFamily: 'monospace', background: 'rgba(0,0,0,0.4)', color: '#e0e0e0', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 6, padding: 6, marginBottom: 8 }} />
+        <button onClick={restore} disabled={!restoreCode.trim()} style={{ padding: '8px 14px', background: restoreCode.trim() ? '#f59e0b' : 'rgba(100,100,100,0.5)', border: 'none', borderRadius: 6, color: '#1a1a2e', fontWeight: 'bold', cursor: restoreCode.trim() ? 'pointer' : 'not-allowed' }}>
+          Restore from code
+        </button>
       </div>
 
       {showConfirm && (

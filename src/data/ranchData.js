@@ -276,11 +276,3 @@ export const RANCH_UPGRADE_BONUSES = {
 };
 
 export const MAX_RANCH_LEVEL = 5;
-
-// Prisms shop packages (cosmetic - not in actual game logic)
-export const PRISM_PACKAGES = [
-  { id: 'starter', name: 'Starter Pack', prisms: 50, price: '$0.99', bonus: null },
-  { id: 'value', name: 'Value Pack', prisms: 150, price: '$2.99', bonus: '+50 bonus' },
-  { id: 'premium', name: 'Premium Pack', prisms: 500, price: '$9.99', bonus: '+100 bonus' },
-  { id: 'mega', name: 'Mega Pack', prisms: 1200, price: '$19.99', bonus: '+300 bonus' },
-];
