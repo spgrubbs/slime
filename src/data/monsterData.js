@@ -94,7 +94,7 @@ export const MUTAGEN_RATES = {
  * nothing, which reads as broken rather than unlucky — so the kill tally that
  * used to gate unlocks becomes the safety net instead of being deleted.
  */
-export const MUTAGEN_PITY_KILLS = 150;
+export const MUTAGEN_PITY_KILLS = 200;
 
 export const mutagenDropChance = (monster) =>
   monster?.rare ? MUTAGEN_RATES.rare : MUTAGEN_RATES.common;

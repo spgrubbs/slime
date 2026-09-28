@@ -95,7 +95,7 @@ export const TUTORIALS = {
     body: [
       'Our genes are loose now. Monsters sometimes drop a **mutagen**, and each one holds that monster\'s trick.',
       'Open a slime with a free slot and feed it one. The trick is ours for good. Wounds can\'t take it. Only reabsorbing can.',
-      'Most tricks go off more often on a slime with high **Viscosity**. If one monster just won\'t drop its mutagen, keep at it: every 150 kills of it guarantees one.',
+      'Most tricks go off more often on a slime with high **Viscosity**. If one monster just won\'t drop its mutagen, keep at it: every 200 kills of it guarantees one.',
     ],
     when: (s) => s.mutationsUnlocked,
   },

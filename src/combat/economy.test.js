@@ -11,7 +11,9 @@ import {
 } from '../data/monsterData.js';
 import { MUTATION_LIBRARY } from '../data/traitData.js';
 import { ZONES } from '../data/zoneData.js';
-import { BUILDINGS } from '../data/buildingData.js';
+import { BUILDINGS, TENDRILS } from '../data/buildingData.js';
+import { MATERIAL_TABLE } from '../data/merchantData.js';
+import { farm, STAGES } from '../../scripts/economy-sim.mjs';
 import { RANCH_TYPES } from '../data/ranchData.js';
 import { CARAVAN_UNITS } from '../data/caravanData.js';
 
@@ -113,12 +115,33 @@ test('each material rolls on its own, so a kill can drop several or none', () =>
   assert.ok((counts.get(2) || 0) + (counts.get(3) || 0) > 0, 'some kills should drop several');
 });
 
-test('a gating material takes real time but not an unreasonable amount', () => {
-  // Void Essence x5 for the Primordial Chamber, from a rare in the endgame zone.
-  const perKill = 0.05 * materialDropChance('Void Essence', MONSTER_TYPES.hollowOne);
-  const kills = 5 / perKill;
-  assert.ok(kills > 100, `only ${Math.round(kills)} kills — too cheap for a capstone`);
-  assert.ok(kills < 600, `${Math.round(kills)} kills is a slog, not a gate`);
+test('a tier building never needs materials from the zone that tier is for', () => {
+  // The Primordial Chamber (Royal slimes) used to cost Void Essence, which only
+  // drops in the Void, the zone Royal slimes exist to reach: a deadlock.
+  const TIER_ZONE = { spawningVat: 'swamp', royalHatchery: 'ruins', primordialChamber: 'peaks' };
+  const order = Object.keys(ZONES);
+  for (const [id, zone] of Object.entries(TIER_ZONE)) {
+    for (const m of Object.keys(BUILDINGS[id].cost.mats)) {
+      const src = MATERIAL_TABLE[m]?.zone;
+      assert.ok(src && order.indexOf(src) < order.indexOf(zone),
+        `${id} needs ${m} from ${src}, not before ${zone}`);
+    }
+  }
+});
+
+// Hours of farming a zone, with its typical party, to pay for each Provoke.
+// The targets are the pacing the design asks for (§23); a gate may land
+// anywhere from half to double its target before this fails.
+test('each Tendril Provoke costs about its target in hours of farming', () => {
+  const TARGET = { forest: 1.5, swamp: 3, caves: 6, ruins: 10, peaks: 16 };
+  for (const [zone, target] of Object.entries(TARGET)) {
+    const y = farm(zone, STAGES[zone], 2);
+    const cost = TENDRILS.find(t => t.zone === zone).levels[1].cost;
+    let hours = cost.biomass / y.biomass;
+    for (const [m, n] of Object.entries(cost.mats)) hours = Math.max(hours, n / (y.mats[m] || 1e-9));
+    assert.ok(hours >= target / 2 && hours <= target * 2,
+      `${zone} Provoke takes ${hours.toFixed(1)}h of farming, target ${target}h`);
+  }
 });
 
 test('drop skills and Lucky raise every material together', () => {

@@ -1438,3 +1438,94 @@ explains things. Glub calls the player "Mother" and speaks as one of the brood
   `Label — explanation` form.
 
 The resource called `mana` in code is **musk** in the game; pheromones cost it.
+
+
+## 23. Sound, notifications, and an economy measured instead of guessed
+
+### Sound
+
+All sound is synthesized with the Web Audio API (`src/audio/sound.js`): no
+files, no licensing, nothing added to the APK, and any sound is a line to
+retune. 26 effects plus a quiet ambience bed per zone.
+
+| Group | Sounds |
+|---|---|
+| Interface | tap, error, glub (Glub talking, on every tutorial) |
+| Slimes | bud, squish (draw out biomass), slurp (reabsorb), mutate, depart, recall |
+| Combat | hit, hurt, crit, dodge, stun, eat (the kill), fall, revive |
+| Moments | drop, rare, levelUp, learn, build, swap, merchant (a snail bell), warden, wardenDown |
+
+Rules: only what is on screen makes noise (combat sounds are cued from the
+animation beats of the fight being viewed, so three parties running do not
+triple the clatter); offline catch-up is silent; audio suspends in the
+background. Repeated sounds have a minimum gap, ±6% pitch variation and a
+12-voice cap. Levels were measured from an offline render: nothing clips, and
+the effects bus carries +60% makeup gain for phone speakers.
+
+Haptics (Capacitor plugin) only for crits, a slime falling, a Warden appearing
+or falling, rare drops, mutations and level-ups. Buzzing on every hit makes a
+phone feel like a pager.
+
+### Notifications, and why offline is now deterministic
+
+Backgrounding the app is treated exactly like closing it: save, stop the live
+clocks, and on return run the same catch-up a cold start would. The catch-up is
+seeded from the save's timestamp, so the same save always plays out the same
+way. That is what makes notifications honest: on the way out, the game runs the
+catch-up 12 hours forward from the save it just wrote and schedules a
+notification for every party that will wipe or Warden hunt that will end. When
+the player opens the app, the real catch-up replays the identical simulation.
+
+Also scheduled: Mossback's next visit, the first pool slime to hit its 24-hour
+cap, the first wounded slime to mend. Permission is asked on the first
+expedition, not at launch.
+
+### The economy, measured
+
+`node scripts/economy-sim.mjs` farms each zone with its typical party through
+the real resolver and prices every gate in hours of that farming. The first run
+showed the whole Tendril chain cost about 20 hours of play: every gate under
+five hours, most under one. Materials were costed in single digits against
+~25 of each dropping per hour. Two structural bugs showed up too:
+
+- **Royal slimes were deadlocked.** The Primordial Chamber needed Void Essence,
+  which only drops in the Void, the zone Royal slimes exist to reach. It now
+  costs Cinderspire materials.
+- The Ambush Post and Rendering Vat needed materials from zones far later than
+  the skills that unlock them.
+
+Costs are now set from targets, in hours of farming the zone itself:
+
+| Provoke | Forest | Swamp | Caves | Cinderspire | Peaks | Void |
+|---|---|---|---|---|---|---|
+| Target | 1.5 h | 3 h | 6 h | 10 h | 16 h | 24 h |
+
+Reach is ~1–12 h of the previous zone's biomass, Root roughly 2× Provoke.
+With two or three parties out and Warden preparation in between, the Tendril
+chain is now one to two weeks of ordinary idle play. A test fails if any
+Provoke drifts outside half-to-double its target.
+
+Queen levels cost `100 × level^1.35` instead of `100 × level`: the first few
+Instincts still arrive in minutes, level 10 is about five hours of forest,
+level 20 about a day. The mutagen pity floor went 150 → 200 kills.
+
+**Known gap:** a plain Royal party at stat 48 wipes in the Void within
+16 minutes, so the sim cannot price the Void's Provoke. The final zone assumes
+a mutation loadout the simulator does not model yet.
+
+### Saved state has one source of truth
+
+`getDefaultState()` in `saveSystem.js` lists every saved key with its new-game
+value. The component builds its starting state, save, load and backup export
+from that list, and a test fails if the component wires a key the list lacks
+or the reverse. Save, load and reset had been three hand-kept lists that had
+drifted apart, which is how the earlier save and offline bugs got in.
+
+### Smaller fixes
+
+- Backup codes in Settings (copy / paste to restore), checksummed.
+- Knitting Flesh and Shared Vigor heal 2% / 3% of max HP instead of 1–2 flat.
+- The forge hides mutation slots until mutations are unlocked.
+- The placeholder real-money prism packs are gone.
+- The Warden balance test used random ids, which break turn-order ties, and
+  failed about one run in ten. Ids are deterministic now.

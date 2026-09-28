@@ -85,3 +85,10 @@ export const ARENA_LUNGE = 26;       // world units an attacker lunges forward
  * one bleeds down at the difference. Tuned in docs/GAME_DESIGN.md §11.
  */
 export const TRAVEL_REGEN = 0.28;
+
+// ── Queen levels ─────────────────────────────────────────────────────────────
+// Each level is a skill point. The cost climbs a little faster than linearly
+// so the tree fills over weeks: the old flat level×100 made the first dozen
+// points cost about three hours of forest farming, and the whole early ladder
+// opened in an afternoon. See docs/GAME_DESIGN.md §23.
+export const queenLevelCost = (level) => Math.round((100 * Math.pow(level, 1.35)) / 10) * 10;

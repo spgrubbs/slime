@@ -336,7 +336,7 @@ const Compendium = ({ queen, monsterKills, mutagens = {}, wardenKills = {}, ward
                         <span style={{ fontSize: 12, fontWeight: 'bold' }}>{mutation.name}</span>
                         {isUnlocked && <span style={{ fontSize: 10, color: '#4ade80', background: 'rgba(74,222,128,0.2)', padding: '2px 6px', borderRadius: 4 }}>×{held} HELD</span>}
                       </div>
-                      <span style={{ fontSize: 11, opacity: 0.8 }} title="Every 150 kills of this monster guarantees its mutagen, however the rolls go">
+                      <span style={{ fontSize: 11, opacity: 0.8 }} title={`Every ${MUTAGEN_PITY_KILLS} kills of this monster guarantees its mutagen, however the rolls go`}>
                         {kills % MUTAGEN_PITY_KILLS}/{MUTAGEN_PITY_KILLS}
                       </span>
                     </div>

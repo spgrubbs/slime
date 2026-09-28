@@ -121,6 +121,22 @@ and skill without needing updates when content changes.
 To unlock a zone quickly: *Every Seal & Core*, then build its Tendril on The
 Nucleus (or just *Reach every zone*).
 
+## Sound, vibration and notifications
+
+- **Sound** starts on your first tap (browsers and WebViews require one).
+  Settings → Sound has volume, effects and ambience sliders, mute, and a
+  vibration toggle. The dev panel's *Sound test* row plays every effect by name.
+- **Notifications** are requested the first time you send a party out. They
+  cover a party wiping or a Warden hunt ending (forecast when you leave the app,
+  and exact: the catch-up replays the same simulation), Mossback arriving, a
+  pool filling up and a wounded slime mending. Toggle in Settings.
+
+## Backups
+
+Settings → Backup makes a code containing the whole save. Keep it somewhere
+(a note, a message to yourself); paste it into *Restore* on any install to get
+the game back. Worth doing before any uninstall.
+
 ## Saving
 
 The game saves every 10 seconds and whenever the app goes to the background

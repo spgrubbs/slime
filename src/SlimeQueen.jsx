@@ -12,6 +12,7 @@ import {
   ELEMENTS,
   ARENA_TICK_RATE,
   ROUND_MS,
+  queenLevelCost,
 } from './data/gameConstants.js';
 
 import { STAT_INFO, SLIME_TIERS } from './data/slimeData.js';
@@ -772,7 +773,7 @@ export default function SlimeQueen() {
   };
 
   const levelUpQueen = () => {
-    const cost = queen.level * 100; // 100 biomass per level
+    const cost = queenLevelCost(queen.level);
     if (bio < cost) return;
     setBio(p => p - cost);
     setQueen(q => ({ ...q, level: q.level + 1 }));
@@ -2036,19 +2037,19 @@ export default function SlimeQueen() {
                   <div style={{ fontSize: 14, opacity: 0.7, marginBottom: 10 }}>Level {queen.level}</div>
                   <button
                     onClick={levelUpQueen}
-                    disabled={bio < queen.level * 100}
+                    disabled={bio < queenLevelCost(queen.level)}
                     style={{
                       padding: '10px 20px',
-                      background: bio >= queen.level * 100 ? 'linear-gradient(135deg, #ec4899, #f472b6)' : 'rgba(100,100,100,0.5)',
+                      background: bio >= queenLevelCost(queen.level) ? 'linear-gradient(135deg, #ec4899, #f472b6)' : 'rgba(100,100,100,0.5)',
                       border: 'none',
                       borderRadius: 8,
                       color: '#fff',
                       fontWeight: 'bold',
-                      cursor: bio >= queen.level * 100 ? 'pointer' : 'not-allowed',
+                      cursor: bio >= queenLevelCost(queen.level) ? 'pointer' : 'not-allowed',
                       fontSize: 12
                     }}
                   >
-                    ⬆️ Level Up ({queen.level * 100}🧬)
+                    ⬆️ Level Up ({queenLevelCost(queen.level)}🧬)
                   </button>
                 </div>
               </div>
