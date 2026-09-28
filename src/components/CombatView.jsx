@@ -3,6 +3,7 @@ import {
   CANVAS_W, CANVAS_H, drawFrame, applyBeats, setSpriteReadyCallback,
   fieldX, groundY, depthScale, sizeFromFirmness,
 } from './arenaRender.js';
+import { cue } from '../audio/index.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // The one combat view.
@@ -10,6 +11,20 @@ import {
 // Expeditions and caravan ambushes both render through here — the only
 // difference is how many enemies there are and whether they are marching.
 // ─────────────────────────────────────────────────────────────────────────────
+
+/** Which sound a combat beat makes, if any. */
+function beatSound(b) {
+  switch (b.kind) {
+    case 'strike':
+      if (b.result === 'evaded' || b.result === 'miss') return 'dodge';
+      if (b.result === 'crit' || b.result === 'execute') return 'crit';
+      return b.side === 'enemy' ? 'hurt' : 'hit';
+    case 'fall':    return b.result === 'kill' ? 'eat' : 'fall';
+    case 'rise':    return 'revive';
+    case 'stagger': return 'stun';
+    default:        return null;
+  }
+}
 
 export default function CombatView({
   view, anim, logs, verboseLogs, setVerboseLogs, hud, emptyLabel,
@@ -34,7 +49,11 @@ export default function CombatView({
     [...motions.current.keys()].forEach(k => { if (!live.has(k)) motions.current.delete(k); });
   }, [view]);
 
-  // New round → fold its beats into motion and queue the floating numbers.
+  // New round → fold its beats into motion, queue the floating numbers, and
+  // cue each beat's sound at the moment it lands. Only the fight on screen is
+  // mounted here, so only the fight on screen makes noise.
+  const soundTimers = useRef([]);
+  useEffect(() => () => soundTimers.current.forEach(clearTimeout), []);
   useEffect(() => {
     if (!anim || anim.startedAt === seenAnim.current) return;
     seenAnim.current = anim.startedAt;
@@ -42,6 +61,11 @@ export default function CombatView({
     floats.current.push(
       ...anim.beats.filter(b => b.text).map(b => ({ ...b, at: Date.now() + b.at })),
     );
+    anim.beats.forEach(b => {
+      const name = beatSound(b);
+      if (name) soundTimers.current.push(setTimeout(() => cue(name), b.at));
+    });
+    if (soundTimers.current.length > 60) soundTimers.current = soundTimers.current.slice(-30);
   }, [anim, view]);
 
   // Animation loop, independent of the game tick so motion stays smooth.

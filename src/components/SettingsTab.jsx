@@ -1,10 +1,13 @@
 import React, { useState } from 'react';
 import { PRISM_SHOP } from '../data/hiveData.js';
 import SlimeSprite from './SlimeSprite.jsx';
+import { getPrefs, setPrefs, sfx, buzz, unlockAudio } from '../audio/index.js';
 
 const SettingsTab = ({ onSave, onDelete, onExport, onImport, lastSave, prisms, slimes, purchasePrismItem,
   tutorialsOn, setTutorialsOn, seenTutorials = [], resetTutorials, totalTutorials = 0 }) => {
   const [showConfirm, setShowConfirm] = useState(false);
+  const [audio, setAudio] = useState(getPrefs);
+  const changeAudio = (patch) => { setPrefs(patch); setAudio(getPrefs()); };
   const [backup, setBackup] = useState('');
   const [backupNote, setBackupNote] = useState('');
   const [restoreCode, setRestoreCode] = useState('');
@@ -135,6 +138,39 @@ const SettingsTab = ({ onSave, onDelete, onExport, onImport, lastSave, prisms, s
               </div>
             );
           })}
+        </div>
+      </div>
+
+      {/* Sound */}
+      <div style={{ background: 'rgba(0,0,0,0.3)', borderRadius: 10, padding: 15, marginBottom: 15 }}>
+        <div style={{ fontSize: 14, fontWeight: 'bold', marginBottom: 10 }}>🔊 Sound</div>
+        {[
+          ['volume', 'Volume'],
+          ['sfx', 'Effects'],
+          ['ambience', 'Ambience'],
+        ].map(([key, label]) => (
+          <label key={key} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12, marginBottom: 8 }}>
+            <span style={{ width: 70 }}>{label}</span>
+            <input type="range" min="0" max="1" step="0.05" value={audio[key]}
+              onChange={e => changeAudio({ [key]: +e.target.value })}
+              onPointerUp={() => sfx(key === 'ambience' ? 'drop' : 'hit')}
+              style={{ flex: 1 }} disabled={audio.muted} />
+            <span style={{ width: 34, textAlign: 'right', opacity: 0.6 }}>{Math.round(audio[key] * 100)}%</span>
+          </label>
+        ))}
+        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginTop: 4, alignItems: 'center' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: 'pointer' }}>
+            <input type="checkbox" checked={audio.muted} onChange={e => changeAudio({ muted: e.target.checked })} />
+            Mute everything
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: 'pointer' }}>
+            <input type="checkbox" checked={audio.haptics} onChange={e => { changeAudio({ haptics: e.target.checked }); if (e.target.checked) buzz('medium'); }} />
+            Vibrate on big moments
+          </label>
+          <button onClick={() => { unlockAudio(); setTimeout(() => sfx('glub'), 50); }}
+            style={{ padding: '5px 12px', fontSize: 11, borderRadius: 5, cursor: 'pointer', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.18)', color: '#e0e0e0' }}>
+            Say hi, Glub
+          </button>
         </div>
       </div>
 

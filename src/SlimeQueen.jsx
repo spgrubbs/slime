@@ -71,6 +71,7 @@ import {
 import { merchantVisit, rollMerchantDeals, canTakeDeal, MERCHANT, MATERIAL_TABLE } from './data/merchantData.js';
 import SkillTree from './components/SkillTree.jsx';
 import DevPanel from './components/DevPanel.jsx';
+import { sfx, cue, unlockAudio, setAmbience } from './audio/index.js';
 
 // ============== OFFLINE PROGRESS ==============
 const calculateOfflineProgress = (saved, bonuses, offlineCtx = {}) => {
@@ -432,6 +433,7 @@ export default function SlimeQueen() {
       [abilityId]: Date.now() + ability.duration
     }));
     log(`${ability.icon} ${ability.name} fills the air.`);
+    sfx('revive');
   };
 
   const getAbilityTimeRemaining = (abilityId) => {
@@ -622,6 +624,20 @@ export default function SlimeQueen() {
     setGameLoaded(true);
   }, [pendingOffline]);
 
+  // ── Sound ──────────────────────────────────────────────────────────────────
+  // Browsers only allow audio after a touch, so the first tap anywhere wakes
+  // it. Every button gets a very soft tap; actions layer their own sound on it.
+  useEffect(() => {
+    const wake = () => unlockAudio();
+    const tap = (e) => { if (e.target?.closest?.('button')) sfx('tap'); };
+    document.addEventListener('pointerdown', wake);
+    document.addEventListener('click', tap);
+    return () => {
+      document.removeEventListener('pointerdown', wake);
+      document.removeEventListener('click', tap);
+    };
+  }, []);
+
   // ── Saving ────────────────────────────────────────────────────────────────
   //
   // The autosave used to be an interval inside an effect that depended on every
@@ -757,8 +773,10 @@ export default function SlimeQueen() {
     if (spawnTraits.length > 0) {
       const trait = SLIME_TRAITS[spawnTraits[0]];
       log(`🥚 ${slimeName} buds off, and it's ${trait.icon} ${trait.name}!`);
+      sfx('bud');
     } else {
       log(`🥚 ${slimeName} buds off!`);
+      sfx('bud');
     }
   };
 
@@ -826,6 +844,7 @@ export default function SlimeQueen() {
       return next;
     }));
     log(`🧬 ${mut.icon} ${mut.name} takes hold in ${slime.name}.`);
+    cue('mutate');
   };
 
   /** How much of a dissolved slime's genework the Rendering Vat gives back. */
@@ -843,6 +862,7 @@ export default function SlimeQueen() {
     setBio(p => p + held);
     setSlimes(list => list.map(x => (x.id === id ? { ...x, biomass: 0 } : x)));
     log(`Squeezed ${held}🧬 out of ${sl.name}.`);
+    sfx('squish');
   };
 
   /** Dissolve a slime for good: its held biomass plus its body, and the jelly back. */
@@ -880,6 +900,7 @@ export default function SlimeQueen() {
       });
       return next;
     });
+    sfx('slurp');
     log(`${sl.name} melts back into the nucleus. +${held + body}🧬 (${held} carried, ${body} from the body)`);
   };
 
@@ -888,12 +909,14 @@ export default function SlimeQueen() {
     if (bio < cost) return;
     setBio(p => p - cost);
     setQueen(q => ({ ...q, level: q.level + 1 }));
+    cue('levelUp');
     log(`👑 Queen level ${queen.level + 1}! +${SKILL_POINTS_PER_LEVEL} point for Instincts.`);
   };
 
   // Skill tree functions
   const purchaseSkill = (skillId, cost) => {
     setPurchasedSkills(prev => [...prev, skillId]);
+    sfx('learn');
     log(`🌳 We learned ${Object.values(SKILL_TREES).find(t => t.skills[skillId])?.skills[skillId].name || skillId}.`);
   };
 
@@ -928,6 +951,7 @@ export default function SlimeQueen() {
     });
     setMerchant({ firstVisit, visit: stall.index, deals, taken: [] });
     log(`${MERCHANT.icon} ${MERCHANT.name} has come up the path, shop and all.`);
+    sfx('merchant');
   // Keyed on the visit only: a new stall per arrival, not per inventory change.
   }, [gameLoaded, stall?.index, stall?.present]);
 
@@ -944,6 +968,7 @@ export default function SlimeQueen() {
     move(deal.give.kind === 'mutagen' ? setMutagens : setMats, deal.give, -1);
     move(deal.get.kind === 'mutagen' ? setMutagens : setMats, deal.get, +1);
     setMerchant(m => ({ ...m, taken: [...(m.taken || []), dealId] }));
+    sfx('swap');
     log(`${MERCHANT.icon} Swapped ${deal.give.qty} ${deal.give.kind === 'mutagen' ? mutagenName(deal.give.id) : deal.give.id} for ${deal.get.qty} ${deal.get.kind === 'mutagen' ? mutagenName(deal.get.id) : deal.get.id}.`);
   };
 
@@ -1058,6 +1083,7 @@ export default function SlimeQueen() {
     totalKills: Object.values(monsterKills).reduce((n, c) => n + c, 0),
   };
   const activeTutorial = tutorialsOn ? nextTutorial(tutorialState, seenTutorials) : null;
+  useEffect(() => { if (activeTutorial) sfx('glub'); }, [activeTutorial?.id]);
   const dismissTutorial = () => {
     if (activeTutorial) setSeenTutorials(prev => [...prev, activeTutorial.id]);
   };
@@ -1112,6 +1138,7 @@ export default function SlimeQueen() {
     setRanchAssignments(p => ({ ...p, [ranchId]: [] }));
     setRanchProgress(p => ({ ...p, [ranchId]: 0 }));
     log(`${ranch.icon} The ${ranch.name} is ready.`);
+    sfx('build');
   };
 
   const canUpgradeRanch = (ranchId) => {
@@ -1370,6 +1397,7 @@ export default function SlimeQueen() {
 
   const recordWardenKill = useCallback((zone, plus) => {
     setWardenKills(prev => ({ ...prev, [zone]: (prev[zone] || 0) + 1 }));
+    cue('wardenDown');
     const w = WARDENS[zone];
     if (!w) return;
     log(plus
@@ -1395,6 +1423,7 @@ export default function SlimeQueen() {
 
     setExps(pr => ({ ...pr, [zone]: exp }));
     if (warden) setWardenTries(t => ({ ...t, [zone]: (t[zone] || 0) + 1 }));
+    if (warden) cue('warden'); else sfx('depart');
     log(warden
       ? `${WARDENS[zone]?.icon || '👑'} We call out ${WARDENS[zone]?.name || 'the Warden'}. It answers.`
       : `${ZONES[zone].icon} Off to ${ZONES[zone].name}!`);
@@ -1539,6 +1568,7 @@ export default function SlimeQueen() {
     setBuilds(p => ({ ...p, [id]: (p[id] || 0) + 1 }));
     const lv = b.levels?.[level];
     log(lv ? `${b.icon} ${b.name}: ${lv.title}. ${lv.desc}.` : `${b.icon} The ${b.name} is up!`);
+    sfx('build');
   };
 
   /**
@@ -1879,9 +1909,11 @@ export default function SlimeQueen() {
                   break;
                 case 'prism':
                   setPrisms(p => p + 1);
+                  cue('rare');
                   break;
                 case 'mutagen':
                   grantMutagen(se.mutation);
+                  cue('rare');
                   break;
                 case 'grantTrait':
                   setSlimes(list => list.map(sl =>
@@ -2018,6 +2050,10 @@ export default function SlimeQueen() {
   const selSl = slimes.find(s => s.id === selSlime);
   const selExp = selSlime ? Object.values(exps).find(e => (e.slimes || []).some(s => s.id === selSlime)) : null;
   const getResTime = () => { if (!activeRes) return ''; const r = RESEARCH[activeRes.id]; const tot = r.time / bon.res; const rem = Math.ceil(tot * (1 - activeRes.prog / 100)); return `${Math.floor(rem / 60)}:${(rem % 60).toString().padStart(2, '0')}`; };
+
+  // Ambience plays only while you are watching a party in the wilds.
+  const ambienceZone = tab === 'wilds' && exps[selZone] ? selZone : null;
+  useEffect(() => { setAmbience(ambienceZone); }, [ambienceZone]);
 
   if (!gameLoaded) {
     return (
@@ -2571,7 +2607,7 @@ export default function SlimeQueen() {
               setVerboseLogs={setVerboseLogs}
             />
             {exps[selZone] ? (
-              <button onClick={() => stopExp(selZone)} style={{ width: '100%', marginTop: 15, padding: 12, background: 'linear-gradient(135deg, #ef4444, #f59e0b)', border: 'none', borderRadius: 8, color: '#fff', fontWeight: 'bold', cursor: 'pointer' }}>🛑 Call them home</button>
+              <button onClick={() => { sfx('recall'); stopExp(selZone); }} style={{ width: '100%', marginTop: 15, padding: 12, background: 'linear-gradient(135deg, #ef4444, #f59e0b)', border: 'none', borderRadius: 8, color: '#fff', fontWeight: 'bold', cursor: 'pointer' }}>🛑 Call them home</button>
             ) : (
               <div style={{ marginTop: 15 }}>
                 <div style={{ fontSize: 12, marginBottom: 8, opacity: 0.7 }}>Party</div>

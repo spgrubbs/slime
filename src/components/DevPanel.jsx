@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ZONES } from '../data/zoneData.js';
 import { SLIME_TIERS } from '../data/slimeData.js';
+import { sfx, unlockAudio, SOUND_NAMES } from '../audio/index.js';
 
 // Playtest controls. Everything here is derived from the data files through
 // `tools` (built in SlimeQueen), so adding a material, mutagen, zone or skill
@@ -92,6 +93,12 @@ export default function DevPanel({ tools, speed, setSpeed, onClose }) {
         <B color="#475569" onClick={() => tools.simulateOffline(24)}>Close for 24h</B>
         <B color="#84cc16" dark onClick={tools.summonMerchant}>🐌 Summon Mossback</B>
         <B color="#0e7490" onClick={tools.resetCaravan}>Reset caravan</B>
+      </Section>
+
+      <Section title="Sound test">
+        {SOUND_NAMES.map(n => (
+          <B key={n} onClick={() => { unlockAudio(); setTimeout(() => sfx(n), 30); }}>{n}</B>
+        ))}
       </Section>
 
       <Section title="Tutorials">
