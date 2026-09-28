@@ -26,7 +26,8 @@ import { HIVE_ABILITIES, PRISM_SHOP, MANA_UPDATE_INTERVAL, MANA_PER_SLIME_PER_HO
 import { SKILL_TREES, SKILL_POINTS_PER_LEVEL, getSkillEffects, isBuildingUnlocked, isPheromoneUnlocked, isFeatureUnlocked } from './data/skillTreeData.js';
 
 // Utility imports
-import { genName, genId, formatTime, calculateElementalDamage, createDefaultElements, canGainElement, calculateElementGain } from './utils/helpers.js';
+import { genName, genId, formatTime, calculateElementalDamage, createDefaultElements, canGainElement, calculateElementGain, seededRng } from './utils/helpers.js';
+import { askPermission, scheduleNotes, clearNotes, NOTE_IDS } from './notify.js';
 import { saveGame, loadGame, deleteSave, getDefaultState, SAVED_KEYS, exportSave, importSave } from './utils/saveSystem.js';
 
 // Importing the combat module registers every mutation/trait effect and
@@ -73,168 +74,7 @@ import SkillTree from './components/SkillTree.jsx';
 import DevPanel from './components/DevPanel.jsx';
 import { sfx, cue, unlockAudio, setAmbience } from './audio/index.js';
 
-// ============== OFFLINE PROGRESS ==============
-const calculateOfflineProgress = (saved, bonuses, offlineCtx = {}) => {
-  const now = Date.now();
-  const offlineMs = now - (saved.lastSave || now);
-  const offlineSec = Math.min(offlineMs / 1000, 24 * 3600); // Cap at 24h
-
-  if (offlineSec < 60) return { hadProgress: false };
-
-  const results = {
-    biomassGained: 0,
-    matsGained: {},
-    monsterKillsGained: {},
-    slimesLost: [],
-    monstersKilled: 0,
-    expeditionsWiped: [],
-    wardensFelled: [],
-    mutagensFound: {},
-    prismsFound: 0,
-    salvaged: {},
-    completed: [],
-    researchCompleted: null,
-  };
-
-  let { bio, slimes, exps, mats, activeRes, research, builds } = JSON.parse(JSON.stringify(saved));
-
-  // Offline expeditions run the real resolver rather than a simplified copy of
-  // it — mutations, traits and status effects all apply exactly as they do
-  // while you are watching.
-  //
-  // The ceiling is a safety net, not the real limit: elapsed time is already
-  // capped at 24h above, and 24h is 54,000 rounds. The old 1,500 was set
-  // without measuring and quietly truncated an overnight session to 40 minutes
-  // of progress. Measured, a full 24h of forest costs ~430ms to simulate.
-  const MAX_OFFLINE_ROUNDS = 60000;
-
-  Object.entries(exps || {}).forEach(([zone, savedExp]) => {
-    if (!ZONES[zone]) return;
-
-    // Pre-rewrite expeditions have no combatants to advance; recall them.
-    if (!Array.isArray(savedExp.slimes) || savedExp.version !== 4) {
-      results.expeditionsWiped.push(zone);
-      delete exps[zone];
-      return;
-    }
-
-    const exp = hydrateExpedition(savedExp, slimes);
-    // Swift Expedition runs offline too, for whatever part of the absence it
-    // was still active.
-    const swiftUntil = saved.activeHiveAbilities?.swiftExpedition || 0;
-    const swiftMs = Math.max(0, Math.min(offlineSec * 1000, swiftUntil - (saved.lastSave || now)));
-    const budgetMs = Math.min(offlineSec * 1000 + 0.5 * swiftMs, MAX_OFFLINE_ROUNDS * ROUND_MS);
-    const step = ROUND_MS;
-
-    const killsBefore = exp.kills;
-    const countsBefore = { ...(exp.monsterKillCounts || {}) };
-
-    for (let elapsed = 0; elapsed < budgetMs; elapsed += step) {
-      if (exp.phase === 'defeat') break;
-
-      const { sideEffects } = tickExpedition(exp, step, offlineCtx, zone);
-
-      sideEffects.forEach(se => {
-        if (se.type === 'slimeDown') {
-          const hurt = slimes.find(sl => sl.id === se.id);
-          results.slimesLost.push(hurt?.name || 'Slime');
-          slimes = slimes.map(sl => (
-            sl.id === se.id ? { ...sl, wounded: true, woundedAt: Date.now(), biomass: 0 } : sl
-          ));
-        } else if (se.type === 'bioReclaim') {
-          bio += se.amount;
-          results.biomassGained += se.amount;
-        } else if (se.type === 'grantTrait') {
-          slimes = slimes.map(sl => sl.id === se.id && !(sl.traits || []).includes(se.trait)
-            ? { ...sl, traits: [...(sl.traits || []), se.trait] }
-            : sl);
-        } else if (se.type === 'wardenDown') {
-          results.wardensFelled.push({ zone: se.zone, plus: se.plus });
-        } else if (se.type === 'mutagen') {
-          results.mutagensFound[se.mutation] = (results.mutagensFound[se.mutation] || 0) + 1;
-        } else if (se.type === 'prism') {
-          results.prismsFound += 1;
-        } else if (se.type === 'expWipe') {
-          Object.entries(se.salvage || {}).forEach(([mat, n]) => {
-            results.salvaged[mat] = (results.salvaged[mat] || 0) + n;
-            mats[mat] = (mats[mat] || 0) + n;
-          });
-          if (se.decoy) results.decoyUsed = true;
-        }
-      });
-
-      if (exp.phase === 'defeat') break;
-      if (exp.targetKills != null && exp.kills >= exp.targetKills) {
-        results.completed.push(zone);
-        break;
-      }
-    }
-
-    results.monstersKilled += exp.kills - killsBefore;
-    Object.entries(exp.monsterKillCounts || {}).forEach(([type, n]) => {
-      const gained = n - (countsBefore[type] || 0);
-      if (gained > 0) results.monsterKillsGained[type] = (results.monsterKillsGained[type] || 0) + gained;
-    });
-
-    if (exp.phase === 'defeat' || exp.slimes.every(c => c.dead)) {
-      results.expeditionsWiped.push(zone);
-      delete exps[zone];
-      return;
-    }
-
-    // Bank what the party earned so the welcome-back summary can report it.
-    exp.slimes.filter(c => !c.dead).forEach(c => {
-      const sl = slimes.find(x => x.id === c.id);
-      if (!sl) return;
-      results.biomassGained += c.biomassGained;
-      sl.biomass = (sl.biomass || 0) + c.biomassGained;
-      c.biomassGained = 0;
-
-      if (!sl.primaryElement && c.elementGains) {
-        sl.elements = sl.elements || { fire: 0, water: 0, nature: 0, earth: 0 };
-        Object.entries(c.elementGains).forEach(([el, gain]) => {
-          sl.elements[el] = Math.min(100, (sl.elements[el] || 0) + gain);
-          if (sl.elements[el] >= 100) sl.primaryElement = el;
-        });
-        c.elementGains = {};
-      }
-    });
-
-    Object.entries(exp.materials || {}).forEach(([mat, n]) => {
-      results.matsGained[mat] = (results.matsGained[mat] || 0) + n;
-      mats[mat] = (mats[mat] || 0) + n;
-    });
-    exp.materials = {};
-
-    // Kill counts are NOT banked here. They stay on the expedition and are
-    // counted, pity floor and all, when the party comes home, exactly as if
-    // the game had been open the whole time.
-
-    exps[zone] = exp;
-  });
-
-  // Research progress
-  if (activeRes) {
-    const rd = RESEARCH[activeRes.id];
-    if (rd) {
-      const prog = activeRes.prog + (100 / rd.time) * (bonuses?.res || 1) * offlineSec;
-      if (prog >= 100) {
-        research = [...research, activeRes.id];
-        results.researchCompleted = rd.name;
-        activeRes = null;
-      } else {
-        activeRes = { ...activeRes, prog };
-      }
-    }
-  }
-
-  return {
-    hadProgress: true,
-    offlineTime: formatTime(offlineSec),
-    results,
-    newState: { bio, slimes, exps, mats, activeRes, research, lastSave: now }
-  };
-};
+import { calculateOfflineProgress } from './combat/offline.js';
 
 // ============== MAIN GAME ==============
 export default function SlimeQueen() {
@@ -603,7 +443,7 @@ export default function SlimeQueen() {
     const saved = pendingOffline;
     setPendingOffline(null);
 
-    const offline = calculateOfflineProgress(saved, bon, combatContext());
+    const offline = calculateOfflineProgress(saved, bon, { ...combatContext(), rng: seededRng(saved.lastSave || 0) });
     if (offline.hadProgress) {
       const r = offline.results;
       setBio(offline.newState.bio);
@@ -621,6 +461,9 @@ export default function SlimeQueen() {
       if (r.completed.length) setTimeout(() => r.completed.forEach(z => stopExp(z)), 0);
       setWelcomeBack(offline);
     }
+    // The catch-up covered the time away; the live clocks start from now.
+    setLastTick(Date.now());
+    lastArenaTickRef.current = Date.now();
     setGameLoaded(true);
   }, [pendingOffline]);
 
@@ -666,10 +509,34 @@ export default function SlimeQueen() {
     return ok;
   }, []);
 
+  // Backgrounding is treated exactly like closing: save, forecast, schedule
+  // notifications, and stop the live clocks. Coming back runs the same seeded
+  // catch-up a cold start would, so a phone that kept the app alive and one
+  // that killed it end up in the same place, and the notifications were true.
+  const hiddenAtRef = useRef(null);
+  const planNotesRef = useRef(null);
+
   useEffect(() => {
     if (!gameLoaded) return;
-    const interval = setInterval(saveNow, AUTO_SAVE_INTERVAL);
-    const onHide = () => { if (document.visibilityState === 'hidden') saveNow(); };
+    const interval = setInterval(() => { if (!document.hidden) saveNow(); }, AUTO_SAVE_INTERVAL);
+    const onHide = () => {
+      if (document.visibilityState === 'hidden') {
+        if (hiddenAtRef.current) return;
+        saveNow();
+        hiddenAtRef.current = Date.now();
+        try { planNotesRef.current?.(); } catch (e) { console.error('Notification plan failed:', e); }
+        return;
+      }
+      // Visible again.
+      const away = hiddenAtRef.current ? Date.now() - hiddenAtRef.current : 0;
+      hiddenAtRef.current = null;
+      clearNotes();
+      if (away > 60 * 1000 && !deletedRef.current) {
+        const saved = loadGame();
+        if (saved) setPendingOffline(saved);
+      }
+      // A short absence needs nothing: the live clocks simply catch up.
+    };
     document.addEventListener('visibilitychange', onHide);
     window.addEventListener('pagehide', saveNow);
     window.addEventListener('beforeunload', saveNow);
@@ -970,6 +837,66 @@ export default function SlimeQueen() {
     setMerchant(m => ({ ...m, taken: [...(m.taken || []), dealId] }));
     sfx('swap');
     log(`${MERCHANT.icon} Swapped ${deal.give.qty} ${deal.give.kind === 'mutagen' ? mutagenName(deal.give.id) : deal.give.id} for ${deal.get.qty} ${deal.get.kind === 'mutagen' ? mutagenName(deal.get.id) : deal.get.id}.`);
+  };
+
+  // ── Notifications ──────────────────────────────────────────────────────
+  // Built when the app is backgrounded, from the save that was just written.
+  planNotesRef.current = () => {
+    const saved = loadGame();
+    if (!saved) return;
+    const now = Date.now();
+    const notes = [];
+
+    // Parties: the same seeded run the catch-up will do, up to 12 hours out.
+    if (Object.keys(saved.exps || {}).length) {
+      const forecast = calculateOfflineProgress(
+        saved, bon, { ...combatContext(), rng: seededRng(saved.lastSave || 0) },
+        (saved.lastSave || now) + 12 * 3600 * 1000,
+      );
+      forecast.results.events.forEach((e, i) => {
+        const z = ZONES[e.zone];
+        const w = WARDENS[e.zone];
+        notes.push(e.type === 'wipe'
+          ? { id: NOTE_IDS.expedition + i, at: e.at, title: `Mother, the party in ${z?.name} is down`,
+              body: 'Everyone fell. They need to mend, and they dropped what they were carrying.' }
+          : { id: NOTE_IDS.expedition + i, at: e.at, title: `${w?.icon || '👑'} It's over`,
+              body: `The fight with ${w?.name || 'the Warden'} is done. Come and see how it went.` });
+      });
+    }
+
+    // Mossback's next arrival.
+    if (merchantUnlocked && merchant?.firstVisit) {
+      const v = merchantVisit(merchant.firstVisit, now);
+      notes.push({ id: NOTE_IDS.merchant, at: v.nextAt, title: '🐌 Mossback is here',
+        body: 'It will stay for 5 hours, and it has things to swap.' });
+    }
+
+    // The first pool slime to fill up, and the first wounded slime to mend.
+    let full = null;
+    let mended = null;
+    Object.entries(ranchAssignments).forEach(([ranchId, list]) => {
+      const ranch = RANCH_TYPES[ranchId];
+      const level = ranchBuildings[ranchId]?.level || 1;
+      (list || []).forEach(a => {
+        if (typeof a !== 'object' || !a.startTime) return;
+        const sl = slimes.find(x => x.id === a.slimeId);
+        if (!sl) return;
+        if (ranch?.effect === 'recover') {
+          const cycle = ranch.cycleTime * (1 - Math.min(0.5, (level - 1) * RANCH_UPGRADE_BONUSES.cycleReduction));
+          const at = a.startTime + cycle * 1000;
+          if (!mended || at < mended.at) mended = { at, name: sl.name };
+        } else {
+          const at = a.startTime + RANCH_MAX_ACCUMULATION_TIME * 1000;
+          if (!full || at < full.at) full = { at, name: sl.name, pool: ranch?.name };
+        }
+      });
+    });
+    if (full) notes.push({ id: NOTE_IDS.poolFull, at: full.at, title: 'A pool is full',
+      body: `${full.name} has soaked up all the ${full.pool} can give. Take it out to collect.` });
+    if (mended) notes.push({ id: NOTE_IDS.mended, at: mended.at, title: `🩹 ${mended.name} is whole again`,
+      body: 'Ready to go back out.' });
+
+    scheduleNotes(notes);
   };
 
   // ── Dev panel ────────────────────────────────────────────────────────────
@@ -1424,6 +1351,7 @@ export default function SlimeQueen() {
     setExps(pr => ({ ...pr, [zone]: exp }));
     if (warden) setWardenTries(t => ({ ...t, [zone]: (t[zone] || 0) + 1 }));
     if (warden) cue('warden'); else sfx('depart');
+    askPermission(); // asked once, the first time it is useful
     log(warden
       ? `${WARDENS[zone]?.icon || '👑'} We call out ${WARDENS[zone]?.name || 'the Warden'}. It answers.`
       : `${ZONES[zone].icon} Off to ${ZONES[zone].name}!`);
@@ -1670,6 +1598,7 @@ export default function SlimeQueen() {
   useEffect(() => {
     if (!gameLoaded) return;
     const iv = setInterval(() => {
+      if (document.hidden) return; // backgrounded: the catch-up on return covers it
       const now = Date.now();
       const dt = ((now - lastTick) / TICK_RATE) * speed; // Game ticks for battles
       const dtSeconds = (now - lastTick) / 1000 * speed; // Real seconds for research/ranch
@@ -1880,6 +1809,7 @@ export default function SlimeQueen() {
     if (!gameLoaded || Object.keys(exps).length === 0) return;
 
     const iv = setInterval(() => {
+      if (document.hidden) return;
       const now = Date.now();
       const ctx = combatContext();
       const dt = (now - lastArenaTickRef.current) * speed * (ctx.hiveAbilities.swiftExpedition ? 1.5 : 1);
@@ -1962,6 +1892,7 @@ export default function SlimeQueen() {
     if (!gameLoaded || !ambush || ambush.phase !== 'battle') return;
 
     const iv = setInterval(() => {
+      if (document.hidden) { lastAmbushTickRef.current = Date.now(); return; } // an ambush waits for you
       const now = Date.now();
       const dt = (now - lastAmbushTickRef.current) * speed;
       lastAmbushTickRef.current = now;
@@ -2020,7 +1951,7 @@ export default function SlimeQueen() {
   useEffect(() => {
     if (!gameLoaded || !hasPassive('fieldDressing')) return;
     const iv = setInterval(() => {
-      const baseline = (RANCH_TYPES?.convalescence?.cycleTime || 86400) * 2 * 1000;
+      const baseline = RANCH_TYPES.convalescencePool.cycleTime * 2 * 1000;
       setSlimes(list => {
         let changed = false;
         const next = list.map(sl => {

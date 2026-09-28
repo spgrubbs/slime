@@ -79,7 +79,18 @@ if (fs.existsSync(RES)) {
       .png().toBuffer();
     fs.writeFileSync(p, buf);
   }
-  console.log('android: launcher icons, round icons, adaptive foregrounds, splash');
+  // Notification icon: Android draws it as a flat white silhouette, so it is
+  // the slime's shape in white on transparent, nothing else.
+  const NOTIFY = { mdpi: 24, hdpi: 36, xhdpi: 48, xxhdpi: 72, xxxhdpi: 96 };
+  for (const [density, size] of Object.entries(NOTIFY)) {
+    const dir = path.join(RES, `drawable-${density}`);
+    ensure(dir);
+    const alpha = await sharp(SVG).resize(size, size).ensureAlpha().extractChannel('alpha').toBuffer();
+    await sharp({ create: { width: size, height: size, channels: 3, background: '#ffffff' } })
+      .joinChannel(alpha, { raw: undefined }).png().toFile(path.join(dir, 'ic_stat_slime.png'));
+  }
+
+  console.log('android: launcher icons, round icons, adaptive foregrounds, splash, notification icon');
 } else {
   console.log('android/ not present — skipped native icons (run `npx cap add android`)');
 }

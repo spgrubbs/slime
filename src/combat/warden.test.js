@@ -31,8 +31,12 @@ const TIER_FOR_ZONE = ['basic', 'enhanced', 'elite', 'royal'];
 const tierOf = (zone) =>
   TIER_FOR_ZONE[Math.min(3, Math.ceil(ZONES[zone].tier / 1.6) - 1)];
 
+// Ids break ties in turn order, so they must be deterministic: random ones
+// made the win rates wobble a few points between runs, and a Warden that sits
+// near a threshold then failed one run in ten.
+let nextId = 0;
 const slimeAt = (tier, stat) => ({
-  id: 's' + Math.random(), name: 'S', tier, mutations: [], traits: [], biomass: 0,
+  id: 's' + String(++nextId).padStart(6, '0'), name: 'S', tier, mutations: [], traits: [], biomass: 0,
   baseStats: { firmness: stat, slipperiness: stat, viscosity: stat }, elements: {},
 });
 

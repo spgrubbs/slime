@@ -88,3 +88,19 @@ export const calculateElementGain = (baseGain, slime) => {
   }
   return gain;
 };
+
+/**
+ * mulberry32: a small seeded PRNG. The offline catch-up seeds it from the
+ * save's timestamp, so the same save always plays out the same way, and a
+ * forecast made when the app is closed matches what happens when it reopens.
+ */
+export const seededRng = (seed) => {
+  let a = Math.floor(seed) >>> 0;
+  return () => {
+    a = (a + 0x6D2B79F5) | 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+};

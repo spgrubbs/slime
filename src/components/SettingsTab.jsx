@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { PRISM_SHOP } from '../data/hiveData.js';
 import SlimeSprite from './SlimeSprite.jsx';
 import { getPrefs, setPrefs, sfx, buzz, unlockAudio } from '../audio/index.js';
+import { askPermission } from '../notify.js';
 
 const SettingsTab = ({ onSave, onDelete, onExport, onImport, lastSave, prisms, slimes, purchasePrismItem,
   tutorialsOn, setTutorialsOn, seenTutorials = [], resetTutorials, totalTutorials = 0 }) => {
@@ -166,6 +167,10 @@ const SettingsTab = ({ onSave, onDelete, onExport, onImport, lastSave, prisms, s
           <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: 'pointer' }}>
             <input type="checkbox" checked={audio.haptics} onChange={e => { changeAudio({ haptics: e.target.checked }); if (e.target.checked) buzz('medium'); }} />
             Vibrate on big moments
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: 'pointer' }}>
+            <input type="checkbox" checked={audio.notifications} onChange={e => { changeAudio({ notifications: e.target.checked }); if (e.target.checked) askPermission(); }} />
+            Tell me when things happen while I'm away
           </label>
           <button onClick={() => { unlockAudio(); setTimeout(() => sfx('glub'), 50); }}
             style={{ padding: '5px 12px', fontSize: 11, borderRadius: 5, cursor: 'pointer', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.18)', color: '#e0e0e0' }}>

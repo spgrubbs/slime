@@ -20,7 +20,7 @@
 
 const PREFS_KEY = 'slime_queen_prefs';
 
-const DEFAULT_PREFS = { volume: 0.8, sfx: 1, ambience: 0.5, muted: false, haptics: true };
+const DEFAULT_PREFS = { volume: 0.8, sfx: 1, ambience: 0.5, muted: false, haptics: true, notifications: true };
 
 // Per-device preferences, kept apart from the save so deleting a game does not
 // reset your volume.
