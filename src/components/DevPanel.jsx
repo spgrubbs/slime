@@ -92,6 +92,7 @@ export default function DevPanel({ tools, speed, setSpeed, onClose }) {
         <B color="#475569" onClick={() => tools.simulateOffline(8)}>Close for 8h</B>
         <B color="#475569" onClick={() => tools.simulateOffline(24)}>Close for 24h</B>
         <B color="#84cc16" dark onClick={tools.summonMerchant}>🐌 Summon Mossback</B>
+        <B color="#15803d" onClick={tools.wakeGullet}>🥀 Wake Old Gullet (+4 Digest)</B>
         <B color="#0e7490" onClick={tools.resetCaravan}>Reset caravan</B>
       </Section>
 

@@ -41,6 +41,21 @@ export function spawnEnemy(zone, rareSpawnMult = 1, rng = Math.random) {
   return type ? makeEnemyCombatant(type) : null;
 }
 
+// ── Secret encounters ────────────────────────────────────────────────────────
+//
+// Old Gullet, the first slimetrap. The host decides whether the player has
+// earned it (ctx.secrets.gullet: forest Warden beaten, enough slimetraps
+// eaten, not beaten before); the party decides whether it comes: it only rises
+// for a party carrying Digest, the thing we stole from its children.
+export const SECRET_CHANCE = 0.03;
+
+export function rollSecret(zone, exp, ctx, rng) {
+  if (zone !== 'forest' || !ctx.secrets?.gullet || exp.secretMet) return null;
+  const carriesDigest = exp.slimes.some(sl => !sl.dead && (sl.ref?.mutations || []).includes('digest'));
+  if (!carriesDigest || rng() >= (ctx.secrets.force ? 1 : SECRET_CHANCE)) return null;
+  return makeEnemyCombatant('oldGullet');
+}
+
 // ── Expedition state ─────────────────────────────────────────────────────────
 
 /**
@@ -319,7 +334,13 @@ export function tickExpedition(exp, dt, ctx = {}, zone) {
         }
       }
 
-      const enemy = spawnEnemy(zone, ctx.combatBonuses?.rareSpawn, rng);
+      const secret = rollSecret(zone, exp, ctx, rng);
+      const enemy = secret || spawnEnemy(zone, ctx.combatBonuses?.rareSpawn, rng);
+      if (secret) {
+        exp.secretMet = true;
+        log({ m: 'The forest floor opens like a mouth. Something very old smells what we took. 🥀', c: '#15803d',
+              v: 'secret encounter: Old Gullet' });
+      }
       if (enemy) {
         // Contagion: the rot outlives its host.
         if (ctx.passives?.includes('contagion') && exp.lingering?.length) {

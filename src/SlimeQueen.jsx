@@ -37,8 +37,8 @@ import './combat/index.js';
 import { computeStats, computeMaxHp, mutationSlots, slotsFromSelection, buildEffectList } from './combat/stats.js';
 import { makeExpedition, tickExpedition, hydrateExpedition } from './combat/expedition.js';
 import { makeAmbush, tickAmbush, retreatAmbush, hydrateAmbush, dehydrateAmbush } from './combat/caravan.js';
-import { nextTutorial, TUTORIALS, TUTORIAL_ORDER } from './data/tutorialData.js';
-import { MUTAGEN_PITY_KILLS } from './data/monsterData.js';
+import { nextTutorial, TUTORIALS, TUTORIAL_ORDER, GUIDE_STEPS, currentGuideStep } from './data/tutorialData.js';
+import { MUTAGEN_PITY_KILLS, GULLET_TRAP_KILLS } from './data/monsterData.js';
 import { mutagenName, traitValues } from './data/traitData.js';
 
 /**
@@ -107,6 +107,9 @@ export default function SlimeQueen() {
   const [pityKills, setPityKills] = useState(D.pityKills);
   const [purchasedSkills, setPurchasedSkills] = useState(D.purchasedSkills);
   const [merchant, setMerchant] = useState(D.merchant);
+  const [guide, setGuide] = useState(D.guide);
+  const [secrets, setSecrets] = useState(D.secrets);
+  const devForceSecret = useRef(false);
 
   // Ranch system state
   const [prisms, setPrisms] = useState(D.prisms);
@@ -404,6 +407,7 @@ export default function SlimeQueen() {
     mutagens: [mutagens, setMutagens], pityKills: [pityKills, setPityKills],
     wardenKills: [wardenKills, setWardenKills], wardenTries: [wardenTries, setWardenTries],
     purchasedSkills: [purchasedSkills, setPurchasedSkills], merchant: [merchant, setMerchant],
+    guide: [guide, setGuide], secrets: [secrets, setSecrets],
     prisms: [prisms, setPrisms], ranchBuildings: [ranchBuildings, setRanchBuildings],
     ranchAssignments: [ranchAssignments, setRanchAssignments], ranchProgress: [ranchProgress, setRanchProgress],
     mana: [mana, setMana], lastManaUpdate: [lastManaUpdate, setLastManaUpdate],
@@ -457,6 +461,7 @@ export default function SlimeQueen() {
       if (r.prismsFound) setPrisms(p => p + r.prismsFound);
       if (r.decoyUsed) setActiveHiveAbilities(a => { const n = { ...a }; delete n.decoy; return n; });
       r.wardensFelled.forEach(w => recordWardenKill(w.zone, w.plus));
+      (r.secretsFound || []).forEach(id => setSecrets(x => ({ ...x, [id]: 'beaten' })));
       // A hunt that reached its target while the game was closed comes home
       // now. Its "done" signal fired offline, where there was nobody to hear it.
       if (r.completed.length) setTimeout(() => r.completed.forEach(z => stopExp(z)), 0);
@@ -718,6 +723,8 @@ export default function SlimeQueen() {
   /** How much of a dissolved slime's genework the Rendering Vat gives back. */
   const mutagenRecovery = () => [0, 0.5, 1][builds.renderingVat || 0] ?? 1;
 
+  const markGuide = (flag) => setGuide(g => (g.flags?.[flag] ? g : { ...g, flags: { ...g.flags, [flag]: true } }));
+
   const withdrawBiomass = (id) => {
     const sl = slimes.find(s => s.id === id);
     if (!sl) return;
@@ -730,6 +737,22 @@ export default function SlimeQueen() {
     setBio(p => p + held);
     setSlimes(list => list.map(x => (x.id === id ? { ...x, biomass: 0 } : x)));
     log(`Squeezed ${held}🧬 out of ${sl.name}.`);
+    markGuide('squeezed');
+    sfx('squish');
+  };
+
+  /** Squeeze every slime at home at once. Parties out in the wilds keep theirs. */
+  const homeSlimes = () => slimes.filter(sl =>
+    !Object.values(exps).some(e => (e.slimes || []).some(x => x.id === sl.id))
+    && !(ambush?.slimes || []).some(x => x.id === sl.id));
+  const heldAtHome = homeSlimes().reduce((n, sl) => n + Math.floor(sl.biomass || 0), 0);
+  const withdrawAll = () => {
+    const ids = new Set(homeSlimes().filter(sl => (sl.biomass || 0) >= 1).map(sl => sl.id));
+    if (!ids.size) return;
+    setBio(p => p + heldAtHome);
+    setSlimes(list => list.map(x => (ids.has(x.id) ? { ...x, biomass: 0 } : x)));
+    log(`Squeezed ${heldAtHome}🧬 out of ${ids.size} slime${ids.size === 1 ? '' : 's'}.`);
+    markGuide('squeezed');
     sfx('squish');
   };
 
@@ -964,6 +987,15 @@ export default function SlimeQueen() {
       const pool = Object.keys(SLIME_TRAITS).filter(t => !(sl.traits || []).includes(t) && t !== 'void');
       return pool.length ? { ...sl, traits: [...(sl.traits || []), pool[Math.floor(Math.random() * pool.length)]] } : sl;
     })),
+    // Old Gullet: make the player eligible, hand the party its answer, and make
+    // the next forest fight the one (it still needs a Digest slime in the party).
+    wakeGullet: () => {
+      setWardenKills(k => ({ ...k, forest: Math.max(1, k.forest || 0) }));
+      setMonsterKills(k => ({ ...k, venusSlimetrap: Math.max(GULLET_TRAP_KILLS, k.venusSlimetrap || 0) }));
+      setMutagens(m => ({ ...m, digest: (m.digest || 0) + 4 }));
+      setSecrets(x => { const n = { ...x }; delete n.gullet; return n; });
+      devForceSecret.current = true;
+    },
     summonMerchant: () => {
       if (!purchasedSkills.includes('barter')) setPurchasedSkills(p => [...p, 'barter']);
       setMerchant(null);
@@ -1004,6 +1036,7 @@ export default function SlimeQueen() {
     affinityUnlocked: skillEffects.passives.includes('affinity'),
     caravanUnlocked: isFeatureUnlocked('caravan', purchasedSkills),
     merchantHere: !!stall?.present,
+    gulletBeaten: secrets.gullet === 'beaten',
     expeditionSlots,
     maxHeldBiomass: slimes.reduce((n, sl) => Math.max(n, sl.biomass || 0), 0),
     maxElementAffinity: slimes.reduce(
@@ -1302,6 +1335,13 @@ export default function SlimeQueen() {
     ranchRegen: getRanchBonuses().expeditionRegen,
     travelMult: bon.travel,
     roundMs: ROUND_MS,
+    // Old Gullet rises only for a player who has beaten the forest Warden and
+    // eaten a great many of its children, and only until it is beaten.
+    secrets: {
+      gullet: (wardenKills.forest || 0) > 0 && (monsterKills.venusSlimetrap || 0) >= GULLET_TRAP_KILLS
+        && secrets.gullet !== 'beaten',
+      force: devForceSecret.current,   // dev panel: next forest fight is Old Gullet
+    },
     hiveAbilities: {
       sharedVigor:      isHiveAbilityActive('sharedVigor'),
       bountifulHarvest: isHiveAbilityActive('bountifulHarvest'),
@@ -1309,7 +1349,7 @@ export default function SlimeQueen() {
       swiftExpedition:  isHiveAbilityActive('swiftExpedition'),
       decoy:            isHiveAbilityActive('decoy'),
     },
-  }), [combatBonuses, bon, builds, skillEffects, getRanchBonuses, activeHiveAbilities]);
+  }), [combatBonuses, bon, builds, skillEffects, getRanchBonuses, activeHiveAbilities, wardenKills, monsterKills, secrets]);
 
   // ── Wardens ───────────────────────────────────────────────────────────────
   //
@@ -1352,6 +1392,7 @@ export default function SlimeQueen() {
     setExps(pr => ({ ...pr, [zone]: exp }));
     if (warden) setWardenTries(t => ({ ...t, [zone]: (t[zone] || 0) + 1 }));
     if (warden) cue('warden'); else sfx('depart');
+    markGuide('sent');
     askPermission(); // asked once, the first time it is useful
     log(warden
       ? `${WARDENS[zone]?.icon || '👑'} We call out ${WARDENS[zone]?.name || 'the Warden'}. It answers.`
@@ -1388,6 +1429,7 @@ export default function SlimeQueen() {
   // Process expedition summary (split out to avoid nested state updates)
   const processExpSummary = (zone, summary) => {
     if (summary.survivors.length > 0) {
+      markGuide('recalled');
       setMats(m => {
         const n = { ...m };
         Object.entries(summary.materials).forEach(([mat, count]) => {
@@ -1855,6 +1897,12 @@ export default function SlimeQueen() {
                 case 'wardenDown':
                   recordWardenKill(se.zone, se.plus);
                   break;
+                case 'secretDown':
+                  devForceSecret.current = false;
+                  setSecrets(x => ({ ...x, [se.id]: 'beaten' }));
+                  cue('wardenDown');
+                  log('🥀 Old Gullet sinks back into the ground, and doesn\'t come up again.');
+                  break;
                 case 'expComplete':
                   stopExp(se.zone);
                   break;
@@ -1983,6 +2031,22 @@ export default function SlimeQueen() {
   const selExp = selSlime ? Object.values(exps).find(e => (e.slimes || []).some(s => s.id === selSlime)) : null;
   const getResTime = () => { if (!activeRes) return ''; const r = RESEARCH[activeRes.id]; const tot = r.time / bon.res; const rem = Math.ceil(tot * (1 - activeRes.prog / 100)); return `${Math.floor(rem / 60)}:${(rem % 60).toString().padStart(2, '0')}`; };
 
+  // Glub's first steps, until they are done or skipped.
+  const guideStep = tutorialsOn && !guide.dismissed ? currentGuideStep({
+    slimeCount: slimes.length,
+    flags: guide.flags || {},
+    bankedKills: Object.values(monsterKills).reduce((n, c) => n + c, 0),
+    totalKills: Object.values(monsterKills).reduce((n, c) => n + c, 0)
+      + Object.values(exps).reduce((n, e) => n + (e.kills || 0), 0),
+    queenLevel: queen.level,
+    skillsLearned: purchasedSkills.length,
+  }) : null;
+  const prevGuideStep = useRef(null);
+  useEffect(() => {
+    if (prevGuideStep.current && prevGuideStep.current !== guideStep?.id) sfx('learn');
+    prevGuideStep.current = guideStep?.id || null;
+  }, [guideStep?.id]);
+
   // Ambience plays only while you are watching a party in the wilds.
   const ambienceZone = tab === 'wilds' && exps[selZone] ? selZone : null;
   useEffect(() => { setAmbience(ambienceZone); }, [ambienceZone]);
@@ -2026,6 +2090,28 @@ export default function SlimeQueen() {
       
       <main style={{ padding: 15, paddingBottom: 'calc(110px + env(safe-area-inset-bottom))' }}>
         <h2 style={{ margin: '0 0 15px', fontSize: 20 }}>{tabs.find(t => t.id === tab)?.icon} {tabs.find(t => t.id === tab)?.label}</h2>
+
+        {guideStep && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'linear-gradient(135deg, rgba(168,85,247,0.18), rgba(99,102,241,0.12))', border: '1px solid rgba(168,85,247,0.4)', borderRadius: 10, padding: '9px 12px', marginBottom: 14 }}>
+            <SlimeSprite tier="basic" size={30} />
+            <div style={{ flex: 1, fontSize: 12, lineHeight: 1.4 }}>
+              <div style={{ fontSize: 10, opacity: 0.6 }}>Glub · first steps {GUIDE_STEPS.indexOf(guideStep) + 1}/{GUIDE_STEPS.length}</div>
+              {guideStep.text}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {tab !== guideStep.tab && (
+                <button onClick={() => { setTab(guideStep.tab); if (guideStep.tab === 'brood') { setBroodView('roster'); setSelSlime(null); } }}
+                  style={{ padding: '6px 10px', fontSize: 11, borderRadius: 6, border: 'none', fontWeight: 'bold', cursor: 'pointer', background: '#a855f7', color: '#fff', whiteSpace: 'nowrap' }}>
+                  Show me
+                </button>
+              )}
+              <button onClick={() => setGuide(g => ({ ...g, dismissed: true }))}
+                style={{ padding: '3px 8px', fontSize: 10, borderRadius: 6, border: 'none', cursor: 'pointer', background: 'transparent', color: '#9ca3af' }}>
+                skip
+              </button>
+            </div>
+          </div>
+        )}
         
         {tab === 'hive' && (
           <div>
@@ -2332,7 +2418,19 @@ export default function SlimeQueen() {
                 onApplyMutagen={applyMutagen}
                 onWithdraw={withdrawBiomass}
               />
-              {!selExp && <button onClick={() => { reabsorb(selSl.id); setSelSlime(null); }} style={{ width: '100%', marginTop: 15, padding: 12, background: 'linear-gradient(135deg, #f59e0b, #ef4444)', border: 'none', borderRadius: 8, color: '#fff', fontWeight: 'bold', cursor: 'pointer' }}>🔄 Reabsorb</button>}
+              {!selExp && (
+                <div style={{ marginTop: 22, textAlign: 'center' }}>
+                  <button
+                    onClick={() => {
+                      if (!window.confirm(`Reabsorb ${selSl.name}? It melts back into the nucleus for good. You get its biomass back, but the slime is gone.`)) return;
+                      reabsorb(selSl.id); setSelSlime(null);
+                    }}
+                    style={{ padding: '6px 12px', background: 'transparent', border: '1px solid rgba(239,68,68,0.45)', borderRadius: 6, color: '#fca5a5', fontSize: 11, cursor: 'pointer' }}
+                  >
+                    Reabsorb this slime…
+                  </button>
+                </div>
+              )}
             </div>
           ) : (
             <div>
@@ -2427,6 +2525,18 @@ export default function SlimeQueen() {
                     })}
                   </div>
                 </details>
+              )}
+
+              {heldAtHome > 0 && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'rgba(74,222,128,0.08)', border: '1px solid rgba(74,222,128,0.3)', borderRadius: 10, padding: 10, marginBottom: 12 }}>
+                  <div style={{ flex: 1, fontSize: 11 }}>
+                    <div style={{ fontWeight: 'bold', color: '#4ade80', fontSize: 13 }}>🧬 {heldAtHome} biomass in the slimes at home</div>
+                    <div style={{ opacity: 0.7, marginTop: 2 }}>Carrying it makes them stronger, but they spill it all if they fall.</div>
+                  </div>
+                  <button onClick={withdrawAll} style={{ padding: '9px 14px', borderRadius: 8, border: 'none', fontWeight: 'bold', cursor: 'pointer', background: 'linear-gradient(135deg, #4ade80, #22d3ee)', color: '#1a1a2e', whiteSpace: 'nowrap' }}>
+                    Squeeze all
+                  </button>
+                </div>
               )}
 
               {slimes.length ? (
@@ -2628,6 +2738,7 @@ export default function SlimeQueen() {
             mutagens={mutagens}
             wardenKills={wardenKills}
             wardenTries={wardenTries}
+            secrets={secrets}
             mutationsUnlocked={hasPassive('mutagenesis')}
             affinityUnlocked={hasPassive('affinity')}
             seenTutorials={seenTutorials}

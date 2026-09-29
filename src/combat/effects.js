@@ -45,6 +45,15 @@ mut('digest', {
   onKill: (ev, self) => { ev.biomassFlat += self.power; },
 });
 
+mut('firstStomach', {
+  // "+X% biomass from every kill, and mends X/2% of max HP"
+  onKill: (ev, self) => {
+    ev.biomassMult += self.power / 100;
+    ev.heal += ev.self.maxHp * (self.power / 200);
+    ev.healLabel = '🥣 First Stomach';
+  },
+});
+
 mut('stoneskin', {
   // "+X Firmness" — a genuine stat bonus, declared explicitly
   statMod: (ev, self) => { ev.stats.firmness += Math.floor(self.power); },

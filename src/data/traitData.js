@@ -413,6 +413,22 @@ export const MUTATION_LIBRARY = {
     monster: 'hollowOne',
     elementBonus: null,
   },
+
+  // The secret one. Only Old Gullet carries it, and it always gives it up.
+  firstStomach: {
+    name: 'First Stomach',
+    affinity: 'nature',
+    icon: '🥣',
+    stat: 'viscosity',
+    bonus: 3,
+    passive: 'firstStomach',
+    passiveDesc: (visc) => `Every kill feeds the whole party: +${(10 + 0.3 * visc).toFixed(1)}% biomass, and this slime mends ${((10 + 0.3 * visc) / 2).toFixed(1)}% of its health`,
+    baseValue: 10,
+    viscScale: 0.3,
+    color: '#15803d',
+    monster: 'oldGullet',
+    elementBonus: { nature: 10 },
+  },
 };
 
 // Backward compatibility alias - will be removed in future

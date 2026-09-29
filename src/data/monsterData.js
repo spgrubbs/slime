@@ -96,6 +96,9 @@ export const MUTAGEN_RATES = {
  */
 export const MUTAGEN_PITY_KILLS = 200;
 
+/** Slimetraps a player must have eaten before Old Gullet will rise. */
+export const GULLET_TRAP_KILLS = 250;
+
 export const mutagenDropChance = (monster) =>
   monster?.rare ? MUTAGEN_RATES.rare : MUTAGEN_RATES.common;
 
@@ -217,7 +220,7 @@ export const MONSTER_TYPES = {
   youngWolf: {
     name: 'Young Wolf',
     icon: '🐺',
-    desc: 'All legs and teeth. It bites first and thinks never. Its fangs are where Sharp comes from.',
+    desc: 'All legs and teeth. It bites first and thinks never.',
     tier: 1,
     hp: 100,
     dmg: 6,
@@ -233,7 +236,7 @@ export const MONSTER_TYPES = {
   venusSlimetrap: {
     name: 'Venus Slimetrap',
     icon: '🌱',
-    desc: 'A plant that grew a mouth just for slimes like us. Rude. Its insides digest anything, which is how we learned Digest.',
+    desc: 'A plant that grew a mouth just for slimes like us. Rude. The old ones say we never used to eat at all. We learned how by watching these eat us.',
     tier: 1,
     hp: 124,
     dmg: 4,
@@ -248,7 +251,7 @@ export const MONSTER_TYPES = {
   pebblet: {
     name: 'Pebblet',
     icon: '🪨',
-    desc: 'A pebble that decided to walk. Hard to chew. Eat enough and your skin goes stony too.',
+    desc: 'A pebble that decided to walk. Hard to chew, and it knows it.',
     tier: 1,
     hp: 124,
     dmg: 4,
@@ -263,7 +266,7 @@ export const MONSTER_TYPES = {
   vineSpider: {
     name: 'Vine Spider',
     icon: '🕷️',
-    desc: 'Spins webs out of vines and throws them at us. We get slow and sticky. We also learned Vinewebs from it.',
+    desc: 'Spins webs out of vines and throws them at us. We get slow and sticky and annoyed.',
     tier: 1,
     hp: 92,
     dmg: 8,
@@ -279,7 +282,7 @@ export const MONSTER_TYPES = {
   lifeFairy: {
     name: 'Life Fairy',
     icon: '🧚',
-    desc: 'Rare. Glowy. Smells like being alive. Sometimes it leaves behind the trick for getting back up.',
+    desc: 'Rare. Glowy. Smells like being alive. It keeps getting back up, which is very rude.',
     tier: 1,
     hp: 92,
     dmg: 3,
@@ -297,7 +300,7 @@ export const MONSTER_TYPES = {
   serratedCarp: {
     name: 'Serrated Carp',
     icon: '🐟',
-    desc: 'A fish made of little knives. It cuts, and the cuts keep bleeding. That\'s Spiny.',
+    desc: 'A fish made of little knives. It cuts, and the cuts keep bleeding.',
     tier: 2,
     hp: 175,
     dmg: 9,
@@ -327,7 +330,7 @@ export const MONSTER_TYPES = {
   swampStrider: {
     name: 'Swamp Strider',
     icon: '🦟',
-    desc: 'Walks on water on long thin legs and stabs with a poison needle. It never steps in anything. Farstep.',
+    desc: 'Walks on water on long thin legs and stabs with a poison needle. It never steps in anything.',
     tier: 2,
     hp: 164,
     dmg: 12,
@@ -343,7 +346,7 @@ export const MONSTER_TYPES = {
   wilOWisp: {
     name: "Wil-o'-Wisp",
     icon: '👻',
-    desc: 'A floating light that leads you into the deep water. You can\'t quite touch it. It taught us Ethereal.',
+    desc: 'A floating light that leads you into the deep water. You can\'t quite touch it.',
     tier: 2,
     hp: 164,
     dmg: 13,
@@ -376,7 +379,7 @@ export const MONSTER_TYPES = {
   vampireBat: {
     name: 'Vampire Bat',
     icon: '🦇',
-    desc: 'It bites and drinks and gets healthier while you get worse. Lifesteal comes from here.',
+    desc: 'It bites and drinks and gets healthier while you get worse.',
     tier: 3,
     hp: 234,
     dmg: 8,
@@ -392,7 +395,7 @@ export const MONSTER_TYPES = {
   rockWorm: {
     name: 'Rock Worm',
     icon: '🪱',
-    desc: 'A worm the size of a tunnel. It throws rocks hard enough to knock you silly, then sheds its skin and carries on.',
+    desc: 'A worm the size of a tunnel. It throws rocks hard enough to knock you silly.',
     tier: 3,
     hp: 288,
     dmg: 7,
@@ -408,7 +411,7 @@ export const MONSTER_TYPES = {
   coalSprite: {
     name: 'Coal Sprite',
     icon: '🔥',
-    desc: 'A little angry spark. It throws hot dust in your face so you can\'t see. Blinding Powder.',
+    desc: 'A little angry spark. It throws hot dust in your face so you can\'t see.',
     tier: 3,
     hp: 220,
     dmg: 10,
@@ -423,7 +426,7 @@ export const MONSTER_TYPES = {
   stalagMite: {
     name: 'Stalag-Mite',
     icon: '⛰️',
-    desc: 'Hangs from the ceiling pretending to be a rock, then drops on you. Drop In.',
+    desc: 'Hangs from the ceiling pretending to be a rock, then drops on you.',
     tier: 3,
     hp: 298,
     dmg: 7,
@@ -456,7 +459,7 @@ export const MONSTER_TYPES = {
   embermander: {
     name: 'Embermander',
     icon: '🔥',
-    desc: 'A lizard that breathes fire and heals while it burns. We learned Regenerate from it.',
+    desc: 'A lizard that breathes fire and heals while it burns.',
     tier: 4,
     hp: 359,
     dmg: 13,
@@ -487,7 +490,7 @@ export const MONSTER_TYPES = {
   magmaOoze: {
     name: 'Magma Ooze',
     icon: '🌋',
-    desc: 'A slime made of lava. A cousin, sort of. It burns everything it touches, and it taught us Pyrolyze.',
+    desc: 'A slime made of lava. A cousin, sort of. We don\'t talk about that side of the family.',
     tier: 4,
     hp: 400,
     dmg: 14,
@@ -502,7 +505,7 @@ export const MONSTER_TYPES = {
   burntSpirit: {
     name: 'Burnt Spirit',
     icon: '💀',
-    desc: 'What\'s left of something that burned here long ago. It screams, and the scream stops you in your tracks. Ghastly Wail.',
+    desc: 'What\'s left of something that burned here long ago. Its scream stops you in your tracks.',
     tier: 4,
     hp: 359,
     dmg: 16,
@@ -517,7 +520,7 @@ export const MONSTER_TYPES = {
   wyrm: {
     name: 'Fire Wyrm',
     icon: '🐉',
-    desc: 'A young dragon. Rare, huge, and angry about both. Its blood makes everything stronger.',
+    desc: 'A young dragon. Rare, huge, and angry about both.',
     tier: 4,
     hp: 486,
     dmg: 15,
@@ -581,7 +584,7 @@ export const MONSTER_TYPES = {
   frostGiant: {
     name: 'Frost Giant',
     icon: '🥶',
-    desc: 'Breathes ice. Everything it breathes on slows down, us included. Permafrost comes from here.',
+    desc: 'Breathes ice. Everything it breathes on slows down, us included.',
     tier: 5,
     hp: 770,
     dmg: 21,
@@ -615,7 +618,7 @@ export const MONSTER_TYPES = {
   voidTendril: {
     name: 'Void Tendril',
     icon: '🦑',
-    desc: 'An arm with no body. It reaches through whatever you put in front of it and eats what it finds.',
+    desc: 'An arm with no body. It reaches through whatever you put in front of it.',
     tier: 6,
     hp: 975,
     dmg: 30,
@@ -688,6 +691,35 @@ export const MONSTER_TYPES = {
     element: null,
     mutation: 'voidTouched',
     rare: true,
+  },
+
+  // ── Secret ─────────────────────────────────────────────────────────────────
+  //
+  // In no zone's spawn table. It only turns up in the forest, for a party that
+  // has eaten enough of its children and carries the thing we stole from it.
+  // See docs/GAME_DESIGN.md §24 and the expedition spawn in expedition.js.
+  oldGullet: {
+    name: 'Old Gullet',
+    icon: '🥀',
+    desc: 'The first slimetrap. Every one in the forest grew from its seeds. We learned to eat inside this thing, a long time ago, and it has never forgiven us for leaving.',
+    tier: 2,
+    // Tuned so the rule decides the fight: four Enhanced slimes at stat 12
+    // win 0% with no Digest among them, ~70% with two, every time with four.
+    hp: 600,
+    dmg: 9,
+    actions: 2,
+    biomass: 150,
+    mats: ['Slimetrap Vine', 'Digestive Sac'],
+    element: 'nature',
+    mechanic: 'swallow',
+    abilities: ['Swallow: digests what a slime is carrying and heals on it'],
+    counter: 'It cannot digest a slime that already knows how. Bring slimes with Digest. Anything that burns stops its healing too.',
+    mutation: 'firstStomach',
+    guaranteedMutagen: true,
+    secret: 'gullet',
+    isBoss: true,
+    rare: false,
+    drop: 0,
   },
 };
 

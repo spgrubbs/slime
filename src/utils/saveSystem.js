@@ -35,6 +35,8 @@ export const getDefaultState = () => ({
   wardenTries: {},       // { [zone]: hunts started }, reveals the counter
   purchasedSkills: ['expeditionBasics', 'hiveFoundation', 'combatTraining'], // roots are free
   merchant: null,        // Mossback: { firstVisit, visit, deals, taken }
+  guide: { flags: {}, dismissed: false }, // Glub's first steps (tutorialData.js)
+  secrets: {},           // { gullet: 'beaten' }: secret bosses found
   prisms: 0,
   ranchBuildings: {},
   ranchAssignments: {},

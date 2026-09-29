@@ -237,6 +237,11 @@ test('no mutagen drops before Unstable Genes is bought', () => {
 test('every mutation is obtainable from a monster that exists in a zone', () => {
   const inAZone = new Set(Object.values(ZONES).flatMap(z => z.monsters));
   Object.entries(MUTATION_LIBRARY).forEach(([id, m]) => {
+    // A secret boss is not in a spawn table by design; it guarantees its drop.
+    if (MONSTER_TYPES[m.monster]?.secret) {
+      assert.ok(MONSTER_TYPES[m.monster].guaranteedMutagen, `${id}: secret source must guarantee it`);
+      return;
+    }
     assert.ok(inAZone.has(m.monster), `${id} comes from ${m.monster}, which no zone spawns`);
   });
 });

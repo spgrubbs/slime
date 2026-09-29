@@ -8,7 +8,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { MUTATION_LIBRARY, SLIME_TRAITS, STATUS_EFFECTS } from '../data/traitData.js';
-import { MONSTER_ABILITIES } from '../data/monsterData.js';
+import { MONSTER_ABILITIES, MONSTER_TYPES } from '../data/monsterData.js';
 import { WARDENS } from '../data/wardenData.js';
 import { hasEffect } from './hooks.js';
 
@@ -47,6 +47,13 @@ export function validateRegistry({ throwOnError = true } = {}) {
       errors.push(`Warden "${zone}" has no \`mechanic\` — it would be a stat check`);
     } else if (!hasEffect('warden', w.mechanic)) {
       errors.push(`Warden "${zone}" declares mechanic "${w.mechanic}" with no registered effect`);
+    }
+  }
+
+  // Secret bosses carry a mechanic the same way Wardens do.
+  for (const [id, m] of Object.entries(MONSTER_TYPES)) {
+    if (m.mechanic && !hasEffect('warden', m.mechanic)) {
+      errors.push(`Monster "${id}" declares mechanic "${m.mechanic}" with no registered effect`);
     }
   }
 

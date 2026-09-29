@@ -55,6 +55,10 @@ const WelcomeBackModal = ({ data, onClose }) => {
             </Block>
           )}
 
+          {r.secretsFound?.includes('gullet') && (
+            <Block label="🥀 Something very old came up out of the forest floor" color="#86efac">We beat it. Old Gullet won't come up again.</Block>
+          )}
+
           {Object.keys(r.monsterKillsGained || {}).length > 0 && (
             <Block label="Who we ate" color="#a855f7">
               {list(r.monsterKillsGained, ([m, c]) => `${MONSTER_TYPES[m]?.icon || '?'} ${MONSTER_TYPES[m]?.name || m} ×${c}`)}

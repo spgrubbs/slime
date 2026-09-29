@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   CARAVAN_UNITS, rollCaravan, caravanManifest, caravanValue,
   getCaravanScaling, caravanDay, ESCAPE_ROUNDS, catapultDamage,
@@ -6,6 +6,8 @@ import {
 import { STAT_INFO } from '../data/slimeData.js';
 import SlimeSprite from './SlimeSprite.jsx';
 import CombatView from './CombatView.jsx';
+import { ROUND_MS } from '../data/gameConstants.js';
+import { cue } from '../audio/index.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Caravan ambush
@@ -96,7 +98,7 @@ function Setup({ slimes, getSlimeStats, tier, scouted, squadSize, catapults, coo
       <div style={{ ...panel, marginBottom: 12 }}>
         <div style={label}>Ambush squad ({squad.length}/{squadSize})</div>
         <div style={{ display: 'flex', gap: 12, fontSize: 10, opacity: 0.7, marginBottom: 10, flexWrap: 'wrap' }}>
-          <span>⏳ {ESCAPE_ROUNDS} rounds</span>
+          <span>🏃 about {Math.round(ESCAPE_ROUNDS * ROUND_MS / 1000)}s before they're gone</span>
           <span>💰 paid per kill</span>
           <span>🏃 leave any time</span>
         </div>
@@ -161,40 +163,31 @@ function Setup({ slimes, getSlimeStats, tier, scouted, squadSize, catapults, coo
 
 // ── Battle ───────────────────────────────────────────────────────────────────
 
-function EscapeClock({ round, escapeRounds }) {
-  const left = Math.max(0, escapeRounds - round);
-  const pct = Math.max(0, Math.min(1, left / escapeRounds));
-  const urgent = left <= 6;
-  const color = urgent ? '#ef4444' : left <= 12 ? '#f59e0b' : '#22d3ee';
-
-  return (
-    <div style={{ ...panel, marginBottom: 10, borderLeft: `3px solid ${color}` }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
-        <span style={{ fontSize: 12, fontWeight: 'bold' }}>
-          {urgent ? '⚠️ They are almost clear' : '⏳ Time to work'}
-        </span>
-        <span style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 15, fontWeight: 'bold', color }}>
-          {left} <span style={{ fontSize: 10, opacity: 0.7 }}>rounds left</span>
-        </span>
-      </div>
-      <div style={{ height: 8, background: 'rgba(0,0,0,0.55)', borderRadius: 4, overflow: 'hidden' }}>
-        <div style={{
-          width: `${pct * 100}%`, height: '100%', background: color,
-          transition: 'width 0.3s linear',
-        }} />
-      </div>
-      <div style={{ fontSize: 9, opacity: 0.55, marginTop: 4 }}>
-        Round {round} of {escapeRounds}
-      </div>
-    </div>
-  );
-}
-
-function Battle({ ambush, verboseLogs, setVerboseLogs, onRetreat }) {
+function Battle({ ambush, verboseLogs, setVerboseLogs, onRetreat, onClose }) {
   const remaining = ambush.units.filter(u => !u.dead).length;
-  const roundsLeft = Math.max(0, ambush.escapeRounds - ambush.round);
   const matLine = Object.entries(ambush.banked.mats)
     .map(([m, c]) => `${c}× ${m}`).join(', ');
+  const over = !!ambush.summary;
+
+  // The result waits a beat after the fight ends so the last blow is seen
+  // landing, then comes up over the battle instead of replacing the screen.
+  const [showResult, setShowResult] = useState(false);
+  useEffect(() => {
+    if (!over) { setShowResult(false); return undefined; }
+    const t = setTimeout(() => {
+      setShowResult(true);
+      const reason = ambush.summary.reason;
+      cue(reason === 'rout' ? 'fanfare' : reason === 'wiped' ? 'fall'
+        : ambush.summary.banked.biomass > 0 ? 'victory' : 'recall');
+    }, 1300);
+    return () => clearTimeout(t);
+  }, [over]);
+
+  // How far down the road the column has walked, smoothly between rounds.
+  // The walk is the clock: when the head of the column reaches the far edge,
+  // it is clear of the ambush.
+  const progress = Math.min(1,
+    (ambush.round + Math.min(1, (ambush.roundTimer || 0) / ROUND_MS)) / ambush.escapeRounds);
 
   const view = {
     zone: 'road',
@@ -202,12 +195,11 @@ function Battle({ ambush, verboseLogs, setVerboseLogs, onRetreat }) {
     enemies: ambush.units.filter(u => !u.dead).slice(0, 6),
     focusId: ambush.units.find(u => !u.dead)?.id,
     marching: true,
-    marchProgress: ambush.round / ambush.escapeRounds,
+    marchProgress: over ? (ambush.summary.reason === 'escaped' ? 1 : progress) : progress,
   };
 
   return (
-    <div>
-      <EscapeClock round={ambush.round} escapeRounds={ambush.escapeRounds} />
+    <div style={{ position: 'relative' }}>
       <CombatView
         view={view}
         anim={ambush.anim}
@@ -217,7 +209,6 @@ function Battle({ ambush, verboseLogs, setVerboseLogs, onRetreat }) {
         hud={[
           { text: `🎯 ${ambush.killed.length} down · ${remaining} left`, color: '#f59e0b' },
           ...(ambush.catapults > 0 ? [{ text: `🪃 ×${ambush.catapults}`, color: '#4ade80' }] : []),
-          { text: `⏳ ${roundsLeft}`, color: roundsLeft <= 6 ? '#ef4444' : '#22d3ee' },
         ]}
       />
 
@@ -227,16 +218,31 @@ function Battle({ ambush, verboseLogs, setVerboseLogs, onRetreat }) {
         {matLine && <div style={{ fontSize: 11, opacity: 0.85 }}>📦 {matLine}</div>}
       </div>
 
-      <button
-        onClick={onRetreat}
-        style={{
-          width: '100%', marginTop: 10, padding: 12, borderRadius: 8,
-          border: '1px solid rgba(255,255,255,0.25)', background: 'rgba(0,0,0,0.4)',
-          color: '#e0e0e0', fontWeight: 'bold', cursor: 'pointer',
-        }}
-      >
-        🏃 Break off — keep the haul
-      </button>
+      {!over && (
+        <button
+          onClick={onRetreat}
+          style={{
+            width: '100%', marginTop: 10, padding: 12, borderRadius: 8,
+            border: '1px solid rgba(255,255,255,0.25)', background: 'rgba(0,0,0,0.4)',
+            color: '#e0e0e0', fontWeight: 'bold', cursor: 'pointer',
+          }}
+        >
+          🏃 Break off and keep the haul
+        </button>
+      )}
+
+      {over && showResult && (
+        <div style={{
+          position: 'absolute', inset: 0, zIndex: 5, display: 'flex', alignItems: 'flex-start',
+          justifyContent: 'center', paddingTop: 8, background: 'rgba(5,7,10,0.82)', borderRadius: 8,
+          animation: 'sqResultIn 0.35s ease-out',
+        }}>
+          <style>{'@keyframes sqResultIn { from { opacity: 0; transform: translateY(12px) scale(0.97); } to { opacity: 1; transform: none; } }'}</style>
+          <div style={{ width: '100%', maxWidth: 420, background: '#151b28', borderRadius: 10, boxShadow: '0 12px 40px rgba(0,0,0,0.6)' }}>
+            <Result summary={ambush.summary} onClose={onClose} />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -249,9 +255,9 @@ function Result({ summary, onClose }) {
 
   const title = {
     rout: '💎 Caravan routed',
-    escaped: '🌫️ They broke through',
-    retreated: '🏃 Withdrew with the haul',
-    wiped: '💀 Squad lost',
+    escaped: '🌫️ They got away',
+    retreated: '🏃 We slipped away with the haul',
+    wiped: '💀 Squad down',
   }[reason];
 
   return (
@@ -262,7 +268,7 @@ function Result({ summary, onClose }) {
     }}>
       <div style={{ fontSize: 18, fontWeight: 'bold', textAlign: 'center', marginBottom: 4 }}>{title}</div>
       <div style={{ fontSize: 11, textAlign: 'center', opacity: 0.75, marginBottom: 12 }}>
-        {killed.length} killed · {remaining} escaped · {rounds} rounds
+        {killed.length} caught · {remaining} got away
       </div>
 
       <div style={{ ...panel, marginBottom: 8 }}>
@@ -280,16 +286,16 @@ function Result({ summary, onClose }) {
       {routed && (
         <div style={{ ...panel, marginBottom: 8, borderLeft: '3px solid #22d3ee' }}>
           <div style={{ fontSize: 11, color: '#22d3ee' }}>
-            The road gets more dangerous. Caravans rise to <strong>tier {nextTier}</strong> —
-            bigger columns, tougher escorts, better cargo.
+            Word gets around. Caravans rise to <strong>tier {nextTier}</strong>: bigger
+            columns, tougher guards, better cargo.
           </div>
         </div>
       )}
 
       {lost.length > 0 && (
         <div style={{ ...panel, marginBottom: 8, borderLeft: '3px solid #ef4444' }}>
-          <div style={label}>Lost in the ambush</div>
-          {lost.map(s => <div key={s.id} style={{ fontSize: 11, color: '#f87171' }}>💔 {s.name}</div>)}
+          <div style={label}>Hurt, need to mend</div>
+          {lost.map(s => <div key={s.id} style={{ fontSize: 11, color: '#f87171' }}>🩹 {s.name}</div>)}
         </div>
       )}
 
@@ -309,7 +315,7 @@ function Result({ summary, onClose }) {
           color: '#fff', cursor: 'pointer', background: 'linear-gradient(135deg, #4ade80, #22d3ee)',
         }}
       >
-        Close
+        Back to the road
       </button>
     </div>
   );
@@ -335,13 +341,13 @@ export default function Caravan({
       />
     );
   }
-  if (ambush.summary) return <Result summary={ambush.summary} onClose={onClose} />;
   return (
     <Battle
       ambush={ambush}
       verboseLogs={verboseLogs}
       setVerboseLogs={setVerboseLogs}
       onRetreat={onRetreat}
+      onClose={onClose}
     />
   );
 }

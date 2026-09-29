@@ -2,8 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import './index.js';
-import { makeSlimeCombatant, makeEnemyCombatant, resolveRound } from './resolveRound.js';
-import { makeExpedition, tickExpedition } from './expedition.js';
+import { makeSlimeCombatant, makeEnemyCombatant, resolveRound, resolveKill } from './resolveRound.js';
+import { makeExpedition, tickExpedition, rollSecret } from './expedition.js';
 import {
   WARDENS, WARDEN_TYPES, ZONE_ORDER, wardenTypeId, wardenMonster,
   prerequisiteZone, ALL_SEALS, ALL_HEARTS, WARDEN_PLUS_HP, WARDEN_PLUS_DMG,
@@ -379,4 +379,43 @@ test('a warden hunt survives a save round trip', async () => {
   const back = hydrateExpedition(saved, roster);
   assert.deepEqual(back.warden, { zone: 'forest', plus: true });
   assert.equal(back.enemy.isWarden, true);
+});
+
+// ── Old Gullet, the secret ───────────────────────────────────────────────────
+
+test('Old Gullet only rises for an eligible player whose party carries Digest', () => {
+  const party = (muts) => [0, 1].map(() => makeSlimeCombatant({ ...slimeAt('enhanced', 12), mutations: muts }));
+  const always = () => 0;
+  const exp = (muts) => ({ slimes: party(muts), secretMet: false });
+  assert.equal(rollSecret('forest', exp(['digest']), { secrets: {} }, always), null, 'not earned yet');
+  assert.equal(rollSecret('forest', exp([]), { secrets: { gullet: true } }, always), null, 'no Digest carrier');
+  assert.equal(rollSecret('swamp', exp(['digest']), { secrets: { gullet: true } }, always), null, 'forest only');
+  assert.equal(rollSecret('forest', exp(['digest']), { secrets: { gullet: true } }, always)?.type, 'oldGullet');
+  assert.equal(rollSecret('forest', { ...exp(['digest']), secretMet: true }, { secrets: { gullet: true } }, always), null, 'once per trip');
+});
+
+test('Digest is the answer to Old Gullet', () => {
+  const winRate = (digestCount) => {
+    let wins = 0;
+    for (let t = 0; t < 120; t++) {
+      const rng = mulberry32(t * 7919 + 11);
+      const world = { round: 0, enemy: makeEnemyCombatant('oldGullet'),
+        slimes: [0, 1, 2, 3].map(i => makeSlimeCombatant({ ...slimeAt('enhanced', 12), mutations: i < digestCount ? ['digest'] : [] })) };
+      for (let r = 0; r < 250 && !world.enemy.dead && !world.slimes.every(s => s.dead); r++) resolveRound(world, { rng });
+      if (world.enemy.dead) wins++;
+    }
+    return wins / 120;
+  };
+  const none = winRate(0), two = winRate(2), four = winRate(4);
+  assert.ok(none <= 0.1, `without Digest it should be a wall (${none})`);
+  assert.ok(two >= 0.4, `two Digest slimes should make it winnable (${two})`);
+  assert.ok(four >= 0.9, `a full Digest party should win (${four})`);
+});
+
+test('Old Gullet always gives up First Stomach', () => {
+  const world = { slimes: [makeSlimeCombatant(slimeAt('enhanced', 12))], enemy: makeEnemyCombatant('oldGullet') };
+  const se = [];
+  resolveKill(world, { rng: () => 0.99, passives: [] }, [], se, null);
+  assert.ok(se.some(e => e.type === 'mutagen' && e.mutation === 'firstStomach'));
+  assert.ok(se.some(e => e.type === 'secretDown' && e.id === 'gullet'));
 });

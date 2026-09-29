@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { ZONES } from '../data/zoneData.js';
-import { MONSTER_TYPES, MONSTER_ABILITIES, MATERIAL_RATES, MUTAGEN_RATES, MUTAGEN_PITY_KILLS, materialDropChance } from '../data/monsterData.js';
+import { MONSTER_TYPES, MONSTER_ABILITIES, MATERIAL_RATES, MUTAGEN_RATES, MUTAGEN_PITY_KILLS, GULLET_TRAP_KILLS, materialDropChance } from '../data/monsterData.js';
 import { MUTATION_LIBRARY, SLIME_TRAITS, STATUS_EFFECTS, TRAIT_RARITY_COLORS, traitDesc } from '../data/traitData.js';
 import { SLIME_TIERS, STAT_INFO } from '../data/slimeData.js';
 import { ELEMENTS } from '../data/gameConstants.js';
@@ -52,6 +52,50 @@ function Guide({ seenTutorials = [] }) {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+// ── The secret under the forest ──────────────────────────────────────────────
+//
+// Nothing about Old Gullet is shown until the player has eaten a hundred
+// slimetraps. Then a rumor, then what it wants, and only after it is beaten the
+// full entry. The rumor is the whole trail: it is how the player finds it.
+
+function GulletCard({ kills, wardenBeaten, beaten }) {
+  const g = MONSTER_TYPES.oldGullet;
+  if (beaten) {
+    return (
+      <div style={{ background: 'rgba(21,128,61,0.12)', border: '1px solid rgba(21,128,61,0.45)', borderRadius: 10, padding: 12, marginBottom: 15 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: 26 }}>{g.icon}</span>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 'bold', fontSize: 13, color: '#86efac' }}>{g.name}</div>
+            <div style={{ fontSize: 10, opacity: 0.7 }}>Beaten · it doesn't come up any more</div>
+          </div>
+        </div>
+        <div style={{ fontSize: 11, opacity: 0.8, marginTop: 8 }}>{g.desc}</div>
+        {(g.abilities || []).map(a => <div key={a} style={{ fontSize: 11, color: '#86efac', marginTop: 6 }}>◆ {a}</div>)}
+        <div style={{ marginTop: 8, fontSize: 11, color: '#86efac' }}>💡 {g.counter}</div>
+        <div style={{ marginTop: 6, fontSize: 10, color: '#c084fc' }}>Gave up: First Stomach</div>
+      </div>
+    );
+  }
+  if (kills < 100) return null;
+  const awake = kills >= GULLET_TRAP_KILLS;
+  return (
+    <div style={{ background: 'rgba(0,0,0,0.3)', border: '1px dashed rgba(134,239,172,0.35)', borderRadius: 10, padding: 12, marginBottom: 15 }}>
+      <div style={{ fontWeight: 'bold', fontSize: 13, color: '#86efac' }}>❓ Something under the forest</div>
+      <div style={{ fontSize: 11, opacity: 0.8, marginTop: 6 }}>
+        The slimetraps all lean the same way now, like something under the roots is calling them. Something big and very old.
+      </div>
+      <div style={{ fontSize: 11, color: '#fbbf24', marginTop: 6 }}>
+        {!awake
+          ? `We'd have to eat a lot more of its children to wake it. (${kills}/${GULLET_TRAP_KILLS})`
+          : !wardenBeaten
+            ? "It's awake, but it won't come up while the Verdant Warden still stands."
+            : "It's awake. I think it only comes up for slimes that carry what we took from its children."}
+      </div>
     </div>
   );
 }
@@ -167,7 +211,7 @@ function Reference() {
   );
 }
 
-const Compendium = ({ queen, monsterKills, mutagens = {}, wardenKills = {}, wardenTries = {},
+const Compendium = ({ queen, monsterKills, mutagens = {}, wardenKills = {}, wardenTries = {}, secrets = {},
                      mutationsUnlocked = false, affinityUnlocked = false, seenTutorials = [] }) => {
   const [tab, setTab] = useState('zones'); // 'zones' | 'guide' | 'reference'
   const [zone, setZone] = useState('forest');
@@ -256,6 +300,14 @@ const Compendium = ({ queen, monsterKills, mutagens = {}, wardenKills = {}, ward
               </div>
             );
           })()}
+
+          {zone === 'forest' && (
+            <GulletCard
+              kills={monsterKills?.venusSlimetrap || 0}
+              wardenBeaten={(wardenKills?.forest || 0) > 0}
+              beaten={secrets.gullet === 'beaten'}
+            />
+          )}
 
           <div style={{ fontSize: 14, fontWeight: 'bold', marginBottom: 10 }}>What lives here</div>
           {z.monsters.map(mid => {

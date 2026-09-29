@@ -1529,3 +1529,65 @@ drifted apart, which is how the earlier save and offline bugs got in.
 - The placeholder real-money prism packs are gone.
 - The Warden balance test used random ids, which break turn-order ties, and
   failed about one run in ten. Ids are deterministic now.
+
+
+## 24. Playtest round three: the road, the tapping, first steps, and Old Gullet
+
+### The caravan walks
+
+The column used to stand still while a round counter ran down. It now walks the
+road from left to right over the escape window, and when its head reaches the
+dark edge on the right it is clear of the ambush: the movement is the clock, so
+the counter is gone. Units behind the leader walk on from the left, and one
+stepping up to replace a fallen leader eases into place.
+
+When the fight ends, the battle stays on screen for a beat so the last blow is
+seen landing, then the result comes up over it with **Back to the road**. It
+used to replace the whole screen the instant the last unit fell. A rout plays a
+fanfare; a haul where some got away, a smaller one.
+
+### The tapping
+
+Ordinary hits were a bright noise transient plus a thump, one per swing. Four
+slimes swinging every round read as constant tapping. Hits are now a single
+muffled thump at lower volume, and plain hits collapse to one per side per
+round. Crits, dodges, kills and falls always sound.
+
+### Biomass collection and first steps
+
+- **Squeeze all** on The Spawn collects every home slime's carried biomass at
+  once, with a line explaining the trade-off (stronger while carried, spilled
+  on a fall). Reabsorb is now a small outlined link with a confirmation, not a
+  big orange button beside the thing you do every session.
+- **Glub's first steps**: a banner that walks a new player through bud a slime,
+  send it out, let it eat, call it home, squeeze it, level the Queen, learn an
+  Instinct. Each step completes from game state, so doing things out of order
+  skips ahead, and existing saves are not sent back to step two. "Show me"
+  switches to the right screen; "skip" hides it for good.
+
+### Monster notes
+
+Glub's field notes no longer name the mutation each monster gives. The
+Compendium already shows that under the entry.
+
+### Old Gullet, the first slimetrap
+
+The lore: slimes did not always eat. They learned, from the inside, by being
+eaten by slimetraps; Digest is a stolen gift. Old Gullet is the first trap, the
+one every other grew from, and it wants its stomach back.
+
+| | |
+|---|---|
+| Where | The Verdant Forest, never in the spawn table |
+| Wakes | after the forest Warden is beaten and 250 slimetraps have been eaten |
+| Rises | 3% per fight, once per trip, only for a party carrying a Digest slime |
+| Rule | **Swallow**: its hits heal it 3× the damage and digest 15% of the target's carried biomass |
+| Answer | a slime with Digest cannot be digested; burn stops the healing |
+| Reward | **First Stomach**, a unique mutation (every kill: +% biomass for the party, the carrier mends); Glub tells the origin story |
+
+Tuned so the rule decides the fight: four Enhanced slimes at stat 12 win 0% with
+no Digest among them, about 70% with two, and every time with four.
+
+The trail is in Memory: after 100 slimetraps a rumor appears under the Verdant
+Forest ("something under the roots is calling them"), then what it is waiting
+for, then, once beaten, the full entry.

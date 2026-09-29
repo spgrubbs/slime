@@ -36,6 +36,7 @@ export const calculateOfflineProgress = (saved, bonuses, offlineCtx = {}, now = 
     wardensFelled: [],
     events: [],            // [{ zone, type: 'wipe' | 'complete', at }] with timestamps
     mutagensFound: {},
+    secretsFound: [],
     prismsFound: 0,
     salvaged: {},
     completed: [],
@@ -98,6 +99,8 @@ export const calculateOfflineProgress = (saved, bonuses, offlineCtx = {}, now = 
             : sl);
         } else if (se.type === 'wardenDown') {
           results.wardensFelled.push({ zone: se.zone, plus: se.plus });
+        } else if (se.type === 'secretDown') {
+          results.secretsFound.push(se.id);
         } else if (se.type === 'mutagen') {
           results.mutagensFound[se.mutation] = (results.mutagensFound[se.mutation] || 0) + 1;
         } else if (se.type === 'prism') {

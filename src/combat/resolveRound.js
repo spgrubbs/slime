@@ -8,7 +8,8 @@
 // See docs/GAME_DESIGN.md §9.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { STATUS_EFFECTS } from '../data/traitData.js';
+import { STATUS_EFFECTS, MUTATION_LIBRARY } from '../data/traitData.js';
+const MUTATION_LIBRARY_NAME = (id) => MUTATION_LIBRARY[id]?.name || id;
 import {
   MONSTER_TYPES, MONSTER_ABILITIES, materialDropChance, mutagenDropChance,
 } from '../data/monsterData.js';
@@ -747,7 +748,14 @@ export function resolveKill(world, ctx, records, sideEffects, zoneDef) {
   // Gated on the Unstable Genes skill. Before it, a mutagen is an item the
   // player cannot use and has had nothing explained about, so it should not
   // drop at all rather than pile up unexplained.
-  if (md.mutation && ctx.passives?.includes('mutagenesis')) {
+  // A secret boss always gives up its mutagen, unlocked or not: it is the
+  // reward, not a drop.
+  if (md.secret) sideEffects.push({ type: 'secretDown', id: md.secret });
+  if (md.guaranteedMutagen && md.mutation) {
+    sideEffects.push({ type: 'mutagen', mutation: md.mutation });
+    records.push({ kind: 'reward', log: { m: `🥣 ${md.name} gives up its ${MUTATION_LIBRARY_NAME(md.mutation)} mutagen.`, c: '#a855f7',
+      v: 'guaranteed: secret boss' } });
+  } else if (md.mutation && ctx.passives?.includes('mutagenesis')) {
     // Trophy Hunter: the first rare monster each expedition always gives up
     // its mutagen. It used to be every rare kill, and with Quarry Scent
     // raising rare spawns to one in eight that was hundreds of mutagens a night.

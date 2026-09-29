@@ -70,7 +70,7 @@ const logsOf = (records) => records.map(r => r.log?.m).filter(Boolean).join(' | 
 test('every mutation and trait resolves to a registered effect', () => {
   const result = validateRegistry({ throwOnError: false });
   assert.deepEqual(result.errors, []);
-  assert.equal(result.mutations, 30);
+  assert.equal(result.mutations, 31); // 30 from zone monsters, 1 from Old Gullet
   assert.equal(result.traits, 18);
 });
 

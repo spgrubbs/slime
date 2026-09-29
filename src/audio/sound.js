@@ -192,13 +192,14 @@ const SOUNDS = {
     tone({ f0: (440 - i * 90) * p, f1: (330 - i * 70) * p, dur: 0.09, at, gain: 0.11, lp: 1500 })),
 
   // Combat
-  hit:      (p) => {
-    noise({ type: 'bandpass', f0: 1300 * p, f1: 400 * p, dur: 0.06, gain: 0.16, q: 1.5 });
-    tone({ f0: 170 * p, f1: 80 * p, dur: 0.07, gain: 0.16 });
-  },
+  // Ordinary hits are the most common sound in the game, so they are the
+  // quietest and softest: a low muffled thump with no click on top. The first
+  // version had a bright noise transient that, four slimes deep, turned into
+  // constant tapping.
+  hit:      (p) => tone({ f0: 150 * p, f1: 75 * p, dur: 0.08, gain: 0.09, lp: 420, q: 1 }),
   hurt:     (p) => {
-    noise({ type: 'lowpass', f0: 700 * p, f1: 200 * p, dur: 0.1, gain: 0.18 });
-    tone({ f0: 130 * p, f1: 60 * p, dur: 0.12, gain: 0.18, lp: 500, q: 6 });
+    noise({ type: 'lowpass', f0: 500 * p, f1: 160 * p, dur: 0.1, gain: 0.08 });
+    tone({ f0: 120 * p, f1: 58 * p, dur: 0.12, gain: 0.12, lp: 420, q: 4 });
   },
   crit:     (p) => {
     noise({ type: 'bandpass', f0: 2000 * p, f1: 500 * p, dur: 0.08, gain: 0.2, q: 1.2 });
@@ -253,6 +254,21 @@ const SOUNDS = {
     tone({ type: 'sawtooth', f0: 58.3, dur: 1.4, gain: 0.1, attack: 0.5, lp: 380, q: 4 });
     tone({ f0: 90, f1: 40, dur: 0.4, at: 1.1, gain: 0.3 });
   },
+  // A ta-da for routing a whole caravan: a quick run up, a held chord, and a
+  // thump under it.
+  fanfare:  () => {
+    const run = [523, 659, 784, 1047, 784, 1047];
+    const at = [0, 0.1, 0.2, 0.3, 0.48, 0.58];
+    run.forEach((f, i) => tone({ type: 'triangle', f0: f, dur: i === run.length - 1 ? 0.25 : 0.12, at: at[i], gain: 0.13 }));
+    [523, 659, 784, 1047].forEach(f => tone({ type: 'triangle', f0: f, dur: 1.3, at: 0.72, gain: 0.06, attack: 0.02 }));
+    [0, 0.3, 0.72].forEach(t => tone({ f0: 110, f1: 55, dur: 0.18, at: t, gain: 0.22 }));
+    tone({ type: 'sine', f0: 2093, dur: 0.6, at: 0.72, gain: 0.03 });
+  },
+  // Smaller: a good haul, but they got away.
+  victory:  () => {
+    [659, 784, 1047].forEach((f, i) => tone({ type: 'triangle', f0: f, dur: 0.14, at: i * 0.1, gain: 0.11 }));
+    [659, 1047].forEach(f => tone({ type: 'triangle', f0: f, dur: 0.6, at: 0.32, gain: 0.05, attack: 0.02 }));
+  },
   wardenDown: () => {
     [392, 523, 659, 784].forEach((f, i) => tone({ type: 'triangle', f0: f, dur: 0.18, at: i * 0.12, gain: 0.12 }));
     [523, 659, 784, 1047].forEach(f => tone({ type: 'triangle', f0: f, dur: 1.0, at: 0.5, gain: 0.05, attack: 0.03 }));
@@ -260,7 +276,7 @@ const SOUNDS = {
 };
 
 // Minimum gap (ms) before the same sound can play again.
-const MIN_GAP = { tap: 40, hit: 70, hurt: 90, crit: 80, dodge: 90, eat: 120, stun: 150, drop: 90 };
+const MIN_GAP = { tap: 40, hit: 260, hurt: 260, crit: 80, dodge: 120, eat: 120, stun: 150, drop: 90 };
 // Which sounds are varied in pitch: the repeated ones.
 const VARIED = new Set(['hit', 'hurt', 'crit', 'dodge', 'eat', 'squish', 'bud', 'drop', 'fall', 'stun']);
 const lastPlayed = {};
@@ -272,7 +288,7 @@ export function sfx(name) {
   if (!play) return;
   const now = performance.now();
   if (now - (lastPlayed[name] || 0) < (MIN_GAP[name] || 0)) return;
-  if (voices >= MAX_VOICES && !['wardenDown', 'levelUp', 'warden', 'rare'].includes(name)) return;
+  if (voices >= MAX_VOICES && !['wardenDown', 'levelUp', 'warden', 'rare', 'fanfare', 'victory'].includes(name)) return;
   lastPlayed[name] = now;
   const p = VARIED.has(name) ? 1 + (Math.random() - 0.5) * 0.12 : 1;
   try { play(p); } catch { /* audio is never worth a crash */ }

@@ -269,6 +269,11 @@ function stepDrips(m, viscosity, dt, now) {
   m.drips = m.drips.filter(p => { p.life += dt; return p.life < p.ttl; });
 }
 
+// The caravan's walk: where the head of the column starts, and where it is
+// clear of the ambush.
+const MARCH_START = 0.34;
+const MARCH_END = 1.02;
+
 // ── Drawing ──────────────────────────────────────────────────────────────────
 
 /**
@@ -383,6 +388,13 @@ function drawGround(ctx, zone, tick) {
     ctx.moveTo(0, groundY(0.51));
     ctx.lineTo(CANVAS_W, groundY(0.51));
     ctx.stroke();
+    // Where the road leaves the screen: past this, the caravan is gone.
+    const edgeX = fieldX(MARCH_END - 0.04);
+    const fade = ctx.createLinearGradient(edgeX, 0, CANVAS_W, 0);
+    fade.addColorStop(0, 'rgba(10,14,10,0)');
+    fade.addColorStop(1, 'rgba(10,14,10,0.75)');
+    ctx.fillStyle = fade;
+    ctx.fillRect(edgeX, HORIZON, CANVAS_W - edgeX, CANVAS_H - HORIZON);
   }
 
   // Perspective bands — cheap, and they sell the plane better than a grid.
@@ -625,10 +637,17 @@ export function drawFrame(ctx, view, motions, dt, now, tick) {
     if (!motions.has(e.id)) motions.set(e.id, makeMotion(i, (view.enemies || []).length, 'enemy'));
     const m = motions.get(e.id);
     if (view.marching) {
-      // A column on the move: the lead unit — the one being fought — is out
-      // front to the right, with the rest strung out behind it up the road.
-      const drift = Math.sin(now / 900 + i * 0.7) * 0.006;
-      m.x = 0.70 - i * 0.105 + drift;
+      // The column walks the road from left to right, and when its head
+      // reaches the far edge it is gone: the movement IS the escape clock.
+      // The lead unit (the one being fought) is out front, the rest strung
+      // out behind it, still coming onto the screen from the left.
+      const p = Math.max(0, Math.min(1, view.marchProgress || 0));
+      const head = MARCH_START + p * (MARCH_END - MARCH_START);
+      const tx = head - i * 0.105 + Math.sin(now / 900 + i * 0.7) * 0.006;
+      // Eased rather than snapped, so a unit stepping up to replace a fallen
+      // leader walks into place.
+      m.x = m.x == null || m.marchInit !== true ? tx : m.x + (tx - m.x) * Math.min(1, 3 * dt);
+      m.marchInit = true;
       m.d = 0.40 + ((i * 2) % 3) * 0.11 + Math.sin(now / 1400 + i) * 0.015;
       m.hopPhase += dt * 3.4;
       m.hop = Math.abs(Math.sin(m.hopPhase)) * 2.2;

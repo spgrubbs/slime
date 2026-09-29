@@ -178,6 +178,19 @@ export const TUTORIALS = {
     when: (s) => s.wardenProvoked,
   },
 
+  gullet: {
+    id: 'gullet',
+    category: 'expedition',
+    title: 'Where eating came from',
+    icon: '🥀',
+    body: [
+      'A long time ago we didn\'t eat. We sat in the sun and soaked, and that was all a slime was.',
+      'Then the slimetraps came, and ate us, and ate us. The ones that got back out had learned, from the inside, what a stomach does. That\'s where **Digest** came from. Old Gullet was the first trap. Every one in the forest grew from its seeds.',
+      'Now its stomach is ours too. **First Stomach** feeds the whole party on every kill. Give it to a slime you like.',
+    ],
+    when: (s) => s.gulletBeaten,
+  },
+
   tendrils: {
     id: 'tendrils',
     category: 'hive',
@@ -249,3 +262,32 @@ export function nextTutorial(state, seen = []) {
   }
   return null;
 }
+
+// ── Glub's first steps ───────────────────────────────────────────────────────
+//
+// A guided first run, shown as a small banner until it is done: bud a slime,
+// send it out, let it eat, bring it home, squeeze it, grow the Queen, learn an
+// Instinct. Each step completes from game state (or a flag the action sets),
+// never from a button press, so doing things out of order just skips ahead.
+//
+// `tab` is where "Show me" takes you.
+
+export const GUIDE_STEPS = [
+  { id: 'bud',     tab: 'brood', text: 'Bud your first slime. Tap "Bud a slime" in The Spawn.',
+    done: (s) => s.slimeCount > 0 },
+  { id: 'send',    tab: 'wilds', text: 'Send it into the Verdant Forest. Pick it for the party, then "Send them".',
+    done: (s) => s.flags.sent || s.totalKills > 0 },
+  { id: 'eat',     tab: 'wilds', text: 'Let it eat a few things. Five kills will do.',
+    done: (s) => s.totalKills >= 5 },
+  { id: 'home',    tab: 'wilds', text: 'Call the party home. What they carry only counts once they\'re back.',
+    done: (s) => s.flags.recalled || s.bankedKills > 0 },
+  { id: 'squeeze', tab: 'brood', text: 'Squeeze out the biomass it brought back. "Squeeze all" in The Spawn.',
+    done: (s) => s.flags.squeezed || s.queenLevel >= 2 },
+  { id: 'level',   tab: 'hive',  text: 'Grow the Queen a level with that biomass. "Level Up" on The Nucleus.',
+    done: (s) => s.queenLevel >= 2 },
+  { id: 'learn',   tab: 'hive',  text: 'Spend the point on an Instinct. Unstable Genes is a good first one.',
+    done: (s) => s.skillsLearned > 3 },
+];
+
+/** The first unfinished step, or null when the guide is complete. */
+export const currentGuideStep = (s) => GUIDE_STEPS.find(step => !step.done(s)) || null;

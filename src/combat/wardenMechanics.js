@@ -179,6 +179,30 @@ warden('nullField', {
   },
 });
 
+// ── Secret: Swallow (Old Gullet) ─────────────────────────────────────────────
+//
+// The first slimetrap digests whatever a slime is carrying and heals on it. It
+// cannot digest a slime that already knows how: Digest, the trick we stole
+// from its children, makes a slime indigestible. Burn stops the healing too,
+// through the resolver's general rule.
+
+const knowsDigestion = (c) => (c?.ref?.mutations || []).includes('digest');
+
+warden('swallow', {
+  onDamageDealt: (ev, self) => {
+    const target = ev.defender;
+    if (!target || target.side !== 'slime') return;
+    if (knowsDigestion(target)) {
+      ev.trace?.note('🌱 Indigestible — this one already knows how to digest');
+      return;
+    }
+    ev.healPct = (ev.healPct || 0) + (self.def?.heal ?? 3);
+    const eaten = Math.floor((target.biomassGained || 0) * (self.def?.digest ?? 0.15));
+    if (eaten > 0) target.biomassGained -= eaten;
+    ev.trace?.note(`🥀 Swallow — heals on the hit, digests ${eaten} carried biomass`);
+  },
+});
+
 /** Mechanic id -> the tuning its hooks read off `def`. */
 // Magnitudes solved jointly with each Warden's HP against a single target: the
 // build that answers the rule wins about three fights in four at 1.5x the
@@ -191,4 +215,5 @@ export const WARDEN_MECHANICS = {
   everburning: { rampPerRound: 0.20, floorEvery: 2 },
   stormlash:   { ignoresAvoidance: true },
   nullField:   { adaptPerHit: 0.05, adaptCap: 0.85 },
+  swallow:     { heal: 3, digest: 0.15 },
 };

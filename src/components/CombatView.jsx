@@ -61,9 +61,17 @@ export default function CombatView({
     floats.current.push(
       ...anim.beats.filter(b => b.text).map(b => ({ ...b, at: Date.now() + b.at })),
     );
+    // Plain hits collapse to one per round per side: four slimes swinging is
+    // one thump, not four. Crits, dodges, kills and falls always sound.
+    const once = new Set();
     anim.beats.forEach(b => {
       const name = beatSound(b);
-      if (name) soundTimers.current.push(setTimeout(() => cue(name), b.at));
+      if (!name) return;
+      if (name === 'hit' || name === 'hurt') {
+        if (once.has(name)) return;
+        once.add(name);
+      }
+      soundTimers.current.push(setTimeout(() => cue(name), b.at));
     });
     if (soundTimers.current.length > 60) soundTimers.current = soundTimers.current.slice(-30);
   }, [anim, view]);
