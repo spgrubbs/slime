@@ -1,17 +1,37 @@
 import React, { useState } from 'react';
-import { PRISM_PACKAGES } from '../data/ranchData.js';
 import { PRISM_SHOP } from '../data/hiveData.js';
 import SlimeSprite from './SlimeSprite.jsx';
+import { getPrefs, setPrefs, sfx, buzz, unlockAudio } from '../audio/index.js';
+import { askPermission } from '../notify.js';
 
-const SettingsTab = ({ onSave, onDelete, lastSave, prisms, slimes, purchasePrismItem }) => {
+const SettingsTab = ({ onSave, onDelete, onExport, onImport, lastSave, prisms, slimes, purchasePrismItem,
+  tutorialsOn, setTutorialsOn, seenTutorials = [], resetTutorials, totalTutorials = 0 }) => {
   const [showConfirm, setShowConfirm] = useState(false);
-  const [showPurchaseMessage, setShowPurchaseMessage] = useState(false);
+  const [audio, setAudio] = useState(getPrefs);
+  const changeAudio = (patch) => { setPrefs(patch); setAudio(getPrefs()); };
+  const [backup, setBackup] = useState('');
+  const [backupNote, setBackupNote] = useState('');
+  const [restoreCode, setRestoreCode] = useState('');
+
+  const makeBackup = async () => {
+    const code = onExport?.();
+    if (!code) { setBackupNote('Nothing to back up yet.'); return; }
+    setBackup(code);
+    try {
+      await navigator.clipboard.writeText(code);
+      setBackupNote('Copied. Paste it somewhere safe, like a note or a message to yourself.');
+    } catch {
+      setBackupNote('Select the code below and copy it somewhere safe.');
+    }
+  };
+
+  const restore = () => {
+    if (!restoreCode.trim()) return;
+    if (!window.confirm('Replace this game with the backup? The current game will be gone.')) return;
+    if (!onImport?.(restoreCode)) setBackupNote("That code didn't work. It may have been cut off when it was copied.");
+  };
   const [selectedShopItem, setSelectedShopItem] = useState(null);
 
-  const handlePurchase = (pkg) => {
-    setShowPurchaseMessage(true);
-    setTimeout(() => setShowPurchaseMessage(false), 3000);
-  };
 
   const handleShopPurchase = (itemId, slimeId = null) => {
     const item = PRISM_SHOP[itemId];
@@ -37,7 +57,7 @@ const SettingsTab = ({ onSave, onDelete, lastSave, prisms, slimes, purchasePrism
           </div>
         </div>
         <div style={{ fontSize: 11, opacity: 0.7, marginBottom: 15 }}>
-          Spend your hard-earned Prisms on powerful upgrades and abilities!
+          Prisms are rare and shiny. They turn up about once in every 1,000 kills, and every time we wipe out a whole caravan.
         </div>
 
         {/* Slime Selector Modal */}
@@ -122,74 +142,79 @@ const SettingsTab = ({ onSave, onDelete, lastSave, prisms, slimes, purchasePrism
         </div>
       </div>
 
-      {/* Get Prisms */}
-      <div style={{ background: 'linear-gradient(135deg, rgba(245,158,11,0.15), rgba(245,158,11,0.05))', borderRadius: 10, padding: 15, marginBottom: 15, border: '2px solid #f59e0b' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 }}>
-          <div style={{ fontSize: 16, fontWeight: 'bold' }}>💎 Get More Prisms</div>
+      {/* Sound */}
+      <div style={{ background: 'rgba(0,0,0,0.3)', borderRadius: 10, padding: 15, marginBottom: 15 }}>
+        <div style={{ fontSize: 14, fontWeight: 'bold', marginBottom: 10 }}>🔊 Sound</div>
+        {[
+          ['volume', 'Volume'],
+          ['sfx', 'Effects'],
+          ['ambience', 'Ambience'],
+        ].map(([key, label]) => (
+          <label key={key} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12, marginBottom: 8 }}>
+            <span style={{ width: 70 }}>{label}</span>
+            <input type="range" min="0" max="1" step="0.05" value={audio[key]}
+              onChange={e => changeAudio({ [key]: +e.target.value })}
+              onPointerUp={() => sfx(key === 'ambience' ? 'drop' : 'hit')}
+              style={{ flex: 1 }} disabled={audio.muted} />
+            <span style={{ width: 34, textAlign: 'right', opacity: 0.6 }}>{Math.round(audio[key] * 100)}%</span>
+          </label>
+        ))}
+        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginTop: 4, alignItems: 'center' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: 'pointer' }}>
+            <input type="checkbox" checked={audio.muted} onChange={e => changeAudio({ muted: e.target.checked })} />
+            Mute everything
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: 'pointer' }}>
+            <input type="checkbox" checked={audio.haptics} onChange={e => { changeAudio({ haptics: e.target.checked }); if (e.target.checked) buzz('medium'); }} />
+            Vibrate on big moments
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: 'pointer' }}>
+            <input type="checkbox" checked={audio.notifications} onChange={e => { changeAudio({ notifications: e.target.checked }); if (e.target.checked) askPermission(); }} />
+            Tell me when things happen while I'm away
+          </label>
+          <button onClick={() => { unlockAudio(); setTimeout(() => sfx('glub'), 50); }}
+            style={{ padding: '5px 12px', fontSize: 11, borderRadius: 5, cursor: 'pointer', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.18)', color: '#e0e0e0' }}>
+            Say hi, Glub
+          </button>
         </div>
-        <div style={{ fontSize: 11, opacity: 0.7, marginBottom: 15 }}>
-          Prisms drop rarely from expeditions (~0.1% per kill) and are guaranteed from Tower Defense victories!
-        </div>
+      </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 10 }}>
-          {PRISM_PACKAGES.map(pkg => (
-            <div
-              key={pkg.id}
-              style={{
-                background: 'rgba(0,0,0,0.3)',
-                borderRadius: 8,
-                padding: 12,
-                border: '1px solid rgba(245,158,11,0.3)',
-                textAlign: 'center',
-              }}
-            >
-              <div style={{ fontSize: 24, marginBottom: 6 }}>💎</div>
-              <div style={{ fontSize: 13, fontWeight: 'bold', marginBottom: 2 }}>{pkg.name}</div>
-              <div style={{ fontSize: 18, color: '#f59e0b', marginBottom: 2 }}>{pkg.prisms}</div>
-              {pkg.bonus && (
-                <div style={{ fontSize: 10, color: '#4ade80', marginBottom: 6 }}>{pkg.bonus}</div>
-              )}
-              <button
-                onClick={() => handlePurchase(pkg)}
-                style={{
-                  width: '100%',
-                  padding: '8px 12px',
-                  background: 'linear-gradient(135deg, #f59e0b, #d97706)',
-                  border: 'none',
-                  borderRadius: 6,
-                  color: '#1a1a2e',
-                  fontWeight: 'bold',
-                  cursor: 'pointer',
-                  fontSize: 12,
-                }}
-              >
-                {pkg.price}
-              </button>
-            </div>
-          ))}
+      {/* Tutorials */}
+      <div style={{ background: 'rgba(0,0,0,0.3)', borderRadius: 10, padding: 15, marginBottom: 15 }}>
+        <div style={{ fontSize: 14, fontWeight: 'bold', marginBottom: 10 }}>📖 Tutorials</div>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', marginBottom: 12 }}>
+          <input
+            type="checkbox"
+            checked={!!tutorialsOn}
+            onChange={(e) => setTutorialsOn?.(e.target.checked)}
+            style={{ width: 16, height: 16, cursor: 'pointer' }}
+          />
+          <span style={{ fontSize: 12 }}>Let Glub explain things the first time we meet them</span>
+        </label>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 11, opacity: 0.65 }}>
+            {seenTutorials.length}/{totalTutorials} heard. Every one stays in Memory.
+          </span>
+          <button
+            onClick={resetTutorials}
+            disabled={!seenTutorials.length}
+            style={{
+              padding: '5px 12px', fontSize: 11, borderRadius: 5,
+              cursor: seenTutorials.length ? 'pointer' : 'not-allowed',
+              background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.18)',
+              color: seenTutorials.length ? '#e0e0e0' : '#666',
+            }}
+          >
+            Show them again
+          </button>
         </div>
-
-        {showPurchaseMessage && (
-          <div style={{
-            marginTop: 15,
-            padding: 12,
-            background: 'rgba(34,211,238,0.2)',
-            borderRadius: 8,
-            textAlign: 'center',
-            border: '1px solid #22d3ee'
-          }}>
-            <div style={{ fontSize: 12, color: '#22d3ee' }}>
-              💫 Purchases not yet implemented - this is a demo feature!
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Save System */}
       <div style={{ background: 'rgba(0,0,0,0.3)', borderRadius: 10, padding: 15, marginBottom: 15 }}>
         <div style={{ fontSize: 14, fontWeight: 'bold', marginBottom: 10 }}>💾 Save System</div>
         <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 15 }}>
-          Game auto-saves every 30 seconds. Last saved: {lastSave ? new Date(lastSave).toLocaleString() : 'Never'}
+          Saves every 10 seconds, and whenever you leave the app. Last saved: {lastSave ? new Date(lastSave).toLocaleString() : 'never'}
         </div>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           <button onClick={onSave} style={{ padding: '10px 20px', background: '#4ade80', border: 'none', borderRadius: 6, color: '#1a1a2e', fontWeight: 'bold', cursor: 'pointer' }}>
@@ -201,10 +226,31 @@ const SettingsTab = ({ onSave, onDelete, lastSave, prisms, slimes, purchasePrism
         </div>
       </div>
 
+      {/* Backup */}
+      <div style={{ background: 'rgba(0,0,0,0.3)', borderRadius: 10, padding: 15, marginBottom: 15 }}>
+        <div style={{ fontSize: 14, fontWeight: 'bold', marginBottom: 6 }}>📤 Backup</div>
+        <div style={{ fontSize: 11, opacity: 0.7, marginBottom: 10 }}>
+          The save lives inside the app. Uninstalling it deletes the save. A backup code is the whole game as text you can keep anywhere.
+        </div>
+        <button onClick={makeBackup} style={{ padding: '8px 14px', background: '#22d3ee', border: 'none', borderRadius: 6, color: '#1a1a2e', fontWeight: 'bold', cursor: 'pointer', marginBottom: 8 }}>
+          Make a backup code
+        </button>
+        {backup && (
+          <textarea readOnly value={backup} onFocus={e => e.target.select()}
+            style={{ width: '100%', height: 60, fontSize: 9, fontFamily: 'monospace', background: 'rgba(0,0,0,0.4)', color: '#9ca3af', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 6, padding: 6, marginBottom: 8 }} />
+        )}
+        {backupNote && <div style={{ fontSize: 11, color: '#86efac', marginBottom: 8 }}>{backupNote}</div>}
+        <textarea value={restoreCode} onChange={e => setRestoreCode(e.target.value)} placeholder="Paste a backup code here to restore it"
+          style={{ width: '100%', height: 50, fontSize: 10, fontFamily: 'monospace', background: 'rgba(0,0,0,0.4)', color: '#e0e0e0', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 6, padding: 6, marginBottom: 8 }} />
+        <button onClick={restore} disabled={!restoreCode.trim()} style={{ padding: '8px 14px', background: restoreCode.trim() ? '#f59e0b' : 'rgba(100,100,100,0.5)', border: 'none', borderRadius: 6, color: '#1a1a2e', fontWeight: 'bold', cursor: restoreCode.trim() ? 'pointer' : 'not-allowed' }}>
+          Restore from code
+        </button>
+      </div>
+
       {showConfirm && (
         <div style={{ background: 'rgba(239,68,68,0.2)', borderRadius: 10, padding: 15, border: '2px solid #ef4444', marginBottom: 15 }}>
           <div style={{ fontSize: 14, fontWeight: 'bold', marginBottom: 10 }}>⚠️ Are you sure?</div>
-          <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 15 }}>This will permanently delete all your progress!</div>
+          <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 15 }}>Everything goes. Every slime, every building. It can't be undone.</div>
           <div style={{ display: 'flex', gap: 10 }}>
             <button onClick={() => { onDelete(); setShowConfirm(false); }} style={{ padding: '8px 16px', background: '#ef4444', border: 'none', borderRadius: 6, color: '#fff', fontWeight: 'bold', cursor: 'pointer' }}>
               Yes, Delete Everything
@@ -220,15 +266,15 @@ const SettingsTab = ({ onSave, onDelete, lastSave, prisms, slimes, purchasePrism
       <div style={{ background: 'rgba(0,0,0,0.3)', borderRadius: 10, padding: 15 }}>
         <div style={{ fontSize: 14, fontWeight: 'bold', marginBottom: 10 }}>ℹ️ About</div>
         <div style={{ fontSize: 12, opacity: 0.7 }}>
-          <p>Hive Queen v0.5</p>
-          <p>An idle game where you control a slime hive.</p>
-          <p style={{ marginTop: 10 }}>Tips:</p>
+          <p>Slime Queen, playtest build</p>
+          <p>You are the nucleus. We are your slimes. I'm Glub.</p>
+          <p style={{ marginTop: 10 }}>Things worth knowing:</p>
           <ul style={{ margin: '5px 0', paddingLeft: 20 }}>
-            <li>Send expeditions before closing - they'll continue offline!</li>
-            <li>Assign slimes to ranches for passive gains (up to 24 hours)</li>
-            <li>Higher tier slimes have more trait slots</li>
-            <li>Check the Compendium for mutation unlock requirements</li>
-            <li>Activate Hive Abilities from the Queen tab using Mana!</li>
+            <li>Parties keep fighting while the app is closed, for up to a day.</li>
+            <li>Pools keep working too, for up to 24 hours at a time.</li>
+            <li>Every slime tier has more mutation slots than the one below.</li>
+            <li>Memory has everything I've told you, and every monster we've eaten.</li>
+            <li>Pheromones live on The Nucleus. They cost musk.</li>
           </ul>
         </div>
       </div>

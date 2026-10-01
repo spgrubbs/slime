@@ -1,0 +1,97 @@
+name: Android APK
+
+# Builds a debug-signed APK you can sideload straight onto a phone.
+#
+# GitHub's ubuntu runners ship the Android SDK, which is why this lives in CI:
+# the dev container this was set up from cannot reach dl.google.com, so it can
+# scaffold the Android project but not compile it.
+#
+# Every run uploads the APK as a build artifact. Pushing a tag like v0.3.0 also
+# publishes it as a GitHub Release, which is the easy link to open on a phone.
+
+on:
+  push:
+    branches: ['**']
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: android-actions/setup-android@v3
+        with:
+          # The action's default is "tools platform-tools". The legacy `tools`
+          # package no longer exists in cmdline-tools 16+, which the runner image
+          # now ships, so the default fails with "Failed to find package 'tools'".
+          # Gradle fetches the platform and build-tools it needs on its own.
+          packages: 'platform-tools'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Test
+        run: npm test
+
+      - name: Build web bundle
+        run: npm run build
+        env:
+          CI: true
+
+      - name: Copy web bundle into the Android project
+        run: npx cap sync android
+
+      - name: Assemble debug APK
+        working-directory: android
+        run: ./gradlew --no-daemon assembleDebug
+
+      # Updates only install over a copy signed with the same key, so a build
+      # signed with anything else is useless to a playtester who already has the
+      # app. Fail here rather than ship an APK that says "App not installed".
+      # Replacing the keystore on purpose means updating this digest — and
+      # everyone uninstalling once.
+      - name: Check the APK carries the playtest signature
+        run: |
+          APKSIGNER="$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)apksigner"
+          "$APKSIGNER" verify --print-certs android/app/build/outputs/apk/debug/app-debug.apk | tee certs.txt
+          grep -qi "SHA-256 digest: 7c8406a34188aca6e1964f57778c5d53cfd26747fd791cf8c93b9c7f9a2cc8e2" certs.txt
+
+      # A recognisable filename: the shortest thing that tells you which build
+      # you are holding when three of them are in your Downloads folder.
+      - name: Name the APK
+        id: name
+        run: |
+          SHORT_SHA="$(git rev-parse --short HEAD)"
+          NAME="slime-queen-${SHORT_SHA}.apk"
+          cp android/app/build/outputs/apk/debug/app-debug.apk "$NAME"
+          echo "apk=$NAME" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: slime-queen-apk
+          path: ${{ steps.name.outputs.apk }}
+          retention-days: 30
+
+      - name: Publish release on a tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ steps.name.outputs.apk }}
+          body: |
+            Debug-signed APK for playtesting. Install with "unknown sources"
+            allowed for your browser or file manager.

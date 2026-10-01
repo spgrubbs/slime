@@ -7,7 +7,7 @@ const Menu = ({ open, close, tab, setTab, tabs }) => {
       <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 998 }} onClick={close} />
       <div style={{ position: 'fixed', top: 0, left: 0, bottom: 0, width: 260, background: 'linear-gradient(180deg, #1a1a2e, #16213e)', zIndex: 999, padding: 20, overflowY: 'auto' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 30 }}>
-          <span style={{ fontSize: 18, fontWeight: 'bold', color: '#ec4899' }}>🟢 Hive Queen</span>
+          <span style={{ fontSize: 18, fontWeight: 'bold', color: '#ec4899' }}>🟢 Slime Queen</span>
           <button onClick={close} style={{ background: 'none', border: 'none', color: '#fff', fontSize: 24, cursor: 'pointer' }}>×</button>
         </div>
         {tabs.map(t => (

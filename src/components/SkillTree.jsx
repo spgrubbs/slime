@@ -1,5 +1,55 @@
 import React, { useState, useMemo } from 'react';
 import { SKILL_TREES, canPurchaseSkill, getSkillEffects, SKILL_POINTS_PER_LEVEL } from '../data/skillTreeData.js';
+import { BUILDINGS } from '../data/buildingData.js';
+import { HIVE_ABILITIES } from '../data/hiveData.js';
+
+// The bonuses that survive in the tree are all capacities, so they read as
+// counts rather than percentages — "+15 Plasm", not "+15% maxJelly".
+const CAPACITY_LABELS = {
+  maxJelly: 'Plasm',
+  ranchSlots: 'Pool slots',
+  mutationSlots: 'Mutation slots',
+  defenseSlots: 'Ambush squad',
+  expeditionSlots: 'Parties out at once',
+  rareSpawn: '% rare monsters',
+};
+
+const FEATURE_NAMES = {
+  building: 'Buildings',
+  caravan: 'The Road (caravan ambush)',
+  merchant: "Mossback's visits",
+  ranch: 'The pools',
+};
+
+/** What a skill does, in words, for the Effect line. */
+export const effectText = (effect) => {
+  if (!effect) return '';
+  switch (effect.type) {
+    case 'bonus': {
+      const label = CAPACITY_LABELS[effect.stat] || effect.stat;
+      const extra = Object.entries(effect.also || {})
+        .map(([k, v]) => `, ${CAPACITY_LABELS[k] || k} +${v}`).join('');
+      return label.startsWith('%') ? `+${effect.value}${label}${extra}` : `${label} +${effect.value}${extra}`;
+    }
+    case 'unlock':
+      if (effect.building) return `Unlocks the ${BUILDINGS[effect.building]?.name || effect.building}`;
+      return `Unlocks ${FEATURE_NAMES[effect.feature] || effect.feature}`;
+    case 'pheromone': {
+      const a = HIVE_ABILITIES[effect.ability];
+      return a ? `Pheromone: ${a.icon} ${a.name}, ${a.desc.charAt(0).toLowerCase()}${a.desc.slice(1)}` : effect.ability;
+    }
+    default:
+      return effect.desc || '';
+  }
+};
+
+/** A purchased skill's display name, by id, across all three trees. */
+const skillName = (id) => {
+  for (const tree of Object.values(SKILL_TREES)) {
+    if (tree.skills[id]) return tree.skills[id].name;
+  }
+  return id;
+};
 
 const SkillTree = ({ queenLevel, purchasedSkills, onPurchaseSkill, availablePoints }) => {
   const [activeTree, setActiveTree] = useState('expedition');
@@ -70,15 +120,10 @@ const SkillTree = ({ queenLevel, purchasedSkills, onPurchaseSkill, availablePoin
   };
 
   return (
-    <div style={{ background: 'rgba(0,0,0,0.2)', borderRadius: 12, padding: 15 }}>
-      {/* Header with points */}
+    <div>
+      {/* The screen it lives on already names it; state the numbers, not the title. */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 }}>
-        <div>
-          <h3 style={{ margin: 0, fontSize: 18 }}>🌳 Queen Skill Tree</h3>
-          <div style={{ fontSize: 12, opacity: 0.7, marginTop: 4 }}>
-            Level {queenLevel} • Unlock powerful abilities
-          </div>
-        </div>
+        <div style={{ fontSize: 12, opacity: 0.7 }}>Queen level {queenLevel}</div>
         <div style={{
           background: 'rgba(236,72,153,0.2)',
           padding: '8px 16px',
@@ -268,9 +313,9 @@ const SkillTree = ({ queenLevel, purchasedSkills, onPurchaseSkill, availablePoin
         fontSize: 11,
         opacity: 0.7
       }}>
-        <span><span style={{ color: currentTree.color }}>●</span> Purchased</span>
-        <span><span style={{ color: '#4ade80' }}>●</span> Available</span>
-        <span><span style={{ color: '#f59e0b' }}>●</span> Need Points</span>
+        <span><span style={{ color: currentTree.color }}>●</span> Learned</span>
+        <span><span style={{ color: '#4ade80' }}>●</span> Ready</span>
+        <span><span style={{ color: '#f59e0b' }}>●</span> Need points</span>
         <span><span style={{ color: '#374151' }}>●</span> Locked</span>
       </div>
 
@@ -283,7 +328,7 @@ const SkillTree = ({ queenLevel, purchasedSkills, onPurchaseSkill, availablePoin
           borderRadius: 8
         }}>
           <div style={{ fontSize: 12, fontWeight: 'bold', marginBottom: 8, opacity: 0.7 }}>
-            Active Bonuses
+            What we know so far
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
             {Object.entries(effects.bonuses).map(([stat, value]) => (
@@ -294,7 +339,7 @@ const SkillTree = ({ queenLevel, purchasedSkills, onPurchaseSkill, availablePoin
                 fontSize: 11,
                 color: '#4ade80'
               }}>
-                {stat}: {value > 0 ? '+' : ''}{value}%
+                {CAPACITY_LABELS[stat] || stat}: {value > 0 ? '+' : ''}{value}
               </span>
             ))}
             {effects.pheromones.map(ability => (
@@ -305,7 +350,7 @@ const SkillTree = ({ queenLevel, purchasedSkills, onPurchaseSkill, availablePoin
                 fontSize: 11,
                 color: '#a855f7'
               }}>
-                🧪 {ability}
+                {HIVE_ABILITIES[ability]?.icon} {HIVE_ABILITIES[ability]?.name || ability}
               </span>
             ))}
             {effects.passives.map(passive => (
@@ -316,7 +361,7 @@ const SkillTree = ({ queenLevel, purchasedSkills, onPurchaseSkill, availablePoin
                 fontSize: 11,
                 color: '#22d3ee'
               }}>
-                ⚡ {passive}
+                ⚡ {skillName(passive)}
               </span>
             ))}
           </div>
@@ -409,10 +454,7 @@ const SkillDetailPanel = ({ skill, state, treeColor, purchasedSkills, allSkills,
       }}>
         <div style={{ fontSize: 11, opacity: 0.7, marginBottom: 4 }}>Effect:</div>
         <div style={{ fontSize: 13, color: '#4ade80' }}>
-          {skill.effect.type === 'bonus' && `${skill.effect.stat}: ${skill.effect.value > 0 ? '+' : ''}${skill.effect.value}%`}
-          {skill.effect.type === 'unlock' && `Unlocks: ${skill.effect.zone || skill.effect.building || skill.effect.feature}`}
-          {skill.effect.type === 'pheromone' && `Unlocks mana ability: ${skill.effect.ability}`}
-          {skill.effect.type === 'passive' && skill.effect.desc}
+          {effectText(skill.effect)}
         </div>
       </div>
 
@@ -456,8 +498,8 @@ const SkillDetailPanel = ({ skill, state, treeColor, purchasedSkills, allSkills,
             fontSize: 14,
           }}
         >
-          {state === 'available' && `✨ Purchase (${skill.cost} points)`}
-          {state === 'locked-points' && `Need ${skill.cost} points`}
+          {state === 'available' && `✨ Learn (${skill.cost} point${skill.cost === 1 ? '' : 's'})`}
+          {state === 'locked-points' && `Need ${skill.cost} point${skill.cost === 1 ? '' : 's'}`}
           {state === 'locked' && missingPrereqs.length > 0 && `Requires: ${missingPrereqs.map(p => p.name).join(', ')}`}
         </button>
       )}
@@ -472,7 +514,7 @@ const SkillDetailPanel = ({ skill, state, treeColor, purchasedSkills, allSkills,
           color: '#4ade80',
           fontWeight: 'bold',
         }}>
-          ✓ Skill Purchased
+          ✓ Learned
         </div>
       )}
     </div>

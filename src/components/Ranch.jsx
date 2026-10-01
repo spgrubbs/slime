@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { RANCH_TYPES, RANCH_UPGRADE_BONUSES, MAX_RANCH_LEVEL, RANCH_MAX_ACCUMULATION_TIME } from '../data/ranchData.js';
 import { ELEMENTS } from '../data/gameConstants.js';
 import { SLIME_TIERS } from '../data/slimeData.js';
+import { traitValues } from '../data/traitData.js';
 import SlimeSprite from './SlimeSprite.jsx';
 
 // CSS keyframes for bouncing animation
@@ -40,11 +41,18 @@ const Ranch = ({
   const [selectedRanch, setSelectedRanch] = useState(null);
   const [showAssignModal, setShowAssignModal] = useState(false);
 
-  // Get available slimes (not on expedition, not already assigned)
-  const getAvailableSlimes = () => {
+  /**
+   * Slimes that can be put into `ranchId`: not in the field, not already
+   * assigned, and on the right side of the wound line — the Convalescence Pool
+   * takes only the wounded, every other ranch takes only the healthy.
+   */
+  const getAvailableSlimes = (ranchId = selectedRanch) => {
+    const ranch = RANCH_TYPES[ranchId];
     return slimes.filter(s => {
-      if (Object.values(exps).some(e => e.party.some(p => p.id === s.id))) return false;
-      for (const [rid, assigned] of Object.entries(ranchAssignments)) {
+      if (ranch?.woundedOnly && !s.wounded) return false;
+      if (ranch && !ranch.woundedOnly && s.wounded) return false;
+      if (Object.values(exps).some(e => (e.slimes || []).some(c => c.id === s.id))) return false;
+      for (const [, assigned] of Object.entries(ranchAssignments)) {
         const ids = (assigned || []).map(a => typeof a === 'object' ? a.slimeId : a);
         if (ids.includes(s.id)) return false;
       }
@@ -82,6 +90,17 @@ const Ranch = ({
   const formatAccumulatedReward = (ranchId, slimeId) => {
     const ranch = RANCH_TYPES[ranchId];
     const acc = getSlimeAccumulated(slimeId, ranchId);
+    if (ranch.effect === 'recover') {
+      const entry = (ranchAssignments[ranchId] || [])
+        .find(a => (typeof a === 'object' ? a.slimeId : a) === slimeId);
+      const startedAt = (typeof entry === 'object' && entry?.startTime) || Date.now();
+      const level = ranchBuildings[ranchId]?.level || 1;
+      const cycleSec = ranch.cycleTime * (1 - Math.min(0.5, (level - 1) * RANCH_UPGRADE_BONUSES.cycleReduction));
+      const leftSec = Math.max(0, cycleSec - (Date.now() - startedAt) / 1000);
+      const h = Math.floor(leftSec / 3600);
+      const m = Math.floor((leftSec % 3600) / 60);
+      return leftSec <= 0 ? 'ready' : `${h}h ${m}m left`;
+    }
     if (ranch.effect === 'biomass' && acc.biomass > 0) {
       return `+${Math.floor(acc.biomass)} biomass`;
     } else if (ranch.effect === 'element' && acc.element > 0) {
@@ -118,13 +137,13 @@ const Ranch = ({
       {/* Header */}
       <div style={{ marginBottom: 15 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-          <div style={{ fontSize: 16, fontWeight: 'bold' }}>Slime Ranch</div>
+          <div style={{ fontSize: 16, fontWeight: 'bold' }}>The Pools</div>
           <div style={{ display: 'flex', gap: 15, fontSize: 12 }}>
             <span style={{ color: '#f59e0b' }}>💎 {prisms} Prisms</span>
           </div>
         </div>
         <div style={{ fontSize: 11, opacity: 0.7 }}>
-          Assign slimes to ranches for passive benefits. Rewards accumulate (max 24h) and are applied when slimes are removed.
+          Put a slime in a pool and it soaks up whatever the pool gives, up to 24 hours' worth. Take it out to collect.
         </div>
       </div>
 
@@ -165,7 +184,7 @@ const Ranch = ({
                     </>
                   ) : (
                     <div style={{ fontSize: 11, color: canBuild ? '#22d3ee' : '#4b5563' }}>
-                      Not Built
+                      Not built yet
                     </div>
                   )}
                 </div>
@@ -173,11 +192,16 @@ const Ranch = ({
 
               {/* Effect Info */}
               <div style={{ fontSize: 11, background: 'rgba(0,0,0,0.2)', padding: 8, borderRadius: 6, marginBottom: 12 }}>
-                {ranch.effect === 'biomass' && <span>Effect: +{ranch.effectValue} biomass per cycle per slime</span>}
-                {ranch.effect === 'element' && <span>Effect: {ELEMENTS[ranch.element]?.icon} +{ranch.effectValue}% {ELEMENTS[ranch.element]?.name} affinity per cycle</span>}
-                {ranch.effect === 'stats' && <span>Effect: +{ranch.effectValue} random stat points per cycle</span>}
-                {ranch.effect === 'trait' && ranch.grantsTrait === 'void' && <span>Effect: Grants Void trait (removes elements)</span>}
-                {ranch.effect === 'trait' && ranch.traitPool && <span>Effect: {(ranch.effectValue * 100).toFixed(0)}% chance for rare trait per cycle</span>}
+                {ranch.effect === 'biomass' && <span>+{ranch.effectValue} biomass per slime, every cycle</span>}
+                {ranch.effect === 'element' && <span>{ELEMENTS[ranch.element]?.icon} +{ranch.effectValue}% {ELEMENTS[ranch.element]?.name} affinity every cycle</span>}
+                {ranch.effect === 'stats' && <span>+{ranch.effectValue} random stat points every cycle</span>}
+                {ranch.effect === 'trait' && ranch.grantsTrait === 'void' && <span>Gives the Void trait and wipes the slime's elements</span>}
+                {ranch.effect === 'recover' && <span>Mends one wounded slime per slot</span>}
+                {ranch.effect === 'expeditionBuff' && <span>Every slime in the field mends {ranch.effectValue} HP a round per point of Viscosity here</span>}
+                {ranch.effect === 'defenseBonus' && <span>Ambush squad hits {Math.round(ranch.effectValue * 100)}% harder per point of Firmness here</span>}
+                {ranch.effect === 'manaBonus' && <span>+{ranch.effectValue} musk an hour per point of Viscosity here</span>}
+                {ranch.effect === 'expeditionBonus' && <span>Parties bring home {Math.round(ranch.effectValue * 100)}% more per point of Slipperiness here</span>}
+                {ranch.effect === 'trait' && ranch.traitPool && <span>{(ranch.effectValue * 100).toFixed(0)}% chance of a rare trait every cycle</span>}
               </div>
 
               {/* Slot Visualization */}
@@ -284,7 +308,7 @@ const Ranch = ({
                       fontSize: 12,
                     }}
                   >
-                    Build ({ranch.cost.biomass ? `${ranch.cost.biomass} bio` : ''}{ranch.cost.prisms ? `${ranch.cost.prisms} prisms` : ''}
+                    Build ({ranch.cost.biomass ? `${ranch.cost.biomass}🧬` : ''}{ranch.cost.prisms ? `${ranch.cost.prisms}💎` : ''}
                     {ranch.cost.mats && Object.entries(ranch.cost.mats).map(([m, c]) => ` ${c} ${m}`).join('')})
                   </button>
                 ) : (
@@ -306,7 +330,7 @@ const Ranch = ({
                         fontSize: 11,
                       }}
                     >
-                      + Assign Slime
+                      + Put a slime in
                     </button>
                     {building.level < MAX_RANCH_LEVEL && (
                       <button
@@ -336,7 +360,7 @@ const Ranch = ({
       {/* No ranches unlocked message */}
       {visibleRanches.length === 0 && (
         <div style={{ textAlign: 'center', padding: 40, opacity: 0.6 }}>
-          No ranches unlocked yet. Reach Queen Level 3 to unlock the Feeding Pool!
+          No pools yet. The Feeding Pool opens at Queen level 3.
         </div>
       )}
 
@@ -392,12 +416,12 @@ const Ranch = ({
           >
             <div style={{ fontSize: 16, fontWeight: 'bold', marginBottom: 15, display: 'flex', alignItems: 'center', gap: 10 }}>
               <span>{RANCH_TYPES[selectedRanch].icon}</span>
-              <span>Assign to {RANCH_TYPES[selectedRanch].name}</span>
+              <span>Who goes in the {RANCH_TYPES[selectedRanch].name}?</span>
             </div>
 
             {getAvailableSlimes().length === 0 ? (
               <div style={{ textAlign: 'center', opacity: 0.6, padding: 20 }}>
-                No available slimes. Slimes on expeditions or already assigned cannot be selected.
+                Nobody's free. Slimes out in the wilds or already in a pool can't go in.
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -438,7 +462,7 @@ const Ranch = ({
                       </div>
                       {slime.traits?.includes('lazy') && (
                         <div style={{ fontSize: 9, color: '#4ade80', padding: '2px 6px', background: 'rgba(74,222,128,0.2)', borderRadius: 4 }}>
-                          +10% ranch
+                          +{traitValues('lazy').v}% here
                         </div>
                       )}
                     </div>

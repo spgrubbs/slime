@@ -4,9 +4,12 @@ import assert from 'node:assert/strict';
 import '../combat/index.js';
 import { validateRegistry } from './validate.js';
 import { computeStats, computeMaxHp, mutationSlots } from './stats.js';
-import { makeSlimeCombatant, makeEnemyCombatant, resolveRound, resolveKill, effectiveStats, turnOrder } from './resolveRound.js';
+import {
+  makeSlimeCombatant, makeEnemyCombatant, resolveRound, resolveKill, effectiveStats,
+  turnOrder, enemyActions, dodgeFromSlip, critFromSlip, DODGE_CAP,
+} from './resolveRound.js';
 import { effectPower, effectChance } from './hooks.js';
-import { MUTATION_LIBRARY } from '../data/traitData.js';
+import { MUTATION_LIBRARY, traitValues } from '../data/traitData.js';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -67,7 +70,7 @@ const logsOf = (records) => records.map(r => r.log?.m).filter(Boolean).join(' | 
 test('every mutation and trait resolves to a registered effect', () => {
   const result = validateRegistry({ throwOnError: false });
   assert.deepEqual(result.errors, []);
-  assert.equal(result.mutations, 30);
+  assert.equal(result.mutations, 31); // 30 from zone monsters, 1 from Old Gullet
   assert.equal(result.traits, 18);
 });
 
@@ -109,12 +112,14 @@ test('draconicPower raises all three stats', () => {
   assert.equal(drake.viscosity, plain.viscosity + bump);
 });
 
-test('primordial is +10% to all stats, not just damage', () => {
+test('primordial adds its tier value to every stat', () => {
   const plain = computeStats(slime());
   const prime = computeStats(slime({ traits: ['primordial'] }));
-  assert.equal(prime.firmness, Math.floor(plain.firmness * 1.1));
-  assert.equal(prime.slipperiness, Math.floor(plain.slipperiness * 1.1));
-  assert.equal(prime.viscosity, Math.floor(plain.viscosity * 1.1));
+  const { v } = traitValues('primordial', slime().tier);
+  assert.ok(v > 0);
+  assert.equal(prime.firmness, plain.firmness + v);
+  assert.equal(prime.slipperiness, plain.slipperiness + v);
+  assert.equal(prime.viscosity, plain.viscosity + v);
 });
 
 test('biomass growth raises stats and max HP together', () => {
@@ -413,7 +418,7 @@ test('greedy and glutton stack additively across the party', () => {
 
 test('void blocks element gain, adaptable accelerates it', () => {
   const zone = { element: 'nature', elementGainRate: 1 };
-  const ctx = { rng: always(0.9) };
+  const ctx = { rng: always(0.9), passives: ['affinity'] };
 
   const plain = makeSlimeCombatant(slime({ id: 'p' }));
   const voided = makeSlimeCombatant(slime({ id: 'v', traits: ['void'] }));
@@ -423,6 +428,13 @@ test('void blocks element gain, adaptable accelerates it', () => {
   assert.equal(voided.elementGains.nature, undefined, 'void gained nothing');
   assert.ok(plain.elementGains.nature > 0);
   assert.ok(adapt.elementGains.nature > plain.elementGains.nature);
+});
+
+test('no affinity is gained before Porous Membrane', () => {
+  const zone = { element: 'nature', elementGainRate: 1 };
+  const plain = makeSlimeCombatant(slime({ id: 'p' }));
+  resolveKill(world([plain]), { rng: always(0.9) }, [], [], zone);
+  assert.equal(plain.elementGains.nature, undefined, 'affinity stays locked until learned');
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -483,4 +495,63 @@ test('status proc rolls appear in the attacking hit trace, landed or not', () =>
   assert.ok(hit, 'no slime hit landed');
   assert.ok(hit.log.v.includes('Pyrolyze'), hit.log.v);
   assert.ok(hit.log.v.includes('✗'), 'a failed proc roll should still be shown');
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Balance curves
+// ═════════════════════════════════════════════════════════════════════════════
+
+test('monsters act more often as their zone tier rises', () => {
+  // A party of four each acting once against a lone monster acting once is a
+  // 4:1 economy that swamps every stat difference. Action count is the dial.
+  assert.equal(enemyActions({ tier: 1 }), 1);
+  assert.equal(enemyActions({ tier: 2 }), 1);
+  assert.equal(enemyActions({ tier: 3 }), 2);
+  assert.equal(enemyActions({ tier: 4 }), 2);
+  assert.equal(enemyActions({ tier: 5 }), 3);
+  assert.equal(enemyActions({ tier: 6 }), 3);
+  assert.equal(enemyActions({ tier: 5, rare: true }), 4, 'rares get an extra action');
+  assert.equal(enemyActions({ tier: 1, actions: 7 }), 7, 'an explicit count wins');
+});
+
+test('a deep monster actually takes its extra actions', () => {
+  const w = world([makeSlimeCombatant(slime())], 'hollowOne'); // zone 6 rare
+  const { records } = resolveRound(w, { rng: always(0.9) });
+  const extra = records.filter(r => r.log?.m.includes('strikes again'));
+  assert.ok(extra.length >= 1, logsOf(records));
+});
+
+test('dodge has diminishing returns and never becomes immunity', () => {
+  assert.ok(dodgeFromSlip(5) < 0.10);
+  assert.ok(dodgeFromSlip(37) > 0.20 && dodgeFromSlip(37) < 0.30);
+  // The old linear curve gave 62 slipperiness a 93% dodge, which is why the top
+  // tiers cleared every zone untouched.
+  assert.ok(dodgeFromSlip(62) < 0.35, `62 slip dodges ${dodgeFromSlip(62)}`);
+  assert.ok(dodgeFromSlip(1000) < DODGE_CAP);
+});
+
+test('total evasion is capped even with every dodge source stacked', () => {
+  // allSeeing + timid + cautious + vinewebs + ethereal on a very slippery slime
+  const dodgy = makeSlimeCombatant(slime({
+    mutations: ['allSeeing', 'vinewebs', 'ethereal'],
+    traits: ['timid', 'cautious'],
+    baseStats: { firmness: 10, slipperiness: 200, viscosity: 60 },
+  }));
+  dodgy.hp = Math.floor(dodgy.maxHp * 0.4); // triggers cautious too
+
+  let hits = 0;
+  for (let i = 0; i < 600; i++) {
+    const w = world([dodgy], 'hollowOne');
+    dodgy.dead = false;
+    dodgy.hp = Math.floor(dodgy.maxHp * 0.4);
+    const before = dodgy.hp;
+    resolveRound(w, { rng: seeded(i * 31) });
+    if (dodgy.hp < before) hits++;
+  }
+  assert.ok(hits > 0, 'a fully stacked dodge build was never hit at all');
+});
+
+test('crit chance also has diminishing returns', () => {
+  assert.ok(critFromSlip(5) < 0.08);
+  assert.ok(critFromSlip(62) < 0.35, `62 slip crits ${critFromSlip(62)}`);
 });

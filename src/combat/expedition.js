@@ -13,7 +13,9 @@ import { MONSTER_TYPES } from '../data/monsterData.js';
 import {
   ZONES, INTERMISSION_EVENTS, EXPLORATION_EVENTS, INTERMISSION_DURATION,
 } from '../data/zoneData.js';
-import { ROUND_MS, BEAT_MS } from '../data/gameConstants.js';
+import { wardenTypeId, WARDEN_TYPES } from '../data/wardenData.js';
+import { WARDEN_MECHANICS } from './wardenMechanics.js';
+import { ROUND_MS, BEAT_MS, TRAVEL_REGEN } from '../data/gameConstants.js';
 import { runHooks } from './hooks.js';
 import {
   makeSlimeCombatant, makeEnemyCombatant, resolveRound, resolveKill,
@@ -39,23 +41,63 @@ export function spawnEnemy(zone, rareSpawnMult = 1, rng = Math.random) {
   return type ? makeEnemyCombatant(type) : null;
 }
 
+// ── Secret encounters ────────────────────────────────────────────────────────
+//
+// Old Gullet, the first slimetrap. The host decides whether the player has
+// earned it (ctx.secrets.gullet: forest Warden beaten, enough slimetraps
+// eaten, not beaten before); the party decides whether it comes: it only rises
+// for a party carrying Digest, the thing we stole from its children.
+export const SECRET_CHANCE = 0.03;
+
+export function rollSecret(zone, exp, ctx, rng) {
+  if (zone !== 'forest' || !ctx.secrets?.gullet || exp.secretMet) return null;
+  const carriesDigest = exp.slimes.some(sl => !sl.dead && (sl.ref?.mutations || []).includes('digest'));
+  if (!carriesDigest || rng() >= (ctx.secrets.force ? 1 : SECRET_CHANCE)) return null;
+  return makeEnemyCombatant('oldGullet');
+}
+
 // ── Expedition state ─────────────────────────────────────────────────────────
 
-export function makeExpedition(zone, slimes, targetKills, ctx = {}) {
+/**
+ * `targetKills` is a NUMBER or `null`, never Infinity.
+ *
+ * It used to be Infinity for the ordinary "run until recalled" case, and that
+ * silently ended every expedition: JSON.stringify(Infinity) is `null`, and
+ * `kills >= null` coerces to `kills >= 0`, which is true immediately. So the
+ * first kill after any save/reload fired expComplete and recalled the party —
+ * offline progress looked like it had done nothing at all, because the run
+ * ended one tick in.
+ */
+export function makeExpedition(zone, slimes, targetKills = null, ctx = {}) {
+  // Normalise here so nothing downstream has to know about the old sentinel.
+  targetKills = Number.isFinite(targetKills) ? targetKills : null;
+
   const rng = ctx.rng || Math.random;
-  const enemy = spawnEnemy(zone, ctx.combatBonuses?.rareSpawn, rng);
   const zd = ZONES[zone];
 
-  const logs = [
-    { m: `Entering ${zd.name}...`, c: '#22d3ee',
-      v: `target ${targetKills === Infinity ? '∞' : targetKills} kills · ${slimes.length} slimes deployed` },
-  ];
-  if (enemy) logs.push({ m: `A ${enemy.name} appears!`, c: '#22d3ee',
-                         v: `${enemy.maxHp} HP · ${enemy.stats.firmness} dmg · ${enemy.ref.element || 'neutral'}` });
+  // A Warden hunt is decided before the party leaves: no wandering, no random
+  // encounters, straight to the thing you came for. That is the whole point of
+  // summoning rather than stumbling — an unprepared party is never ambushed by
+  // a boss, it simply never meets one.
+  const warden = ctx.warden || null;
+  const enemy = warden
+    ? makeEnemyCombatant(wardenTypeId(warden.zone, warden.plus))
+    : spawnEnemy(zone, ctx.combatBonuses?.rareSpawn, rng);
+
+  const logs = warden
+    ? [{ m: `The nucleus provokes ${zd.name}...`, c: '#f59e0b',
+         v: `Warden hunt · ${slimes.length} slimes deployed` }]
+    : [{ m: `Entering ${zd.name}...`, c: '#22d3ee',
+         v: `target ${targetKills ?? '∞'} kills · ${slimes.length} slimes deployed` }];
+  if (enemy) logs.push({
+    m: warden ? `${enemy.name} rises to meet them!` : `A ${enemy.name} appears!`,
+    c: warden ? '#f59e0b' : '#22d3ee',
+    v: `${enemy.maxHp} HP · ${enemy.stats.firmness} dmg · ${enemy.actions} actions/round · ${enemy.ref.element || 'neutral'}` });
 
   return {
     version: 4,
     zone,
+    warden,
     phase: enemy ? 'battling' : 'intermission',
     round: 0,
     roundTimer: 0,
@@ -66,7 +108,9 @@ export function makeExpedition(zone, slimes, targetKills, ctx = {}) {
     materials: {},
     monsterKillCounts: {},
     logs,
-    intermission: enemy ? null : { timer: 0, duration: INTERMISSION_DURATION, event: null },
+    intermission: enemy ? null : {
+      timer: 0, duration: INTERMISSION_DURATION * (ctx.travelMult ?? 1), event: null,
+    },
     anim: null,
   };
 }
@@ -113,6 +157,17 @@ function buildAnim(records, roundMs) {
 }
 
 // ── Intermission events ──────────────────────────────────────────────────────
+
+/**
+ * A wiped party loses what it was carrying, unless Salvage Rites (always) or
+ * an active Slime Decoy (once) brings it home. The decoy is only spent when
+ * Salvage would not have covered it anyway.
+ */
+function wipeEffect(exp, ctx) {
+  const salvage = !!ctx.passives?.includes('salvage');
+  const decoy = !salvage && !!ctx.hiveAbilities?.decoy;
+  return { type: 'expWipe', salvage: salvage || decoy ? { ...exp.materials } : null, decoy };
+}
 
 function rollIntermissionEvent(exp, zone, ctx) {
   const rng = ctx.rng || Math.random;
@@ -236,21 +291,77 @@ export function tickExpedition(exp, dt, ctx = {}, zone) {
       exp.slimes.forEach(s => {
         if (!s.dead && s.hp <= 0) {
           s.dead = true;
-          log({ m: `${s.name} succumbs on the road 💔`, c: '#ef4444', v: 'died during travel' });
-          sideEffects.push({ type: 'slimeDeath', id: s.id });
+          log({ m: `${s.name} collapses on the road 💔`, c: '#ef4444', v: 'wounded while travelling' });
+          sideEffects.push({ type: 'slimeDown', id: s.id });
         }
       });
       if (exp.slimes.every(s => s.dead)) {
         exp.phase = 'defeat';
-        sideEffects.push({ type: 'expWipe' });
+        sideEffects.push(wipeEffect(exp, ctx));
         return { exp, sideEffects };
       }
     }
 
     im.timer += dt;
     if (im.timer >= im.duration) {
-      const enemy = spawnEnemy(zone, ctx.combatBonuses?.rareSpawn, rng);
+      // Slimes reknit on the road. Without this an expedition that runs "until
+      // recalled" always ends in a wipe — measured, every zone wiped inside two
+      // minutes after a handful of kills, because nothing ever healed. Recovery
+      // is what makes an at-level zone sustainable for hours and an over-level
+      // one a slow bleed: you last exactly as long as you out-heal the damage.
+      const regen = ctx.travelRegen ?? TRAVEL_REGEN;
+      if (regen > 0) {
+        let healed = 0;
+        const secondWind = ctx.passives?.includes('secondWind');
+        exp.slimes.forEach(sl => {
+          if (sl.dead) return;
+          if (secondWind) {
+            const i = (sl.status || []).findIndex(st => st.harmful);
+            if (i >= 0) {
+              const shed = sl.status.splice(i, 1)[0];
+              log({ m: `${sl.name} shakes off ${shed.type}. 🌬️`, c: '#4ade80',
+                    v: 'Second Wind — one harmful status cleared on the road' });
+            }
+          }
+          if (sl.hp >= sl.maxHp) return;
+          const amount = Math.min(sl.maxHp - sl.hp, Math.ceil(sl.maxHp * regen));
+          sl.hp += amount;
+          healed += amount;
+        });
+        if (healed > 0) {
+          log({ m: 'We knit back together on the road.', c: '#4ade80',
+                v: `travel recovery +${Math.round(regen * 100)}% max HP each · ${healed} total` });
+        }
+      }
+
+      const secret = rollSecret(zone, exp, ctx, rng);
+      const enemy = secret || spawnEnemy(zone, ctx.combatBonuses?.rareSpawn, rng);
+      if (secret) {
+        exp.secretMet = true;
+        log({ m: 'The forest floor opens like a mouth. Something very old smells what we took. 🥀', c: '#15803d',
+              v: 'secret encounter: Old Gullet' });
+      }
       if (enemy) {
+        // Contagion: the rot outlives its host.
+        if (ctx.passives?.includes('contagion') && exp.lingering?.length) {
+          enemy.status = exp.lingering.map(st => ({ ...st }));
+          log({ m: `The ${enemy.name} walks into what killed the last one. 🦠`, c: '#22c55e',
+                v: `Contagion carried ${exp.lingering.map(st => st.type).join(', ')}` });
+        }
+        exp.lingering = null;
+        // A new fight. Everything described as "each fight" or "first attack"
+        // re-arms here; before this, the round counter and every once-per-fight
+        // flag ran for the whole expedition, so Vanguard, Opportunist, Second
+        // Skin, Drop In and Fierce each fired once and never again.
+        // Resurrect and Survival Reflex are once per expedition and stay spent.
+        exp.round = 0;
+        exp.slimes.forEach(sl => {
+          const f = sl.flags || {};
+          sl.flags = {
+            ...(f.usedResurrect ? { usedResurrect: true } : {}),
+            ...(f.usedTacticalRetreat ? { usedTacticalRetreat: true } : {}),
+          };
+        });
         exp.enemy = enemy;
         exp.phase = 'battling';
         exp.intermission = null;
@@ -269,10 +380,19 @@ export function tickExpedition(exp, dt, ctx = {}, zone) {
   if (exp.roundTimer < roundMs) return { exp, sideEffects };
   exp.roundTimer -= roundMs;
 
-  const world = { round: exp.round, slimes: exp.slimes, enemy: exp.enemy, zone };
+  const world = {
+    round: exp.round, slimes: exp.slimes, enemy: exp.enemy, zone,
+    killStreak: exp.killStreak || 0, freeRoundAt: exp.freeRoundAt,
+    trophyTaken: !!exp.trophyTaken,
+  };
   const { records, sideEffects: roundEffects, wiped, enemyDead } = resolveRound(world, ctx);
 
+  // `round` counts within the current fight; `totalRounds` the whole outing.
+  exp.totalRounds = (exp.totalRounds || 0) + (world.round - (exp.round || 0));
   exp.round = world.round;
+  exp.killStreak = world.killStreak || 0;
+  exp.freeRoundAt = world.freeRoundAt;
+  exp.trophyTaken = !!world.trophyTaken;
   sideEffects.push(...roundEffects);
   records.forEach(r => { if (r.log) log(r.log); });
   exp.anim = buildAnim(records, roundMs);
@@ -284,7 +404,16 @@ export function tickExpedition(exp, dt, ctx = {}, zone) {
     killRecords.forEach(r => { if (r.log) log(r.log); });
 
     exp.kills += 1;
+    // Relentless reads this off the world each round; a casualty zeroes it.
+    world.killStreak = (world.killStreak || 0) + 1;
+    exp.killStreak = world.killStreak;
     exp.monsterKillCounts[exp.enemy.type] = (exp.monsterKillCounts[exp.enemy.type] || 0) + 1;
+
+    if (exp.warden) {
+      log({ m: `${exp.enemy.name} falls. 👑`, c: '#f59e0b',
+            v: `warden of ${zd.name} · ${exp.round} rounds` });
+      sideEffects.push({ type: 'wardenDown', zone: exp.warden.zone, plus: !!exp.warden.plus });
+    }
 
     // Materials ride home with the party rather than banking immediately —
     // losing them on a wipe is the point of the risk.
@@ -296,24 +425,35 @@ export function tickExpedition(exp, dt, ctx = {}, zone) {
       }
     }
 
+    exp.lingering = ctx.passives?.includes('contagion')
+      ? (exp.enemy.status || []).filter(st => st.harmful).map(st => ({ ...st }))
+      : null;
     exp.enemy = null;
 
-    if (exp.kills >= exp.targetKills) {
-      log({ m: 'Target reached! Recalling party...', c: '#4ade80',
+    if (exp.targetKills != null && exp.kills >= exp.targetKills) {
+      log({ m: 'Done here. Heading home.', c: '#4ade80',
             v: `${exp.kills}/${exp.targetKills} kills` });
       sideEffects.push({ type: 'expComplete' });
     } else {
       exp.phase = 'intermission';
-      exp.intermission = { timer: 0, duration: INTERMISSION_DURATION, event: null };
+      exp.intermission = {
+        timer: 0,
+        // Pathfinder: the party never stops moving. Travel still HAPPENS (its
+        // recovery and events resolve), it just costs no time.
+        duration: ctx.passives?.includes('pathfinder')
+          ? 0
+          : INTERMISSION_DURATION * (ctx.travelMult ?? 1),
+        event: null,
+      };
     }
     return { exp, sideEffects };
   }
 
   // ── Party wipe ────────────────────────────────────────────────────────────
   if (wiped) {
-    log({ m: 'Party wiped! 💀', c: '#ef4444', v: `after ${exp.round} rounds, ${exp.kills} kills` });
+    log({ m: 'Everyone is down. 💀', c: '#ef4444', v: `after ${exp.totalRounds} rounds, ${exp.kills} kills` });
     exp.phase = 'defeat';
-    sideEffects.push({ type: 'expWipe' });
+    sideEffects.push(wipeEffect(exp, ctx));
   }
 
   return { exp, sideEffects };
@@ -361,7 +501,18 @@ export function hydrateExpedition(exp, slimes = []) {
       };
     }),
     enemy: exp.enemy
-      ? { ...exp.enemy, ref: MONSTER_TYPES[exp.enemy.type] || null, effects: [], status: exp.enemy.status || [], flags: exp.enemy.flags || {} }
+      ? {
+          ...exp.enemy,
+          ref: MONSTER_TYPES[exp.enemy.type] || WARDEN_TYPES[exp.enemy.type] || null,
+          // A Warden carries its mechanic as an effect; rebuild it or the rule
+          // silently stops applying for the rest of a reloaded hunt.
+          effects: WARDEN_TYPES[exp.enemy.type]?.mechanic
+            ? [{ source: 'warden', id: WARDEN_TYPES[exp.enemy.type].mechanic,
+                 def: WARDEN_MECHANICS[WARDEN_TYPES[exp.enemy.type].mechanic] || {} }]
+            : [],
+          status: exp.enemy.status || [],
+          flags: exp.enemy.flags || {},
+        }
       : null,
   };
 }
