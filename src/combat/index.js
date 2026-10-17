@@ -5,6 +5,7 @@
 // of silently doing nothing in battle.
 
 import './effects.js';
+import './wardenMechanics.js';
 import { validateRegistry } from './validate.js';
 
 validateRegistry();

@@ -45,6 +45,15 @@ mut('digest', {
   onKill: (ev, self) => { ev.biomassFlat += self.power; },
 });
 
+mut('firstStomach', {
+  // "+X% biomass from every kill, and mends X/2% of max HP"
+  onKill: (ev, self) => {
+    ev.biomassMult += self.power / 100;
+    ev.heal += ev.self.maxHp * (self.power / 200);
+    ev.healLabel = '🥣 First Stomach';
+  },
+});
+
 mut('stoneskin', {
   // "+X Firmness" — a genuine stat bonus, declared explicitly
   statMod: (ev, self) => { ev.stats.firmness += Math.floor(self.power); },
@@ -267,69 +276,72 @@ mut('voidTouched', {
 // PERSONALITY TRAITS
 // ═════════════════════════════════════════════════════════════════════════════
 
+// Traits are tier affixes (see SLIME_TRAITS): `self.v` and `self.w` are the
+// numbers for this slime's tier, already looked up.
+
 trait('brave', {
-  onBeforeAttack: (ev) => {
-    if (ev.attacker.hp < ev.attacker.maxHp * 0.5) ev.trace.mul('🦁 Brave (wounded)', 1.05);
+  onBeforeAttack: (ev, self) => {
+    if (ev.attacker.hp < ev.attacker.maxHp * 0.5) ev.trace.add('🦁 Brave (wounded)', self.v);
   },
 });
 
 trait('cautious', {
-  onHitChance: (ev) => {
-    if (ev.defender.hp < ev.defender.maxHp * 0.5) ev.chance.dodge += 0.05;
+  onHitChance: (ev, self) => {
+    if (ev.defender.hp < ev.defender.maxHp * 0.5) ev.chance.dodge += self.v / 100;
   },
 });
 
-trait('hardy',   { hpMod: (ev) => { ev.mult *= 1.03; } });
+trait('hardy',   { hpMod: (ev, self) => { ev.flat += self.v; } });
 trait('glutton', {
-  hpMod:  (ev) => { ev.mult *= 0.97; },
-  onKill: (ev) => { ev.biomassMult += 0.10; },
+  hpMod:  (ev, self) => { ev.flat -= self.w; },
+  onKill: (ev, self) => { ev.biomassMult += self.v / 100; },
 });
 
-trait('swift',  { onBeforeAttack: (ev) => { ev.critBonus += 0.03; } });
-trait('wise',   { onKill: (ev) => { ev.elementMult *= 1.05; } });
-trait('lucky',  { onKill: (ev) => { ev.matChance += 0.05; } });
-trait('greedy', { onKill: (ev) => { ev.biomassMult += 0.05; } });
+trait('swift',  { onBeforeAttack: (ev, self) => { ev.critBonus += self.v / 100; } });
+trait('wise',   { onKill: (ev, self) => { ev.elementMult *= 1 + self.v / 100; } });
+trait('lucky',  { onKill: (ev, self) => { ev.matChance += self.v / 100; } });
+trait('greedy', { onKill: (ev, self) => { ev.biomassFlat += self.v; } });
 
 trait('resilient', {
-  onKill: (ev) => { ev.heal += 1; ev.healLabel = '🔄 Resilient'; },
+  onKill: (ev, self) => { ev.heal += self.v; ev.healLabel = '🔄 Resilient'; },
 });
 
 trait('fierce', {
-  onBeforeAttack: (ev) => {
+  onBeforeAttack: (ev, self) => {
     if (ev.attacker.flags.usedFierce) return;
     ev.attacker.flags.usedFierce = true;
-    ev.trace.mul('😤 Fierce (first strike)', 1.08);
+    ev.trace.add('😤 Fierce (first hit)', self.v);
   },
 });
 
-trait('lazy', { onBeforeAttack: (ev) => { ev.trace.mul('😴 Lazy', 0.95); } });
+// Acting last is read by turnOrder; the pool bonus by the ranch tick.
+trait('lazy', {}, { actsLast: true });
 
 trait('timid', {
-  onBeforeAttack: (ev) => { ev.trace.mul('😰 Timid', 0.95); },
-  onHitChance:    (ev) => { ev.chance.dodge += 0.10; },
+  onBeforeAttack: (ev, self) => { ev.trace.add('😰 Timid', -self.w); },
+  onHitChance:    (ev, self) => { ev.chance.dodge += self.v / 100; },
 });
 
 trait('reckless', {
-  onBeforeAttack: (ev) => { ev.trace.mul('💥 Reckless', 1.10); },
-  onDamageTaken:  (ev) => { ev.trace.mul('💥 Reckless (exposed)', 1.05); },
+  onBeforeAttack: (ev, self) => { ev.trace.add('💥 Reckless', self.v); },
+  onDamageTaken:  (ev, self) => { ev.trace.add('💥 Reckless (exposed)', self.v); },
 });
 
 trait('curious', {
-  // "+10% exploration event chance" — read by the intermission roll
-  onHazard: (ev) => { ev.eventChance += 0.10; },
+  // Read by the intermission roll.
+  onHazard: (ev, self) => { ev.eventChance *= 1 + self.v / 100; },
 });
 
 trait('void',      { onKill: (ev) => { ev.blockElement = true; } });
-trait('adaptable', { onKill: (ev) => { ev.elementMult *= 1.5; } });
+trait('adaptable', { onKill: (ev, self) => { ev.elementMult *= 1 + self.v / 100; } });
 
 // "+1 mutation slot" — read by the forge and the graft action
 trait('ancient', {}, { slots: 1 });
 
 trait('primordial', {
-  statMod: (ev) => {
-    ev.stats.firmness     = Math.floor(ev.stats.firmness * 1.10);
-    ev.stats.slipperiness = Math.floor(ev.stats.slipperiness * 1.10);
-    ev.stats.viscosity    = Math.floor(ev.stats.viscosity * 1.10);
+  statMod: (ev, self) => {
+    ev.stats.firmness     += self.v;
+    ev.stats.slipperiness += self.v;
+    ev.stats.viscosity    += self.v;
   },
-  hpMod: (ev) => { ev.mult *= 1.10; },
 });
