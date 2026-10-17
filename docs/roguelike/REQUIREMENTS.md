@@ -1,5 +1,8 @@
 # SLURP — Requirements
 
+> **v0.2:** requirements touched by the Decisions in the GDD are updated in place and
+> marked v0.2. The first playable draft (`/slurp`) implements most P0 rows; see its README.
+
 These are testable requirements derived from [`GAME_DESIGN.md`](./GAME_DESIGN.md) (cited
 as "GDD"). Each one is a single "shall" with its acceptance criteria folded into the
 wording. Numbers are starting values to tune. Where a number and the GDD disagree, the
@@ -85,7 +88,7 @@ GDD wins until both are updated.
 | ABS-09 | Reaching II or III shall trigger a Fusion Burst: pick 1 of 3 boons from the level-appropriate table. A "+1 copy" boon may cascade into further fusions, all resolved in order | P0 | §6.3 |
 | ABS-10 | Choosing a slotted essence with full slots shall require Expelling an owned slotted essence first (or cancelling). The expelled essence becomes a Husk worth 8 Gel per copy, and its copies are lost | P0 | §6.4 |
 | ABS-11 | The absorb screen shall show each option's type, Family, element, level pips toward the next fusion, and a live preview of its Morph on the player's slime | P0 | §14 |
-| ABS-12 | Kill bonuses shall apply: Flawless (+1 option), Overkill (+10 Gel per 100% overflow, +10 base), Devour (absorb 2), Critical Mass (all three) | P1 | §6.6 |
+| ABS-12 | Kill bonuses shall apply: Flawless (+1 option), Overkill (+10 Gel per 100% overflow, +10 base), Devour (absorb 2) | P1 | §6.6 |
 | ABS-13 | Once unlocked through Mastery, an essence shall have a 2% chance per offer slot to appear Iridescent (base effect plus a bonus line). Shiny enemies (1/50 spawn) shall always offer one Iridescent | P1 | §6.7 |
 | ABS-14 | Essences bought in shops, granted by events, or taken from Remnants shall go through the same absorb flow, including slot replacement and fusion | P0 | §6.8 |
 
@@ -118,7 +121,7 @@ GDD wins until both are updated.
 | ID | Requirement | Pri | GDD |
 |---|---|---|---|
 | CMB-01 | Combat shall be 1v1 and resolved by a pure function, `(battleState, inputs, rng) → (newState, records)`, with no DOM or timing dependence | P0 | §8.1 |
-| CMB-02 | Given the same slime snapshot, enemy, battle seed and Morsel input log, a battle shall produce an identical record stream | P0 | §8.8 |
+| CMB-02 | (v0.2) Given the same slime and enemy, a battle shall produce an identical record stream. Combat uses no randomness: crit and dodge are meters that fill by their chance per hit | P0 | §8.4, §8.8 |
 | CMB-03 | At each round start both sides gain Tempo = `max(0, (SLIP_self+5)/(SLIP_opp+5) − 1)`. Each full point converts to one extra action that round, up to 20; extra Tempo beyond that becomes +10% damage per point | P0 | §8.2, §8.9 |
 | CMB-04 | Actions shall resolve in effective-SLIP order, ties going to the player. Each action is its own turn, with turn-start processing per GDD §8.2 | P0 | §8.2 |
 | CMB-05 | On its turn an actor shall use the first ready Action in its priority list, or else make a basic attack (100% FIRM). Cooldowns tick at the end of the owner's turn | P0 | §8.2–8.3 |
@@ -149,19 +152,19 @@ GDD wins until both are updated.
 |---|---|---|---|
 | PRS-01 | The arena shall animate purely from engine records (it never decides outcomes), using the beat model from Hive Queen's `buildAnim` | P0 | §8.10 |
 | PRS-02 | Supported beats shall include strike, projectile, tick, heal, shield, status-apply, stagger, fall, rise, morph-pulse and critical-mass | P0 / P1 | §8.10 |
-| PRS-03 | Battle speed shall be selectable at 1×, 2× and 4×, with pause and Skip. Skip resolves the remaining battle instantly and shows a summary | P0 | §8.7 |
+| PRS-03 | (v0.2) Viewing speed shall be selectable at 1×, 2×, 4× and 8×. There is no Skip: every battle plays out | P0 | §8.7 |
 | PRS-04 | Hit-stop (40–120 ms) and damage-number size shall scale with damage as a fraction of the target's max Mass. Crits shall render larger and in gold | P0 | §8.10 |
 | PRS-05 | Above 6 actions in a round, beats shall batch into a combo counter instead of playing one by one | P1 | §8.10 |
 | PRS-06 | The battle log shall show one line per record, with a verbose toggle that shows the trace under each line | P0 | §8.7 |
 | PRS-07 | Long-pressing either combatant shall open a panel with full stats, statuses and essences | P0 | §8.7 |
-| PRS-08 | Morsels shall be tappable during battle: queued for the start of the player's next turn, at most one per turn, and pausing for a target choice where needed | P0 | §8.7 |
+| PRS-08 | (v0.2) The player shall have no input of any kind once a battle starts | P0 | §8.1 |
 
 ## EMG — Emergent play and safety valves
 
 | ID | Requirement | Pri | GDD |
 |---|---|---|---|
-| EMG-01 | Nested triggers shall be capped at 64 per action. A player chain over the cap fires Critical Mass (the battle is won, and all kill bonuses and a Feat check apply). An enemy chain over the cap is truncated | P0 | §8.9 |
-| EMG-02 | Values shall be 64-bit floats. Display shall shorten to K/M/B/T, then scientific notation. Infinity shall display as ∞ and count as Critical Mass. NaN shall be sanitized to 0 and logged as a bug | P0 | §8.9 |
+| EMG-01 | (v0.2) Nested triggers shall be capped at 64 per action. A chain over the cap, on either side, is truncated with a log line and the battle continues. There are no instant wins | P0 | §8.9 |
+| EMG-02 | Values shall be 64-bit floats. Display shall shorten to K/M/B/T, then scientific notation. Infinity shall display as ∞. NaN shall be sanitized to 0 and logged as a bug | P0 | §8.9 |
 | EMG-03 | From round 30 (bosses 50), Salt Rain shall deal 5% of max Mass as true damage to both sides, +5% per round after, so every battle ends | P0 | §8.9 |
 | EMG-04 | Overkill above 10× the enemy's max Mass shall show an OVERKILL stamp. The run shall track biggest hit, longest chain, most actions in a round, peak Mass and fastest boss kill for the Run Summary and personal records | P1 | §9.5 |
 | EMG-05 | Content shall be built from the interaction grammar (triggers, effects, scalers, converters, rule-breakers), and every essence shall connect to at least two existing blocks (checked by TOOL-01 as a warning) | P1 | §9.2 |
@@ -202,13 +205,13 @@ GDD wins until both are updated.
 | META-01 | Genes shall be awarded at every run end using the GDD §12.3 formula, with an itemized breakdown on the Run Summary | P0 | §12.3 |
 | META-02 | The Gene Tree shall support the unlock tracks Species, Genomes, Biomes, Nodes and services, Instinct capacity, and QoL. Purchases are permanent and take effect on the next run | P0 (≥5 unlocks) / P1 | §12.4 |
 | META-03 | Genome unlocks shall add their essences, relics and events to the drop pools. Content that isn't unlocked shall never appear in a run | P1 | §12.4 |
-| META-04 | Instincts shall be equippable within a capacity budget (2 at start, max 7). The Pure toggle disables them all for a run and is recorded on that run | P1 | §12.5 |
+| META-04 | (v0.2) The Gene Tree shall offer ranked permanent upgrades (stats, healing, Gel, slots, absorb options, Heirloom start, species) with rising costs, forming the main progression | P0 | §12 |
 | META-05 | At every run end the player shall be able to bank one essence into the Gene Bank (6 shelves, replace when full) | P1 | §12.6 |
 | META-06 | The Slimepedia shall record enemies, essences, relics, events and Forms on discovery, showing undiscovered Forms as silhouettes | P1 | §12.7 |
 | META-07 | Each essence shall track 3-step Mastery (absorbed in 3 runs / fused to III / won holding it at III) with the rewards in GDD §12.7 | P1 | §12.7 |
 | META-08 | Feats shall be evaluated from run telemetry and unlock their listed content (GDD §12.8). At least 8 shall exist at 1.0 | P1 | §12.8 |
 | META-09 | The Hall of Slimes shall list every past champion's portrait, build and outcome, plus personal records. Nothing shall be sent online | P1 | §12.6 |
-| META-10 | It shall be possible to win Salt 0 with zero unlocks (verified by the harness: at least 15% win rate for the best bot policy with no unlocks) | P0 | §12.1 |
+| META-10 | (v0.2) A fresh profile shall be nearly unable to win: in the harness, the bot's first win shall come after at least 20 runs, and every bot career shall win within 150 runs | P0 | §12.1 |
 
 ## DIF — Difficulty
 

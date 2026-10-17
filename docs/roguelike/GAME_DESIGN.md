@@ -2,12 +2,29 @@
 
 _Working title. A slime roguelite where you become what you defeat._
 
-_Status: **draft v0.1, a proposal for review**. Every number here is a starting value for
+_Status: **draft v0.2**. v0.2 records your answers to the first round of questions
+(below). A playable first draft lives in [`/slurp`](../../slurp/README.md). Every number here is a starting value for
 tuning, not a final one. Decisions I made on your behalf are listed in §19 (Open Questions)
 with the default I assumed. Testable requirements live in
 [`REQUIREMENTS.md`](./REQUIREMENTS.md)._
 
 ---
+
+## Decisions (v0.2)
+
+These override anything older in this document. Sections that changed are marked "v0.2".
+
+| Topic | Decision |
+|---|---|
+| Battles | **Always play out.** No instant wins. A runaway chain is cut off at the trigger cap and the fight continues normally (§8.9) |
+| Control in battle | **None.** The player has no input once a fight starts. The build is the only thing that matters; speed only changes how fast you watch |
+| Randomness in battle | **None.** Combat is fully deterministic: crit and dodge are meters that fill by their chance (25% crit = every 4th hit), not rolls (§8.4). Dice only live in maps, offers, shops and events |
+| Morsels | Out of battle entirely. Not in the first draft; may return as map-use items |
+| Meta progression | **Mostly permanent upgrades** (the Gene Tree) that push you closer to the end and then up the Salt ladder. The first runs should be almost impossible to win (§12) |
+| Fusion | Level up at 3 copies (3 → II, 6 → III), as in v0.1 |
+| Game | Standalone, set in the Hive Queen world |
+| Art | Placeholders only; you'll do the art |
+| Business | Paid up front. No microtransactions to design around |
 
 ## Contents
 
@@ -426,7 +443,6 @@ How you win changes what you eat. These make good wins feel *more* rewarding.
 | **Flawless** ✨ | Lost no Mass this battle | +1 option on this absorb |
 | **Overkill** 💥 | Killing blow overflows by at least 100% of the enemy's max Mass | +Gel (10 + 10 per 100% of overflow) |
 | **Devour** 😋 | The enemy died while **Digesting**, or to a Devour effect | **Absorb 2** of the options |
-| **Critical Mass** ♾️ | The chain overflow rule fired (§8.9) | All three of the above, plus a Feat check |
 
 ### 6.7 Iridescent essences
 
@@ -529,13 +545,10 @@ and the real-time arena is a view.** A pure, deterministic resolver advances the
 one round at a time and emits structured records. The arena replays those records as
 timed animation beats. Here it is **1v1**: your slime against one enemy.
 
-The fight runs automatically. The player shapes it in three places:
-
-- **before** the fight, by setting Action priority and picking which Morsels to carry;
-- **during** the fight, by tapping Morsels;
-- **between** fights, through the build itself.
-
-(The level of in-battle agency is Open Question Q2.)
+**v0.2:** the fight runs automatically and **the player has no input during it**. The
+build is shaped entirely between fights: what you absorb, what you expel, and the order
+of your slots (top to bottom is the order Actions fire in). The same build against the
+same enemy always produces the same fight.
 
 ### 8.2 Round structure
 
@@ -579,9 +592,11 @@ This extends `resolveAttack` from Hive Queen. Every step writes to the trace.
 
 1. **Base:** FIRM × ability multiplier. `onBeforeAttack` hooks apply crit bonuses and
    conditional multipliers.
-2. **Hit check:** the defender's dodge, then block or phase, then the attacker's miss
-   (Blinded). Every roll is traced, landed or not.
-3. **Crit:** 5% + sources; ×1.5 + crit-damage sources.
+2. **Dodge (v0.2, no dice):** every incoming hit adds the defender's dodge chance to its
+   dodge meter. When the meter reaches 1, the hit is dodged and the meter drops by 1.
+3. **Crit (v0.2, no dice):** every hit adds the attacker's crit chance (5% + sources) to
+   its crit meter; at 1 it crits (×1.5 + crit-damage sources). Chance above 100% becomes
+   extra crit damage.
 4. **Attacker modifiers:** `onDamageDealt` hooks, Enraged/Weakened, execute checks.
 5. **Element:** ×1.25 / ×0.75. Ignored by *true damage*.
 6. **Defender modifiers:** `onDamageTaken` hooks, Softened.
@@ -627,8 +642,7 @@ Intensity stacking is what makes status builds scale, and scaling is what breaks
 
 | Input | Detail |
 |---|---|
-| Speed | 1× / 2× / 4×, pause, and **Skip** (resolve instantly, then show the summary) |
-| **Morsels** | Tap to queue one; it's eaten at the start of your next turn. Max 1 per turn. Free action. The game pauses while you pick a target |
+| Speed | 1× / 2× / 4× / 8× viewing speed. **v0.2:** no Skip; the battle always plays out |
 | Log | Battle log with a **verbose toggle**, the same trace format as Hive Queen §9.4 |
 | Inspect | Long-press either combatant for its full stats, statuses and essences |
 
@@ -643,12 +657,11 @@ instant Skip, replays, and resuming mid-battle by re-simulating.
 These exist so the game never hangs or crashes, and so overflow pays off instead of
 breaking things.
 
-- **Trigger depth:** at most 64 nested triggers per action.
-  - If the **player's** chain exceeds it, **CRITICAL MASS ♾️** fires. The enemy is
-    engulfed and the battle is won, with all kill bonuses and a Feat check (§12.8).
-  - If an **enemy's** chain exceeds it, the chain is truncated.
+- **Trigger depth (v0.2):** at most 64 nested triggers per action. A chain that hits
+  the cap, on either side, is cut off with a log line, and the battle carries on. There
+  is no instant win; a broken build still has to finish the fight.
 - **Big numbers:** the game uses 64-bit floats. Display shortens to K / M / B / T, then
-  `1.2e15`. **Infinity** is a legal value that shows as ∞ and counts as Critical Mass.
+  `1.2e15`. **Infinity** is a legal value that shows as ∞.
   NaN is sanitized to 0 and logged as a bug.
 - **Stalemates:** at round 30 (bosses: 50), **Salt Rain** begins. Both sides lose 5% of
   max Mass as true damage per round, +5% each round after. Every battle ends.
@@ -974,14 +987,23 @@ build axis. Boss rewards are listed in §4.3.
 
 ### 12.1 Goals
 
+> **v0.2:** you asked for more permanent upgrades and for the first runs to be nearly
+> unwinnable. The **Gene Tree is now the main progression**: ranked, permanent stat and
+> economy upgrades (Mass, FIRM, SLIP, VISC, healing after wins, Gel, extra slots, extra
+> absorb options, Heirloom start, species hatching). Instincts and their capacity cap
+> are dropped. Unlocks, Heirlooms, Remnants and Feats stay as secondary layers.
+> First-draft numbers (from the bot harness, `npm run sim`): a dumb bot first beats the
+> Act 1 boss around run 26 and first wins around run 74. A human should get there
+> noticeably faster. Salt levels then keep the permanent upgrades meaningful.
+
 1. **Every run pays out**, including fast losses.
-2. **Mostly horizontal.** Unlocks widen *what's possible*: new essences, relics, events
+2. **Mostly horizontal** (superseded by v0.2: mostly vertical). Unlocks widen *what's possible*: new essences, relics, events
    and species. That fuels emergent strategy, since every unlock is a new combination to
    break.
 3. **A little vertical, bounded.** A small permanent power layer for a sense of growth,
    capped by a loadout budget so Salt levels stay meaningful.
 4. **Thematic.** The Brood Pool remembers your champions.
-5. **No grind walls.** The first win should be possible without any unlocks.
+5. ~~No grind walls~~ (v0.2): the first win is *expected* to need many runs of upgrades.
 
 ### 12.2 The Brood Pool (hub)
 
@@ -1386,6 +1408,10 @@ entries, with heavy family sharing, gives roughly 200 unique essences. About 60 
 ---
 
 ## 19. Open Questions
+
+**v0.2:** Q1, Q2, Q3, Q5, Q7, Q8 and Q13 are answered (see Decisions at the top).
+Still open: Q4 (run length), Q6 (map info), Q9 (platform), Q10 (tone), Q11 (Remnants),
+Q12 (Salt per species), Q14 (name), Q15 (repo). The first draft assumes the defaults.
 
 These are the decisions I made for you so the document could be complete. Each lists the
 default I assumed. They're ordered by how much the answer would change the design.
