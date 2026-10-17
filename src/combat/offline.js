@@ -16,6 +16,7 @@ import { RESEARCH } from '../data/buildingData.js';
 import { ROUND_MS } from '../data/gameConstants.js';
 import { formatTime } from '../utils/helpers.js';
 import { tickExpedition, hydrateExpedition } from './expedition.js';
+import { partyFull } from './carry.js';
 
 // `now` is when the catch-up runs to. The forecast behind notifications calls
 // this with a future `now` and the same seed the real catch-up will use, so
@@ -37,6 +38,7 @@ export const calculateOfflineProgress = (saved, bonuses, offlineCtx = {}, now = 
     events: [],            // [{ zone, type: 'wipe' | 'complete', at }] with timestamps
     mutagensFound: {},
     secretsFound: [],
+    traitsGained: [],      // [{ name, trait }]: who changed while you were away
     prismsFound: 0,
     salvaged: {},
     completed: [],
@@ -78,6 +80,7 @@ export const calculateOfflineProgress = (saved, bonuses, offlineCtx = {}, now = 
 
     const startAt = saved.lastSave || now;
     let elapsed = 0;
+    let fullAt = partyFull(exp.slimes, offlineCtx) ? startAt : null;
     for (; elapsed < budgetMs; elapsed += step) {
       if (exp.phase === 'defeat') break;
 
@@ -94,6 +97,7 @@ export const calculateOfflineProgress = (saved, bonuses, offlineCtx = {}, now = 
           bio += se.amount;
           results.biomassGained += se.amount;
         } else if (se.type === 'grantTrait') {
+          results.traitsGained.push({ name: se.name, trait: se.trait });
           slimes = slimes.map(sl => sl.id === se.id && !(sl.traits || []).includes(se.trait)
             ? { ...sl, traits: [...(sl.traits || []), se.trait] }
             : sl);
@@ -115,6 +119,10 @@ export const calculateOfflineProgress = (saved, bonuses, offlineCtx = {}, now = 
       });
 
       if (exp.phase === 'defeat') break;
+      if (fullAt == null && partyFull(exp.slimes, offlineCtx)) {
+        fullAt = startAt + elapsed;
+        results.events.push({ zone, type: 'full', at: fullAt });
+      }
       if (exp.targetKills != null && exp.kills >= exp.targetKills) {
         results.completed.push(zone);
         results.events.push({ zone, type: 'complete', at: startAt + elapsed });

@@ -617,3 +617,19 @@ export const getMutationDesc = (mutationId, viscosity = 0) => {
   }
   return mut.passiveDesc;
 };
+
+// ── How many traits a slime can have ────────────────────────────────────────
+//
+// Traits used to pile up without limit: the road handed one out about every
+// fifty kills, and a night away left slimes quietly carrying a dozen. Now a
+// trait is rare, announced, and capped by tier, so a higher tier is also more
+// room to become someone. Prism-bought legendary traits ignore the cap.
+export const TRAIT_CAP = { basic: 1, enhanced: 2, elite: 3, royal: 4 };
+
+export const traitRoom = (slime) =>
+  Math.max(0, (TRAIT_CAP[slime?.tier] ?? 1)
+    - (slime?.traits || []).filter(t => SLIME_TRAITS[t]?.rarity !== 'legendary').length);
+
+/** Chance, per trip between fights, that the road changes a slime. About once
+ *  every two or three days of farming for a party. */
+export const ROAD_TRAIT_CHANCE = 0.0001;

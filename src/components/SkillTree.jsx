@@ -12,6 +12,7 @@ const CAPACITY_LABELS = {
   defenseSlots: 'Ambush squad',
   expeditionSlots: 'Parties out at once',
   rareSpawn: '% rare monsters',
+  carryCapacity: '% carry capacity',
 };
 
 const FEATURE_NAMES = {
@@ -179,6 +180,24 @@ const SkillTree = ({ queenLevel, purchasedSkills, onPurchaseSkill, availablePoin
         {currentTree.description}
       </div>
 
+      {/* Selected skill, above the tree so it is visible without scrolling. */}
+      {selectedSkill && (
+        <SkillDetailPanel
+          skill={currentTree.skills[selectedSkill]}
+          state={getSkillState(currentTree.skills[selectedSkill])}
+          treeColor={currentTree.color}
+          purchasedSkills={purchasedSkills}
+          allSkills={currentTree.skills}
+          onPurchase={() => handlePurchase(selectedSkill)}
+          onClose={() => setSelectedSkill(null)}
+        />
+      )}
+      {!selectedSkill && (
+        <div style={{ fontSize: 11, opacity: 0.55, textAlign: 'center', marginBottom: 10 }}>
+          Tap an Instinct to see what it does.
+        </div>
+      )}
+
       {/* Skill tree visualization */}
       <div style={{
         position: 'relative',
@@ -291,19 +310,6 @@ const SkillTree = ({ queenLevel, purchasedSkills, onPurchaseSkill, availablePoin
         )}
       </div>
 
-      {/* Selected skill detail panel */}
-      {selectedSkill && (
-        <SkillDetailPanel
-          skill={currentTree.skills[selectedSkill]}
-          state={getSkillState(currentTree.skills[selectedSkill])}
-          treeColor={currentTree.color}
-          purchasedSkills={purchasedSkills}
-          allSkills={currentTree.skills}
-          onPurchase={() => handlePurchase(selectedSkill)}
-          onClose={() => setSelectedSkill(null)}
-        />
-      )}
-
       {/* Legend */}
       <div style={{
         display: 'flex',
@@ -404,7 +410,7 @@ const SkillDetailPanel = ({ skill, state, treeColor, purchasedSkills, allSkills,
 
   return (
     <div style={{
-      marginTop: 15,
+      marginBottom: 12,
       background: 'rgba(0,0,0,0.4)',
       border: `2px solid ${treeColor}`,
       borderRadius: 10,

@@ -15,7 +15,7 @@ import {
   queenLevelCost,
 } from './data/gameConstants.js';
 
-import { STAT_INFO, SLIME_TIERS } from './data/slimeData.js';
+import { STAT_INFO, SLIME_TIERS, carryCapacity } from './data/slimeData.js';
 import { MUTATION_LIBRARY, TRAIT_LIBRARY, STATUS_EFFECTS, SLIME_TRAITS, getMutationDesc } from './data/traitData.js';
 import { MONSTER_TYPES, MONSTER_ABILITIES } from './data/monsterData.js';
 import { ZONES, EXPLORATION_EVENTS, INTERMISSION_EVENTS, INTERMISSION_DURATION } from './data/zoneData.js';
@@ -39,7 +39,7 @@ import { makeExpedition, tickExpedition, hydrateExpedition } from './combat/expe
 import { makeAmbush, tickAmbush, retreatAmbush, hydrateAmbush, dehydrateAmbush } from './combat/caravan.js';
 import { nextTutorial, TUTORIALS, TUTORIAL_ORDER, GUIDE_STEPS, currentGuideStep } from './data/tutorialData.js';
 import { MUTAGEN_PITY_KILLS, GULLET_TRAP_KILLS } from './data/monsterData.js';
-import { mutagenName, traitValues } from './data/traitData.js';
+import { mutagenName, traitValues, traitDesc, traitRoom } from './data/traitData.js';
 
 /**
  * Rebuild the live references a saved expedition dropped. Combatants are
@@ -69,6 +69,8 @@ import {
   SettingsTab,
   Ranch,
   Merchant,
+  NucleusView,
+  BottomSheet,
 } from './components';
 import { merchantVisit, rollMerchantDeals, canTakeDeal, MERCHANT, MATERIAL_TABLE } from './data/merchantData.js';
 import SkillTree from './components/SkillTree.jsx';
@@ -133,6 +135,7 @@ export default function SlimeQueen() {
   const [selZone, setSelZone] = useState('forest');
   const [party, setParty] = useState([]);
   const [selSlime, setSelSlime] = useState(null);
+  const [hiveSheet, setHiveSheet] = useState(null); // which Nucleus organ is open
   const touchX = useRef(null);
   const lastArenaTickRef = useRef(Date.now());
   const lastAmbushTickRef = useRef(Date.now());
@@ -212,6 +215,8 @@ export default function SlimeQueen() {
     biomassGain: 1 + ((skillBonuses.biomassGain || 0) + (skillBonuses.allResources || 0)) / 100,
     squadSlots: skillBonuses.defenseSlots || 0, // Extra caravan ambush slots
     mutationSlots: skillBonuses.mutationSlots || 0, // Extra mutation slots for slimes
+    carryCapacity: 1 + (skillBonuses.carryCapacity || 0) / 100, // Stretchy Membrane
+    feedShare: 0.15 * (builds.feedingTendril || 0),               // Feeding Tendril
   };
 
   // Check if passive skill is purchased
@@ -829,6 +834,30 @@ export default function SlimeQueen() {
   const merchantUnlocked = isFeatureUnlocked('merchant', purchasedSkills);
   const stall = merchantUnlocked ? merchantVisit(merchant?.firstVisit, Date.now()) : null;
 
+  // ── The Nucleus picture ──────────────────────────────────────────────────
+  // An organ for each system the player has; nothing locked is drawn. A
+  // Tendril for each zone reached, longer with each level.
+  const nucleusArt = {
+    organs: {
+      queen: true, neural: true, stomach: true,
+      gland: Object.keys(HIVE_ABILITIES).some(id => isPheromoneUnlocked(id, purchasedSkills)),
+      vat: isFeatureUnlocked('building', purchasedSkills),
+    },
+    tendrils: TENDRILS.filter(t => (builds[t.id] || 0) >= 1).map(t => ({ zone: t.zone, level: builds[t.id] })),
+    merchant: !!stall?.present,
+  };
+  const pheromonesInAir = Object.values(activeHiveAbilities).filter(t => t > Date.now()).length;
+  const nucleusBadges = {
+    queen: bio >= queenLevelCost(queen.level) ? '⬆' : null,
+    neural: availableSkillPoints > 0 ? availableSkillPoints : null,
+    gland: pheromonesInAir || null,
+    merchant: '!',
+  };
+  const tapNucleus = (id, spot) => {
+    if (id.startsWith('tendril:')) { setSelZone(spot.zone); setTab('wilds'); return; }
+    setHiveSheet(id);
+  };
+
   useEffect(() => {
     if (!gameLoaded || !stall?.present) return;
     if (merchant?.deals && merchant.visit === stall.index) return;
@@ -883,8 +912,11 @@ export default function SlimeQueen() {
         notes.push(e.type === 'wipe'
           ? { id: NOTE_IDS.expedition + i, at: e.at, title: `Mother, the party in ${z?.name} is down`,
               body: 'Everyone fell. They need to mend, and they dropped what they were carrying.' }
-          : { id: NOTE_IDS.expedition + i, at: e.at, title: `${w?.icon || '👑'} It's over`,
-              body: `The fight with ${w?.name || 'the Warden'} is done. Come and see how it went.` });
+          : e.type === 'full'
+            ? { id: NOTE_IDS.expedition + i, at: e.at, title: `🧬 The party in ${z?.name} is full`,
+                body: "They can't carry any more biomass. Come and squeeze them." }
+            : { id: NOTE_IDS.expedition + i, at: e.at, title: `${w?.icon || '👑'} It's over`,
+                body: `The fight with ${w?.name || 'the Warden'} is done. Come and see how it went.` });
       });
     }
 
@@ -1284,7 +1316,6 @@ export default function SlimeQueen() {
   };
 
   const [expSummaries, setExpSummaries] = useState([]); // Array of expedition summaries
-  const [expandedSections, setExpandedSections] = useState({ research: false, buildings: false, queenUnlocks: false, mana: false }); // Collapsible sections
   const [verboseLogs, setVerboseLogs] = useState(false); // Toggle for detailed combat calculations in logs
   const [editingSlimeName, setEditingSlimeName] = useState(null); // { id, name, title } for editing
 
@@ -1346,6 +1377,7 @@ export default function SlimeQueen() {
       sharedVigor:      isHiveAbilityActive('sharedVigor'),
       bountifulHarvest: isHiveAbilityActive('bountifulHarvest'),
       evolutionPulse:   isHiveAbilityActive('evolutionPulse'),
+      muskOfWant:       isHiveAbilityActive('muskOfWant'),
       swiftExpedition:  isHiveAbilityActive('swiftExpedition'),
       decoy:            isHiveAbilityActive('decoy'),
     },
@@ -1390,6 +1422,8 @@ export default function SlimeQueen() {
     const exp = makeExpedition(zone, roster, targetKills, { ...combatContext(), warden });
 
     setExps(pr => ({ ...pr, [zone]: exp }));
+    // Yesterday's results are not today's news: sending a party out clears them.
+    setExpSummaries([]);
     if (warden) setWardenTries(t => ({ ...t, [zone]: (t[zone] || 0) + 1 }));
     if (warden) cue('warden'); else sfx('depart');
     markGuide('sent');
@@ -1808,7 +1842,7 @@ export default function SlimeQueen() {
                 } else if (ranch.effect === 'trait') {
                   acc.cycles = (acc.cycles || 0) + 1;
                   // Luxury lounge: roll for trait on each cycle
-                  if (ranch.traitPool && Math.random() < ranch.effectValue) {
+                  if (ranch.traitPool && traitRoom(slime) > 0 && Math.random() < ranch.effectValue) {
                     const existingTraits = slime.traits || [];
                     const availableTraits = ranch.traitPool.filter(t => !existingTraits.includes(t));
                     if (availableTraits.length > 0) {
@@ -1888,12 +1922,16 @@ export default function SlimeQueen() {
                   grantMutagen(se.mutation);
                   cue('rare');
                   break;
-                case 'grantTrait':
+                case 'grantTrait': {
                   setSlimes(list => list.map(sl =>
                     sl.id === se.id && !(sl.traits || []).includes(se.trait)
                       ? { ...sl, traits: [...(sl.traits || []), se.trait] }
                       : sl));
+                  const def = SLIME_TRAITS[se.trait];
+                  log(`✨ ${se.name || 'A slime'} is ${def?.icon} ${def?.name || se.trait} now: ${traitDesc(se.trait, slimes.find(x => x.id === se.id)?.tier)}.`);
+                  sfx('glub');
                   break;
+                }
                 case 'wardenDown':
                   recordWardenKill(se.zone, se.plus);
                   break;
@@ -1986,7 +2024,17 @@ export default function SlimeQueen() {
   } : null;
   const expHud = selExpedition ? [
     { text: `💀 ${selExpedition.kills}${selExpedition.targetKills != null ? `/${selExpedition.targetKills}` : ''}`, color: '#f59e0b' },
-    { text: `Round ${selExpedition.round}`, color: '#94a3b8' },
+    // How full the party is: the carry cap made this the thing worth glancing at.
+    (() => {
+      const living = (selExpedition.slimes || []).filter(c => !c.dead);
+      if (!living.length) return null;
+      const cap = living.reduce((n, c) => n + carryCapacity(c.ref, combatBonuses.carryCapacity), 0);
+      const held = living.reduce((n, c) => n + (c.ref?.biomass || 0) + (c.biomassGained || 0), 0);
+      const pct = Math.min(100, Math.floor((held / Math.max(1, cap)) * 100));
+      return pct >= 100
+        ? { text: '🧬 Full', color: '#fbbf24' }
+        : { text: `🧬 ${pct}%`, color: '#4ade80' };
+    })(),
     selExpedition.phase === 'intermission'
       ? { text: '🚶 Traveling', color: '#22d3ee' }
       : selExpedition.enemy
@@ -2032,7 +2080,7 @@ export default function SlimeQueen() {
   const getResTime = () => { if (!activeRes) return ''; const r = RESEARCH[activeRes.id]; const tot = r.time / bon.res; const rem = Math.ceil(tot * (1 - activeRes.prog / 100)); return `${Math.floor(rem / 60)}:${(rem % 60).toString().padStart(2, '0')}`; };
 
   // Glub's first steps, until they are done or skipped.
-  const guideStep = tutorialsOn && !guide.dismissed ? currentGuideStep({
+  const guideState = {
     slimeCount: slimes.length,
     flags: guide.flags || {},
     bankedKills: Object.values(monsterKills).reduce((n, c) => n + c, 0),
@@ -2040,7 +2088,12 @@ export default function SlimeQueen() {
       + Object.values(exps).reduce((n, e) => n + (e.kills || 0), 0),
     queenLevel: queen.level,
     skillsLearned: purchasedSkills.length,
-  }) : null;
+    levelCost: queenLevelCost(queen.level),
+    // Everything the player could spend once the party is home and squeezed.
+    biomassAll: bio + slimes.reduce((n, sl) => n + (sl.biomass || 0), 0)
+      + Object.values(exps).reduce((n, e) => n + (e.slimes || []).reduce((m, c) => m + (c.biomassGained || 0), 0), 0),
+  };
+  const guideStep = tutorialsOn && !guide.dismissed ? currentGuideStep(guideState) : null;
   const prevGuideStep = useRef(null);
   useEffect(() => {
     if (prevGuideStep.current && prevGuideStep.current !== guideStep?.id) sfx('learn');
@@ -2096,7 +2149,7 @@ export default function SlimeQueen() {
             <SlimeSprite tier="basic" size={30} />
             <div style={{ flex: 1, fontSize: 12, lineHeight: 1.4 }}>
               <div style={{ fontSize: 10, opacity: 0.6 }}>Glub · first steps {GUIDE_STEPS.indexOf(guideStep) + 1}/{GUIDE_STEPS.length}</div>
-              {guideStep.text}
+              {typeof guideStep.text === 'function' ? guideStep.text(guideState) : guideStep.text}
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
               {tab !== guideStep.tab && (
@@ -2115,6 +2168,15 @@ export default function SlimeQueen() {
         
         {tab === 'hive' && (
           <div>
+            <NucleusView art={nucleusArt} badges={nucleusBadges} onTap={tapNucleus} />
+            {stall && !stall.present && (
+              <div style={{ textAlign: 'center', fontSize: 11, opacity: 0.6, marginBottom: 10 }}>
+                {MERCHANT.icon} {MERCHANT.name} is off down the road. Back in {formatTime(Math.max(0, stall.nextAt - Date.now()) / 1000)}.
+              </div>
+            )}
+            <div style={{ textAlign: 'center', fontSize: 11, opacity: 0.45 }}>Tap an organ, Mother. Tap a Tendril to go where it reaches.</div>
+
+            <BottomSheet open={hiveSheet === 'queen'} onClose={() => setHiveSheet(null)} title="👑 The Slime Queen">
             <div style={{ background: 'rgba(236,72,153,0.1)', borderRadius: 12, marginBottom: 20, padding: 20 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 20, marginBottom: 15 }}>
                 <SlimeSprite tier="royal" size={80} isQueen />
@@ -2141,39 +2203,10 @@ export default function SlimeQueen() {
               </div>
 
             </div>
+            </BottomSheet>
 
-            {/* Collapsible Mana & Abilities */}
-            <div style={{ background: 'rgba(168,85,247,0.1)', borderRadius: 12, marginBottom: 20, overflow: 'hidden' }}>
-              <button
-                onClick={() => setExpandedSections(s => ({ ...s, mana: !s.mana }))}
-                style={{
-                  width: '100%',
-                  padding: 15,
-                  background: 'transparent',
-                  border: 'none',
-                  color: '#fff',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center'
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <span style={{ fontSize: 16, fontWeight: 'bold' }}>🔮 Pheromones</span>
-                  <span style={{ background: 'rgba(0,0,0,0.3)', padding: '4px 10px', borderRadius: 6, fontSize: 14, fontWeight: 'bold' }}>
-                    {mana}
-                  </span>
-                  {Object.keys(activeHiveAbilities).filter(id => activeHiveAbilities[id] > Date.now()).length > 0 && (
-                    <span style={{ fontSize: 10, padding: '2px 6px', background: 'rgba(74,222,128,0.3)', borderRadius: 4, color: '#4ade80' }}>
-                      {Object.keys(activeHiveAbilities).filter(id => activeHiveAbilities[id] > Date.now()).length} active
-                    </span>
-                  )}
-                </div>
-                <span>{expandedSections.mana ? '▼' : '▶'}</span>
-              </button>
-
-              {expandedSections.mana && (
-                <div style={{ padding: '0 20px 20px' }}>
+            <BottomSheet open={hiveSheet === 'gland'} onClose={() => setHiveSheet(null)} title={`🔮 Pheromones · ${mana} musk`}>
+                <div>
                   <div style={{ fontSize: 11, opacity: 0.6, marginBottom: 15 }}>
                     +{slimes.length} musk an hour (1 per slime). Release a pheromone to change how the nucleus works for a while.
                   </div>
@@ -2249,37 +2282,13 @@ export default function SlimeQueen() {
                 )}
                   </div>
                 </div>
-              )}
-            </div>
+            </BottomSheet>
 
-            <Merchant stall={stall} merchant={merchant} mats={mats} mutagens={mutagens} onTake={takeDeal} />
+            <BottomSheet open={hiveSheet === 'merchant'} onClose={() => setHiveSheet(null)} title={`${MERCHANT.icon} ${MERCHANT.name}`}>
+              <Merchant stall={stall} merchant={merchant} mats={mats} mutagens={mutagens} onTake={takeDeal} />
+            </BottomSheet>
 
-            {/* Buildings — hidden entirely until Calcified Frame. A locked panel
-                advertises what you are missing; an absent one lets the screen
-                grow, which is the feeling this ladder is built around. */}
-            {isFeatureUnlocked('building', purchasedSkills) && (
-            <div style={{ background: 'rgba(0,0,0,0.2)', borderRadius: 10, marginBottom: 15, overflow: 'hidden' }}>
-              <button
-                onClick={() => setExpandedSections(s => ({ ...s, buildings: !s.buildings }))}
-                style={{
-                  width: '100%',
-                  padding: 15,
-                  background: 'rgba(245,158,11,0.1)',
-                  border: 'none',
-                  borderRadius: 0,
-                  color: '#fff',
-                  fontWeight: 'bold',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  fontSize: 14
-                }}
-              >
-                <span>🏗️ Buildings</span>
-                <span>{expandedSections.buildings ? '▼' : '▶'}</span>
-              </button>
-              {expandedSections.buildings && (
+            <BottomSheet open={hiveSheet === 'vat'} onClose={() => setHiveSheet(null)} title="🏗️ Buildings">
                 <div style={{ padding: 15 }}>
                   {activeRes && (
                     <div style={{ background: 'rgba(34,211,238,0.1)', padding: 15, borderRadius: 10, marginBottom: 15 }}>
@@ -2359,34 +2368,22 @@ export default function SlimeQueen() {
                     })}
                   </div>
                 </div>
-              )}
-            </div>
-            )}
+            </BottomSheet>
 
-            {/* Stores — kept next to the buildings that eat them */}
-            <details open={availableSkillPoints > 0} style={{ background: 'rgba(0,0,0,0.2)', borderRadius: 10, padding: 15, marginBottom: 15 }}>
-              <summary style={{ fontSize: 16, fontWeight: 'bold', cursor: 'pointer' }}>
-                🌳 Instincts{' '}
-                <span style={{ fontSize: 12, fontWeight: 'normal', opacity: availableSkillPoints > 0 ? 1 : 0.55, color: availableSkillPoints > 0 ? '#4ade80' : undefined }}>
-                  {availableSkillPoints > 0 ? `${availableSkillPoints} point${availableSkillPoints > 1 ? 's' : ''} to spend` : 'no points'}
-                </span>
-              </summary>
-              <div style={{ marginTop: 12 }}>
+            <BottomSheet
+              open={hiveSheet === 'neural'}
+              onClose={() => setHiveSheet(null)}
+              title={`🌳 Instincts · ${availableSkillPoints > 0 ? `${availableSkillPoints} point${availableSkillPoints > 1 ? 's' : ''} to spend` : 'no points'}`}
+            >
               <SkillTree
                 queenLevel={queen.level}
                 purchasedSkills={purchasedSkills}
                 onPurchaseSkill={purchaseSkill}
                 availablePoints={availableSkillPoints}
               />
-              </div>
-            </details>
+            </BottomSheet>
 
-            <details style={{ background: 'rgba(0,0,0,0.2)', borderRadius: 10, padding: 15, marginBottom: 15 }}>
-              <summary style={{ fontSize: 16, fontWeight: 'bold', cursor: 'pointer' }}>
-                📦 Stores <span style={{ fontSize: 12, opacity: 0.5, fontWeight: 'normal' }}>
-                  ({Object.keys(mats).length} kinds)
-                </span>
-              </summary>
+            <BottomSheet open={hiveSheet === 'stomach'} onClose={() => setHiveSheet(null)} title={`📦 Stores · ${Object.keys(mats).length} kinds`}>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8, marginTop: 12 }}>
                 {Object.entries(mats).sort(([a], [b]) => a.localeCompare(b)).map(([n, c]) => (
                   <div key={n} style={{ padding: 9, background: 'rgba(0,0,0,0.3)', borderRadius: 8, fontSize: 12 }}>
@@ -2399,7 +2396,7 @@ export default function SlimeQueen() {
                   </div>
                 )}
               </div>
-            </details>
+            </BottomSheet>
           </div>
         )}
 
@@ -2569,7 +2566,9 @@ export default function SlimeQueen() {
                         </div>
                         <div style={{ textAlign: 'right', fontSize: 10 }}>
                           <div style={{ opacity: 0.6 }}>❤️ {expS ? Math.ceil(expS.hp) : s.maxHp}/{s.maxHp}</div>
-                          <div style={{ opacity: 0.6 }}>🧬 {Math.floor(biomass)}</div>
+                          <div style={{ opacity: 0.6, color: biomass >= carryCapacity(s, combatBonuses.carryCapacity) ? '#fbbf24' : undefined }}>
+                            🧬 {Math.floor(biomass)}/{carryCapacity(s, combatBonuses.carryCapacity)}
+                          </div>
                         </div>
                       </div>
                     </div>

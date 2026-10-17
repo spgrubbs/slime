@@ -20,6 +20,7 @@ import { calculateElementalDamage } from '../utils/helpers.js';
 import { runHooks, getEffect } from './hooks.js';
 import { computeStats, computeMaxHp, buildEffectList } from './stats.js';
 import { makeTrace } from './trace.js';
+import { carry } from './carry.js';
 
 const C = {
   slime:   '#4ade80',
@@ -657,6 +658,27 @@ function checkDeaths(world, ctx, records, sideEffects) {
 
 // ── Kill rewards ─────────────────────────────────────────────────────────────
 
+/** One prism in about every 5,000 kills. Caravan routs still guarantee one. */
+export const PRISM_CHANCE = 0.0002;
+
+/**
+ * Multiplier on a monster's mutagen chance, and the reasons for it.
+ *   Gene Hunger (instinct)     ×2 common
+ *   Trophy Hunter (instinct)   ×3 rare
+ *   Musk of Want (pheromone)   ×3 rare, while it lasts
+ *   Gene Sieve (building)      ×(1 + 0.5 per level), both
+ */
+export function mutagenBoost(md, ctx = {}) {
+  let mult = 1;
+  const why = [];
+  if (!md?.rare && ctx.passives?.includes('geneHunger')) { mult *= 2; why.push('Gene Hunger ×2'); }
+  if (md?.rare && ctx.passives?.includes('trophyHunter')) { mult *= 3; why.push('Trophy Hunter ×3'); }
+  if (md?.rare && ctx.hiveAbilities?.muskOfWant) { mult *= 3; why.push('Musk of Want ×3'); }
+  const sieve = ctx.builds?.geneSieve || 0;
+  if (sieve > 0) { mult *= 1 + 0.5 * sieve; why.push(`Gene Sieve ×${1 + 0.5 * sieve}`); }
+  return { mult, why };
+}
+
 export function resolveKill(world, ctx, records, sideEffects, zoneDef) {
   const enemy = world.enemy;
   const md = enemy.ref;
@@ -724,24 +746,34 @@ export function resolveKill(world, ctx, records, sideEffects, zoneDef) {
   if (ev.biomassFlat > 0)   trace.add('per-kill bonuses (Digest, Greedy)', ev.biomassFlat);
 
   const total = Math.max(0, Math.floor(trace.value));
-  const per   = living.length ? total / living.length : 0;
-  living.forEach(s => { s.biomassGained += per; });
+
+  // The Feeding Tendril sends a share of every kill straight home to the
+  // nucleus, past the carry cap. The rest is split and carried.
+  const piped = Math.floor(total * Math.min(0.9, cb.feedShare || 0));
+  if (piped > 0) sideEffects.push({ type: 'bioReclaim', amount: piped });
+  const per   = living.length ? (total - piped) / living.length : 0;
+  let spilled = 0;
+  living.forEach(s => { spilled += carry(s, per, ctx); });
 
   records.push(...ev.log.map(l => ({ kind: 'effect', log: l })));
   records.push({
     kind: 'kill',
     targetId: enemy.id, targetName: enemy.name,
     log: {
-      m: `${enemy.name} eaten! +${Math.floor(per)}🧬 each`,
+      m: spilled >= total - piped && total > 0
+        ? `${enemy.name} eaten! We're too full to carry any more.`
+        : `${enemy.name} eaten! +${Math.floor(per)}🧬 each`,
       c: C.reward,
-      v: `${trace.render()}  →  split ${living.length} ways`,
+      v: `${trace.render()}  →  split ${living.length} ways`
+        + (piped ? ` · ${piped} piped home by the Feeding Tendril` : '')
+        + (spilled > 0 ? ` · ${Math.floor(spilled)} spilled (carry cap)` : ''),
     },
   });
 
   // Drops
-  if (ctx.rng() < 0.001) {
+  if (ctx.rng() < PRISM_CHANCE) {
     sideEffects.push({ type: 'prism' });
-    records.push({ kind: 'reward', log: { m: '💎 Found a Prism!', c: C.crit, v: '0.1% drop' } });
+    records.push({ kind: 'reward', log: { m: '💎 Found a Prism!', c: C.crit, v: `${(PRISM_CHANCE * 100).toFixed(2)}% drop` } });
   }
   // The monster's own mutagen. Rare, and the only way a slime ever gains a
   // mutation — the host applies a pity floor on top of this roll.
@@ -756,24 +788,17 @@ export function resolveKill(world, ctx, records, sideEffects, zoneDef) {
     records.push({ kind: 'reward', log: { m: `🥣 ${md.name} gives up its ${MUTATION_LIBRARY_NAME(md.mutation)} mutagen.`, c: '#a855f7',
       v: 'guaranteed: secret boss' } });
   } else if (md.mutation && ctx.passives?.includes('mutagenesis')) {
-    // Trophy Hunter: the first rare monster each expedition always gives up
-    // its mutagen. It used to be every rare kill, and with Quarry Scent
-    // raising rare spawns to one in eight that was hundreds of mutagens a night.
-    if (md.rare && ctx.passives?.includes('trophyHunter') && !world.trophyTaken) {
-      world.trophyTaken = true;
-      sideEffects.push({ type: 'mutagen', mutation: md.mutation });
-      records.push({ kind: 'reward', log: { m: `🏆 The ${md.name} gives up its mutagen.`, c: '#a855f7',
-        v: 'Trophy Hunter: first rare kill of the expedition always drops' } });
-      return;
-    }
-    const chance = Math.min(0.95, mutagenDropChance(md) * ev.matMult);
+    // Everything that raises mutagen odds, multiplied. Common and rare
+    // mutagens have separate levers so a player can choose what to chase.
+    const boost = mutagenBoost(md, ctx);
+    const chance = Math.min(0.95, mutagenDropChance(md) * ev.matMult * boost.mult);
     const roll = ctx.rng();
     if (roll < chance) {
       sideEffects.push({ type: 'mutagen', mutation: md.mutation });
       records.push({
         kind: 'reward',
         log: { m: `🧬 A ${md.name} mutagen!`, c: '#a855f7',
-               v: `roll ${(roll * 100).toFixed(2)}% vs ${(chance * 100).toFixed(2)}%` },
+               v: `roll ${(roll * 100).toFixed(3)}% vs ${(chance * 100).toFixed(3)}%${boost.why.length ? ` (${boost.why.join(', ')})` : ''}` },
       });
     }
   }

@@ -2,7 +2,7 @@ import React from 'react';
 import { MONSTER_TYPES } from '../data/monsterData.js';
 import { ZONES } from '../data/zoneData.js';
 import { WARDENS } from '../data/wardenData.js';
-import { MUTATION_LIBRARY, mutagenName } from '../data/traitData.js';
+import { MUTATION_LIBRARY, mutagenName, SLIME_TRAITS } from '../data/traitData.js';
 
 const Row = ({ label, value, color = '#4ade80' }) => (
   <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
@@ -52,6 +52,12 @@ const WelcomeBackModal = ({ data, onClose }) => {
           {r.wardensFelled?.length > 0 && (
             <Block label="👑 Wardens beaten" color="#fbbf24">
               {r.wardensFelled.map(w => `${WARDENS[w.zone]?.name || w.zone}${w.plus ? ', Rekindled' : ''}`).join(', ')}
+            </Block>
+          )}
+
+          {r.traitsGained?.length > 0 && (
+            <Block label="✨ Who changed while you were gone" color="#c084fc">
+              {r.traitsGained.map(g => `${g.name || 'A slime'} is ${SLIME_TRAITS[g.trait]?.icon || ''} ${SLIME_TRAITS[g.trait]?.name || g.trait} now`).join('. ')}
             </Block>
           )}
 

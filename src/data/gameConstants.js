@@ -62,7 +62,7 @@ export const BIOMASS_TO_QUEEN_XP_RATIO = 10; // 10 biomass = 1 queen XP
 // replays it. Everything that used to be BATTLE_TICK_SPEED / TURN_MS /
 // ARENA_TICK_RATE now derives from these.
 
-export const ROUND_MS = 1600;        // real ms per combat round at 1x speed
+export const ROUND_MS = 2400;        // real ms per combat round at 1x speed
 export const BEAT_MS = 320;          // max spacing between animated beats
 export const ARENA_TICK_RATE = 50;   // ms between view/driver ticks (20fps)
 
@@ -91,4 +91,6 @@ export const TRAVEL_REGEN = 0.28;
 // so the tree fills over weeks: the old flat level×100 made the first dozen
 // points cost about three hours of forest farming, and the whole early ladder
 // opened in an afternoon. See docs/GAME_DESIGN.md §23.
-export const queenLevelCost = (level) => Math.round((100 * Math.pow(level, 1.35)) / 10) * 10;
+// Halved with the kill rate (§25): income per hour roughly halved, so prices
+// did too, keeping the pacing while the numbers stay readable.
+export const queenLevelCost = (level) => Math.round((50 * Math.pow(level, 1.35)) / 5) * 5;

@@ -42,6 +42,13 @@ export const HIVE_ABILITIES = {
     cost: 75,
     duration: 14400000, // 4 hours
   },
+  muskOfWant: {
+    name: 'Musk of Want',
+    icon: '🌫️',
+    desc: 'Rare monsters drop their mutagen three times as often',
+    cost: 60,
+    duration: 14400000, // 4 hours
+  },
   decoy: {
     name: 'Slime Decoy',
     icon: '🎭',

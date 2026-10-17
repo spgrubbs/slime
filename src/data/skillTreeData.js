@@ -172,10 +172,10 @@ export const SKILL_TREES = {
         id: 'trophyHunter',
         name: 'Trophy Hunter',
         icon: '🏆',
-        desc: 'The first rare monster we catch on each trip always drops its mutagen.',
+        desc: 'Rare monsters drop their mutagen three times as often.',
         cost: 4,
         requires: ['tacticalRetreat'],
-        effect: { type: 'passive', desc: 'First rare kill each expedition drops its mutagen' },
+        effect: { type: 'passive', desc: 'Rare mutagens ×3' },
         position: { x: 58, y: 58 },
       },
 
@@ -199,6 +199,39 @@ export const SKILL_TREES = {
         requires: ['sharedVigorSkill'],
         effect: { type: 'pheromone', ability: 'evolutionPulse' },
         position: { x: 16, y: 58 },
+      },
+
+      geneHunger: {
+        id: 'geneHunger',
+        name: 'Gene Hunger',
+        icon: '🧫',
+        desc: 'We pick through every kill for its genes. Ordinary mutagens drop twice as often.',
+        cost: 3,
+        requires: ['evolutionPulseSkill'],
+        effect: { type: 'passive', desc: 'Common mutagens ×2' },
+        position: { x: 14, y: 72 },
+      },
+
+      muskOfWantSkill: {
+        id: 'muskOfWantSkill',
+        name: 'Musk of Want',
+        icon: '🌫️',
+        desc: 'Learn the Musk of Want pheromone, which lures out rare monsters\' genes.',
+        cost: 2,
+        requires: ['geneHunger'],
+        effect: { type: 'pheromone', ability: 'muskOfWant' },
+        position: { x: 14, y: 88 },
+      },
+
+      stretchyMembrane: {
+        id: 'stretchyMembrane',
+        name: 'Stretchy Membrane',
+        icon: '🎈',
+        desc: 'Our skin stretches. Every slime can carry half as much biomass again before it is full.',
+        cost: 3,
+        requires: ['secondFront'],
+        effect: { type: 'bonus', stat: 'carryCapacity', value: 50 },
+        position: { x: 28, y: 58 },
       },
 
       rally: {

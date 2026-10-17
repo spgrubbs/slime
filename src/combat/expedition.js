@@ -11,11 +11,13 @@
 
 import { MONSTER_TYPES } from '../data/monsterData.js';
 import {
-  ZONES, INTERMISSION_EVENTS, EXPLORATION_EVENTS, INTERMISSION_DURATION,
+  ZONES, INTERMISSION_EVENTS, EXPLORATION_EVENTS, ROAD_TRAIT_EVENTS, INTERMISSION_DURATION,
 } from '../data/zoneData.js';
 import { wardenTypeId, WARDEN_TYPES } from '../data/wardenData.js';
 import { WARDEN_MECHANICS } from './wardenMechanics.js';
 import { ROUND_MS, BEAT_MS, TRAVEL_REGEN } from '../data/gameConstants.js';
+import { carry } from './carry.js';
+import { SLIME_TRAITS, traitRoom, ROAD_TRAIT_CHANCE } from '../data/traitData.js';
 import { runHooks } from './hooks.js';
 import {
   makeSlimeCombatant, makeEnemyCombatant, resolveRound, resolveKill,
@@ -219,7 +221,7 @@ function applyIntermissionEvent(exp, event, ctx, log) {
         }
       });
     } else if (event.effect === 'biomass') {
-      living.forEach(s => { s.biomassGained += event.value; });
+      living.forEach(s => { carry(s, event.value, ctx); });
       log({ m: `+${event.value}🧬 each`, c: '#4ade80', v: `boon "${event.msg}"` });
     }
   }
@@ -239,7 +241,7 @@ function rollExplorationEvent(exp, ctx, log, sideEffects) {
   if (event.type === 'flavor') {
     log({ m: event.msg, c: '#94a3b8', v: 'exploration flavor' });
   } else if (event.type === 'biomass') {
-    living.forEach(s => { s.biomassGained += event.amount; });
+    living.forEach(s => { carry(s, event.amount, ctx); });
     log({ m: `${event.msg} +${event.amount}🧬 each`, c: '#4ade80', v: 'exploration cache' });
   } else if (event.type === 'material') {
     // Caches drop something native to the zone.
@@ -250,13 +252,26 @@ function rollExplorationEvent(exp, ctx, log, sideEffects) {
       exp.materials[mat] = (exp.materials[mat] || 0) + 1;
       log({ m: `${event.msg} (${mat})`, c: '#f59e0b', v: 'exploration cache' });
     }
-  } else if (event.type === 'trait') {
-    const s = pick(living, rng);
-    const available = event.traitPool.filter(t => !(s.ref?.traits || []).includes(t));
-    if (available.length) {
-      const trait = pick(available, rng);
-      sideEffects.push({ type: 'grantTrait', id: s.id, trait });
-      log({ m: `${s.name} ${event.msg}`, c: '#a855f7', v: `gained trait: ${trait}` });
+  }
+
+  // Rarely, the road changes someone. Never past their tier's trait cap.
+  if (rng() < ROAD_TRAIT_CHANCE) {
+    const roadEvent = pick(ROAD_TRAIT_EVENTS, rng);
+    const eligible = living.filter(s => traitRoom(s.ref) > 0);
+    if (eligible.length) {
+      const s = pick(eligible, rng);
+      const available = roadEvent.traitPool.filter(t => !(s.ref?.traits || []).includes(t));
+      if (available.length) {
+        const trait = pick(available, rng);
+        const def = SLIME_TRAITS[trait];
+        sideEffects.push({ type: 'grantTrait', id: s.id, trait, name: s.name });
+        log({ m: `✨ ${s.name} ${roadEvent.msg} It's ${def.icon} ${def.name} now.`, c: '#c084fc',
+              v: `trait gained: ${trait}` });
+        // A moment on screen: the new trait floats up over the slime.
+        exp.anim = { startedAt: Date.now(), duration: 1200,
+          beats: [{ at: 0, kind: 'tick', actorId: s.id, targetId: s.id, side: 'slime',
+                    text: `+${def.icon} ${def.name}`, color: '#c084fc', result: 'trait' }] };
+      }
     }
   }
 }
@@ -383,7 +398,6 @@ export function tickExpedition(exp, dt, ctx = {}, zone) {
   const world = {
     round: exp.round, slimes: exp.slimes, enemy: exp.enemy, zone,
     killStreak: exp.killStreak || 0, freeRoundAt: exp.freeRoundAt,
-    trophyTaken: !!exp.trophyTaken,
   };
   const { records, sideEffects: roundEffects, wiped, enemyDead } = resolveRound(world, ctx);
 
@@ -392,7 +406,6 @@ export function tickExpedition(exp, dt, ctx = {}, zone) {
   exp.round = world.round;
   exp.killStreak = world.killStreak || 0;
   exp.freeRoundAt = world.freeRoundAt;
-  exp.trophyTaken = !!world.trophyTaken;
   sideEffects.push(...roundEffects);
   records.forEach(r => { if (r.log) log(r.log); });
   exp.anim = buildAnim(records, roundMs);

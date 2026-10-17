@@ -17,8 +17,8 @@ export const RANCH_TYPES = {
     cycleTime: 30 * 60,                 // 30 minutes (in real seconds)
     capacity: 3,
     unlock: { type: 'level', value: 3 },
-    cost: { biomass: 400 },
-    upgradeCost: { biomass: 600, multiplier: 2 },
+    cost: { biomass: 220 },
+    upgradeCost: { biomass: 330, multiplier: 2 },
     color: '#22c55e',
   },
   fireGrove: {
@@ -32,8 +32,8 @@ export const RANCH_TYPES = {
     cycleTime: 60 * 60,                 // 1 hour
     capacity: 2,
     unlock: { type: 'materials' },
-    cost: { biomass: 8000, mats: { 'Phoenix Ash': 8, 'Ember Core': 5 } },
-    upgradeCost: { biomass: 2000, multiplier: 2 },
+    cost: { biomass: 4400, mats: { 'Phoenix Ash': 4, 'Ember Core': 3 } },
+    upgradeCost: { biomass: 1100, multiplier: 2 },
     color: '#ef4444',
   },
   tidalPool: {
@@ -47,8 +47,8 @@ export const RANCH_TYPES = {
     cycleTime: 60 * 60,                 // 1 hour
     capacity: 2,
     unlock: { type: 'materials' },
-    cost: { biomass: 2500, mats: { 'Turtle Shell': 10, 'Ancient Stone': 6 } },
-    upgradeCost: { biomass: 2000, multiplier: 2 },
+    cost: { biomass: 1400, mats: { 'Turtle Shell': 6, 'Ancient Stone': 3 } },
+    upgradeCost: { biomass: 1100, multiplier: 2 },
     color: '#3b82f6',
   },
   earthenDen: {
@@ -62,8 +62,8 @@ export const RANCH_TYPES = {
     cycleTime: 60 * 60,                 // 1 hour
     capacity: 2,
     unlock: { type: 'materials' },
-    cost: { biomass: 5000, mats: { 'Crystal Shard': 6, 'Cave Mineral': 60 } },
-    upgradeCost: { biomass: 2000, multiplier: 2 },
+    cost: { biomass: 2800, mats: { 'Crystal Shard': 3, 'Cave Mineral': 35 } },
+    upgradeCost: { biomass: 1100, multiplier: 2 },
     color: '#a16207',
   },
   verdantNest: {
@@ -77,8 +77,8 @@ export const RANCH_TYPES = {
     cycleTime: 60 * 60,                 // 1 hour
     capacity: 2,
     unlock: { type: 'materials' },
-    cost: { biomass: 2000, mats: { 'Wolf Pelt': 30, 'Snake Scale': 10 } },
-    upgradeCost: { biomass: 2000, multiplier: 2 },
+    cost: { biomass: 1100, mats: { 'Wolf Pelt': 16, 'Snake Scale': 6 } },
+    upgradeCost: { biomass: 1100, multiplier: 2 },
     color: '#16a34a',
   },
   healingSpring: {
@@ -92,8 +92,8 @@ export const RANCH_TYPES = {
     cycleTime: 45 * 60,                 // 45 minutes
     capacity: 3,
     unlock: { type: 'materials' },
-    cost: { biomass: 3000, mats: { 'Life Essence': 10, 'Mana Crystal': 8 } },
-    upgradeCost: { biomass: 3000, multiplier: 2 },
+    cost: { biomass: 1700, mats: { 'Life Essence': 6, 'Mana Crystal': 4 } },
+    upgradeCost: { biomass: 1700, multiplier: 2 },
     color: '#10b981',
   },
   warDen: {
@@ -107,8 +107,8 @@ export const RANCH_TYPES = {
     cycleTime: 45 * 60,                 // 45 minutes
     capacity: 3,
     unlock: { type: 'materials' },
-    cost: { biomass: 2500, mats: { 'Iron Ore': 20, 'Wolf Pelt': 20 } },
-    upgradeCost: { biomass: 3800, multiplier: 2 },
+    cost: { biomass: 1400, mats: { 'Iron Ore': 11, 'Wolf Pelt': 11 } },
+    upgradeCost: { biomass: 2100, multiplier: 2 },
     color: '#dc2626',
   },
   manaWell: {
@@ -121,8 +121,8 @@ export const RANCH_TYPES = {
     cycleTime: 60 * 60,                 // 1 hour
     capacity: 3,
     unlock: { type: 'materials' },
-    cost: { biomass: 5000, mats: { 'Mana Crystal': 15, 'Crystal Shard': 8 } },
-    upgradeCost: { biomass: 3800, multiplier: 2 },
+    cost: { biomass: 2800, mats: { 'Mana Crystal': 8, 'Crystal Shard': 4 } },
+    upgradeCost: { biomass: 2100, multiplier: 2 },
     color: '#a855f7',
   },
   scoutPost: {
@@ -136,8 +136,8 @@ export const RANCH_TYPES = {
     cycleTime: 45 * 60,                 // 45 minutes
     capacity: 3,
     unlock: { type: 'materials' },
-    cost: { biomass: 5000, mats: { 'Bat Wing': 20, 'Snake Scale': 15 } },
-    upgradeCost: { biomass: 3800, multiplier: 2 },
+    cost: { biomass: 2800, mats: { 'Bat Wing': 11, 'Snake Scale': 8 } },
+    upgradeCost: { biomass: 2100, multiplier: 2 },
     color: '#0ea5e9',
   },
   nullifier: {
@@ -166,8 +166,8 @@ export const RANCH_TYPES = {
     capacity: 2,                        // +1 per level
     woundedOnly: true,                  // only wounded slimes may be assigned
     unlock: { type: 'materials' },
-    cost: { biomass: 1500, mats: { 'Life Essence': 4, 'Digestive Sac': 10 } },
-    upgradeCost: { biomass: 3500, mats: { 'Life Essence': 4 }, multiplier: 2 },
+    cost: { biomass: 830, mats: { 'Life Essence': 2, 'Digestive Sac': 6 } },
+    upgradeCost: { biomass: 1900, mats: { 'Life Essence': 2 }, multiplier: 2 },
     color: '#4ade80',
   },
 

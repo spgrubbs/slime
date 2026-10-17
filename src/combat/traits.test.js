@@ -80,3 +80,45 @@ test('once-per-fight effects re-arm when the next fight starts', () => {
   assert.ok(exp.kills >= 2, `needed at least two fights, got ${exp.kills}`);
   assert.ok(fierceHits >= 2, `Fierce fired ${fierceHits} times over ${exp.kills} fights`);
 });
+
+// ── Trait rarity and the cap (§25) ───────────────────────────────────────────
+
+import { traitRoom, TRAIT_CAP, ROAD_TRAIT_CHANCE } from '../data/traitData.js';
+import { carry, partyFull, room } from './carry.js';
+import { carryCapacity } from '../data/slimeData.js';
+
+test('traits are capped by tier, and legendary ones do not count', () => {
+  assert.equal(traitRoom(basic({ traits: [] })), TRAIT_CAP.basic);
+  assert.equal(traitRoom(basic({ traits: ['brave'] })), 0);
+  assert.equal(traitRoom(basic({ traits: ['brave', 'ancient'] })), 0);
+  assert.equal(traitRoom(basic({ tier: 'royal', traits: ['brave', 'ancient'] })), TRAIT_CAP.royal - 1);
+});
+
+test('the road changes a party about once every couple of days, not every fifty kills', () => {
+  const legsPerDay = 160 * 24;
+  const perDay = legsPerDay * ROAD_TRAIT_CHANCE;
+  assert.ok(perDay < 0.6 && perDay > 0.2, `${perDay.toFixed(2)} road traits a day`);
+});
+
+test('a slime carries up to its cap and the rest spills', () => {
+  const c = makeSlimeCombatant(basic());
+  c.biomassGained = 0;
+  const cap = carryCapacity(c.ref);
+  assert.equal(carry(c, cap + 250), 250);
+  assert.equal(c.biomassGained, cap);
+  assert.equal(room(c), 0);
+  assert.ok(partyFull([c]));
+});
+
+test('Stretchy Membrane raises the cap', () => {
+  const c = makeSlimeCombatant(basic());
+  c.biomassGained = 0;
+  const ctx = { combatBonuses: { carryCapacity: 1.5 } };
+  assert.equal(carry(c, carryCapacity(c.ref) * 1.5, ctx), 0);
+});
+
+test('biomass already held at home counts against the cap', () => {
+  const c = makeSlimeCombatant(basic({ biomass: 900 }));
+  c.biomassGained = 0;
+  assert.equal(room(c), carryCapacity(c.ref) - 900);
+});

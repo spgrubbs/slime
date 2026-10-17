@@ -84,9 +84,14 @@ export const materialDropChance = (mat, monster) => {
 // already appears ~5% of the time, and taxing that twice would put its mutagen
 // past 2,000 zone kills.
 
+// Cut hard after a playtest night produced 47 mutagens, 7 of them rare. The
+// rule now: a starting party earns well under one mutagen an hour, drops and
+// pity together (a test enforces it), and a rare mutagen is days of farming
+// unless the player builds toward it: Trophy Hunter, the Musk of Want
+// pheromone and the Gene Sieve each multiply the rare chance.
 export const MUTAGEN_RATES = {
-  common: 0.01,   // ~420 zone kills for one specific mutagen, ~100 for any
-  rare:   0.03,   // ~670 zone kills, behind a 5% spawn
+  common: 0.0025, // ~2,000 zone kills for one specific mutagen, ~400 for any
+  rare:   0.0015, // behind a 5% spawn: about four days of one zone, unboosted
 };
 
 /**
@@ -94,7 +99,7 @@ export const MUTAGEN_RATES = {
  * nothing, which reads as broken rather than unlucky — so the kill tally that
  * used to gate unlocks becomes the safety net instead of being deleted.
  */
-export const MUTAGEN_PITY_KILLS = 200;
+export const MUTAGEN_PITY_KILLS = 1000;
 
 /** Slimetraps a player must have eaten before Old Gullet will rise. */
 export const GULLET_TRAP_KILLS = 250;

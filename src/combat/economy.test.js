@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 
 import './index.js';
 import { computeStats } from './stats.js';
-import { makeSlimeCombatant, makeEnemyCombatant, resolveKill } from './resolveRound.js';
+import { makeSlimeCombatant, makeEnemyCombatant, resolveKill, mutagenBoost } from './resolveRound.js';
 import { SLIME_TIERS } from '../data/slimeData.js';
 import {
   MONSTER_TYPES, materialDropChance, GATING_MATERIALS, MATERIAL_RATES,
@@ -178,36 +178,42 @@ test('mutagen rate follows the mutation, not the monster', () => {
   // mutagen past 2,000 zone kills.
   assert.equal(mutagenDropChance(MONSTER_TYPES.youngWolf), MUTAGEN_RATES.common);
   assert.equal(mutagenDropChance(MONSTER_TYPES.theSnail), MUTAGEN_RATES.rare);
-  assert.ok(MUTAGEN_RATES.rare > MUTAGEN_RATES.common);
+  // Rare is rarer twice over: the monster is rare, and so is its gift.
+  assert.ok(MUTAGEN_RATES.rare < MUTAGEN_RATES.common);
 });
 
 test('a specific mutagen is a real grind, and any mutagen is not', () => {
   const commonSpawn = 0.95 / 4;          // four commons share the common slot
   const specific = 1 / (commonSpawn * MUTAGEN_RATES.common);
-  assert.ok(specific > 250 && specific < 700, `${Math.round(specific)} zone kills for a specific mutagen`);
+  assert.ok(specific > 1000 && specific < 3000, `${Math.round(specific)} zone kills for a specific mutagen`);
 
   const any = 1 / MUTAGEN_RATES.common;  // any monster's own mutagen
-  assert.ok(any <= 150, `${Math.round(any)} kills before seeing any mutagen at all`);
+  assert.ok(any >= 200 && any <= 600, `${Math.round(any)} kills before seeing any mutagen at all`);
 });
 
-test('a rare mutagen costs more than a common one, but not absurdly', () => {
+test('a rare mutagen is days of farming, unless the player builds toward it', () => {
   const rareSpawn = 0.05;
   const kills = 1 / (rareSpawn * MUTAGEN_RATES.rare);
-  assert.ok(kills > 400, `${Math.round(kills)} kills is too cheap for a rare`);
-  assert.ok(kills < 1200, `${Math.round(kills)} kills is a wall, not a chase`);
+  assert.ok(kills > 8000 && kills < 20000, `${Math.round(kills)} kills unboosted`);
+  // Trophy Hunter, Musk of Want and a full Gene Sieve together.
+  const all = mutagenBoost(MONSTER_TYPES.lifeFairy, {
+    passives: ['trophyHunter'], hiveAbilities: { muskOfWant: true }, builds: { geneSieve: 3 },
+  }).mult;
+  const boosted = kills / all;
+  assert.ok(boosted > 300 && boosted < 1500, `${Math.round(boosted)} kills fully boosted (×${all})`);
 });
 
 test('the pity floor caps the worst case', () => {
   // Pure 1% with no floor can hand a player 500 kills and nothing.
   const worstCaseWithoutPity = Infinity;
   assert.ok(MUTAGEN_PITY_KILLS < worstCaseWithoutPity);
-  assert.ok(MUTAGEN_PITY_KILLS >= 100 && MUTAGEN_PITY_KILLS <= 300,
+  assert.ok(MUTAGEN_PITY_KILLS >= 500 && MUTAGEN_PITY_KILLS <= 2000,
     `pity at ${MUTAGEN_PITY_KILLS} kills`);
 
   // The floor must be reachable sooner than the raw drop's expected wait for a
   // specific common, or it never actually protects anyone.
   const expectedRawKillsOfThatMonster = 1 / MUTAGEN_RATES.common;
-  assert.ok(MUTAGEN_PITY_KILLS <= expectedRawKillsOfThatMonster * 2);
+  assert.ok(MUTAGEN_PITY_KILLS <= expectedRawKillsOfThatMonster * 3);
 });
 
 /** Observed mutagen drop rate over N kills, with the given skills active. */
@@ -224,8 +230,22 @@ const mutagenRate = (passives, N = 6000) => {
 };
 
 test('mutagens actually drop from kills, once unlocked', () => {
-  const rate = mutagenRate(['mutagenesis']);
-  assert.ok(rate > 0.005 && rate < 0.02, `observed ${(rate * 100).toFixed(2)}% vs 1% expected`);
+  const rate = mutagenRate(['mutagenesis'], 20000);
+  assert.ok(rate > 0.0012 && rate < 0.004, `observed ${(rate * 100).toFixed(3)}% vs ${MUTAGEN_RATES.common * 100}% expected`);
+});
+
+// The playtest rule: a starting party earns well under a mutagen an hour,
+// counting both drops and the pity floor, in every zone.
+test('no zone pays more than one mutagen an hour to its starting party', () => {
+  for (const zone of ['forest', 'swamp', 'caves', 'ruins', 'peaks']) {
+    // Expected value, not a sample: at a quarter of a percent, four hours of
+    // rolls is too noisy to test against. Real kill rate from the simulator,
+    // times the spawn-weighted drop odds, plus the pity floor.
+    const y = farm(zone, STAGES[zone], 2);
+    const perKill = 0.95 * MUTAGEN_RATES.common + 0.05 * MUTAGEN_RATES.rare;
+    const perHour = y.kills * perKill + y.kills / MUTAGEN_PITY_KILLS;
+    assert.ok(perHour <= 1, `${zone}: ${perHour.toFixed(2)} mutagens an hour`);
+  }
 });
 
 test('no mutagen drops before Unstable Genes is bought', () => {

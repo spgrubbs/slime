@@ -105,9 +105,16 @@ export const EXPLORATION_EVENTS = [
   { msg: 'Found a lump of biomass on the path!', type: 'biomass', amount: 2, weight: 8 },
   { msg: 'Found a little stash of materials!', type: 'material', weight: 5 },
 
-  // Rare trait events. The message follows the slime's name.
-  { msg: 'sits very still for a long time and comes back different.', type: 'trait', traitPool: ['wise', 'cautious'], weight: 1 },
-  { msg: 'nearly got eaten, and liked it.', type: 'trait', traitPool: ['brave', 'fierce'], weight: 1 },
+];
+
+// The road changing a slime. Rolled on its own (ROAD_TRAIT_CHANCE), not as part
+// of the table above, where at weight 2 of 99 it fired about every fifty kills.
+// The message follows the slime's name.
+export const ROAD_TRAIT_EVENTS = [
+  { msg: 'sits very still for a long time and comes back different.', traitPool: ['wise', 'cautious', 'curious'] },
+  { msg: 'nearly got eaten, and liked it.', traitPool: ['brave', 'fierce', 'reckless'] },
+  { msg: 'ate something it shouldn\'t have, and it agreed with it.', traitPool: ['hardy', 'glutton', 'greedy'] },
+  { msg: 'took a long nap in a sunny spot and woke up changed.', traitPool: ['lazy', 'resilient', 'lucky'] },
 ];
 
 // Intermission events between battles
@@ -174,4 +181,4 @@ export const INTERMISSION_EVENTS = {
 // Intermission duration in timer units (matches battle tick system)
 // At 1x speed: 4500 units = 45 ticks = 4.5 seconds
 // This is 3x the BATTLE_TICK_SPEED (1500) for a clear pause
-export const INTERMISSION_DURATION = 4500;
+export const INTERMISSION_DURATION = 9600;

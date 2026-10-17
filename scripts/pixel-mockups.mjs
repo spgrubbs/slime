@@ -13,72 +13,7 @@
 import sharp from 'sharp';
 import path from 'path';
 
-const hex = (h) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16), 255];
-
-// ── A tiny canvas ────────────────────────────────────────────────────────────
-
-class Sprite {
-  constructor(w, h) { this.w = w; this.h = h; this.mat = new Array(w * h).fill(null); this.over = new Map(); }
-  inside(x, y) { return x >= 0 && y >= 0 && x < this.w && y < this.h; }
-  set(x, y, m) { if (this.inside(x, y)) this.mat[y * this.w + x] = m; }
-  get(x, y) { return this.inside(x, y) ? this.mat[y * this.w + x] : null; }
-  ellipse(cx, cy, rx, ry, m) {
-    for (let y = Math.floor(cy - ry); y <= Math.ceil(cy + ry); y++)
-      for (let x = Math.floor(cx - rx); x <= Math.ceil(cx + rx); x++)
-        if (((x + 0.5 - cx) / rx) ** 2 + ((y + 0.5 - cy) / ry) ** 2 <= 1) this.set(x, y, m);
-  }
-  rect(x0, y0, w, h, m) { for (let y = y0; y < y0 + h; y++) for (let x = x0; x < x0 + w; x++) this.set(x, y, m); }
-  poly(pts, m) { // even-odd fill
-    const ys = pts.map(p => p[1]);
-    for (let y = Math.floor(Math.min(...ys)); y <= Math.ceil(Math.max(...ys)); y++)
-      for (let x = 0; x < this.w; x++) {
-        let c = false;
-        for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
-          const [xi, yi] = pts[i], [xj, yj] = pts[j];
-          if ((yi > y + 0.5) !== (yj > y + 0.5) && x + 0.5 < (xj - xi) * (y + 0.5 - yi) / (yj - yi) + xi) c = !c;
-        }
-        if (c) this.set(x, y, m);
-      }
-  }
-  /** A hand-placed pixel that skips shading: eyes, teeth, cracks. */
-  dot(x, y, color) { if (this.inside(x, y)) this.over.set(y * this.w + x, hex(color)); }
-  dots(list, color) { list.forEach(([x, y]) => this.dot(x, y, color)); }
-
-  /** Apply the house shading and return RGBA bytes. */
-  render(materials) {
-    const { w, h } = this;
-    const out = Buffer.alloc(w * h * 4);
-    // Lowest row of each material, for the sunk pool.
-    const bounds = {};
-    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
-      const m = this.get(x, y); if (!m) continue;
-      const b = bounds[m] ||= { top: y, bottom: y };
-      b.top = Math.min(b.top, y); b.bottom = Math.max(b.bottom, y);
-    }
-    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
-      const m = this.get(x, y);
-      const i = (y * w + x) * 4;
-      if (!m) continue;
-      const pal = materials[m];
-      const n4 = [[1, 0], [-1, 0], [0, 1], [0, -1]];
-      const edge = n4.some(([dx, dy]) => this.get(x + dx, y + dy) !== m && !(pal.blend || []).includes(this.get(x + dx, y + dy)));
-      const nearEdge = !edge && n4.some(([dx, dy]) => {
-        const o = this.get(x + dx, y + dy);
-        return o === m && n4.some(([ex, ey]) => this.get(x + dx + ex, y + dy + ey) !== m);
-      });
-      const b = bounds[m];
-      const depth = (y - b.top) / Math.max(1, b.bottom - b.top);
-      let c = pal.fill;
-      if (edge) c = pal.outline;
-      else if (nearEdge && depth < 0.75) c = pal.rim;
-      else if (pal.pool && depth > pal.poolAt) c = pal.pool;
-      const col = hex(c);
-      col.forEach((v, k) => { out[i + k] = v; });
-    }
-    for (const [idx, col] of this.over) col.forEach((v, k) => { out[idx * 4 + k] = v; });
-    return out;
-  }
-}
+import { Sprite, overlay } from '../src/art/pixel.js';
 
 // ── Palettes ─────────────────────────────────────────────────────────────────
 
@@ -184,11 +119,6 @@ function mossback() {
   return overlay(px, t, 40, 32);
 }
 
-function overlay(base, top, w, h) {
-  for (const [idx, col] of top.over) col.forEach((v, k) => { base[idx * 4 + k] = v; });
-  return base;
-}
-
 // ── The Nucleus, as anatomy ──────────────────────────────────────────────────
 //
 // A composition sketch: the membrane, the Queen at the center, the organelles
@@ -254,7 +184,7 @@ function nucleus() {
 
 const out = process.argv[2] || '.';
 const save = async (name, buf, w, h, scale) =>
-  sharp(buf, { raw: { width: w, height: h, channels: 4 } })
+  sharp(Buffer.from(buf.buffer, buf.byteOffset, buf.byteLength), { raw: { width: w, height: h, channels: 4 } })
     .resize(w * scale, h * scale, { kernel: 'nearest' }).png().toFile(path.join(out, name));
 
 const slimeFrame = await sharp(path.resolve(import.meta.dirname, '../src/assets/sprites/slime-basic-idle.png'))

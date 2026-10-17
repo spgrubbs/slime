@@ -27,6 +27,7 @@ export const SLIME_TIERS = {
     baseHp: 30,             // Comfortable in Zone 1
     biomassPerPercent: 3,   // Easy to grow initially
     maxBiomassBonus: 35,    // Temporary power only — never a tier's worth
+    carry: 1000,            // biomass a slime can hold; see carryCapacity
     unlockBuilding: null,   // Always available
   },
   enhanced: {
@@ -38,6 +39,7 @@ export const SLIME_TIERS = {
     baseHp: 75,             // Comfortable in Zone 2-3
     biomassPerPercent: 8,
     maxBiomassBonus: 35,
+    carry: 1800,
     unlockBuilding: 'spawningVat',
   },
   elite: {
@@ -49,6 +51,7 @@ export const SLIME_TIERS = {
     baseHp: 150,            // Comfortable in Zone 4-5
     biomassPerPercent: 20,
     maxBiomassBonus: 35,
+    carry: 3500,
     unlockBuilding: 'royalHatchery',
   },
   royal: {
@@ -60,6 +63,7 @@ export const SLIME_TIERS = {
     baseHp: 300,            // Can tackle Zone 6
     biomassPerPercent: 40,
     maxBiomassBonus: 35,
+    carry: 5000,
     unlockBuilding: 'primordialChamber',
   },
 };
@@ -72,3 +76,16 @@ export const BASE_STAT_RANGE = { min: 3, max: 6 }; // Reduced from implied 5-5
 export const NAME_PRE = ['Glo', 'Spl', 'Oo', 'Squ', 'Blo', 'Jel', 'Wob', 'Bou', 'Dri', 'Sli', 'Goo', 'Muc', 'Pud', 'Glu', 'Flu', 'Gel', 'Mor', 'Gur', 'Bub'];
 export const NAME_SUF = ['bby', 'osh', 'ize', 'orp', 'oop', 'elly', 'ubble', 'urt', 'ime', 'ick', 'ooey', 'uck', 'udge', 'op', 'ash', 'urp', 'oze', 'ish'];
 export const NAME_TIT = ['', '', '', '', ' the Brave', ' the Squishy', ' the Mighty', ' the Swift', ' the Wise', ' the Gooey', ' the Bouncy', ' the Firm'];
+
+// ── Carrying ─────────────────────────────────────────────────────────────────
+//
+// A slime can only hold so much biomass. Without a cap a party out overnight
+// came home with tens of thousands, and that trivialised every cost. Each
+// tier's capacity is sized so a typical party fills up in about four hours of
+// farming the zone that tier is built for: a morning, lunch and evening
+// check-in collects nearly everything, and a night away fills them halfway.
+//
+// Past the cap a slime keeps fighting (materials and mutagens still come) but
+// the biomass spills. `mult` is the Stretchy Membrane instinct.
+export const carryCapacity = (slime, mult = 1) =>
+  Math.floor((SLIME_TIERS[slime?.tier]?.carry || 1000) * mult);

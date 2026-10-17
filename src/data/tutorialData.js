@@ -68,8 +68,8 @@ export const TUTORIALS = {
     icon: '🧬',
     body: [
       'We fatten up as we fight. The extra weight makes us up to **35% stronger**, but we drop all of it if we fall.',
-      'Open a slime and **draw it out** to keep it. The slime is fine. It just goes back to its normal size.',
-      'Carrying it is a gamble. Drawing it out is the safe choice.',
+      'We can only carry so much. A basic slime holds about **1,000**. When we\'re full we keep fighting, but the extra biomass spills on the ground.',
+      'So come and **squeeze us** now and then. "Squeeze all" in The Spawn takes it all at once.',
     ],
     when: (s) => s.maxHeldBiomass >= 25,
   },
@@ -95,7 +95,7 @@ export const TUTORIALS = {
     body: [
       'Our genes are loose now. Monsters sometimes drop a **mutagen**, and each one holds that monster\'s trick.',
       'Open a slime with a free slot and feed it one. The trick is ours for good. Wounds can\'t take it. Only reabsorbing can.',
-      'Most tricks go off more often on a slime with high **Viscosity**. If one monster just won\'t drop its mutagen, keep at it: every 200 kills of it guarantees one.',
+      'Most tricks go off more often on a slime with high **Viscosity**. If one monster just won\'t drop its mutagen, keep at it: every 1,000 kills of it guarantees one.',
     ],
     when: (s) => s.mutationsUnlocked,
   },
@@ -273,12 +273,14 @@ export function nextTutorial(state, seen = []) {
 // `tab` is where "Show me" takes you.
 
 export const GUIDE_STEPS = [
-  { id: 'bud',     tab: 'brood', text: 'Bud your first slime. Tap "Bud a slime" in The Spawn.',
-    done: (s) => s.slimeCount > 0 },
-  { id: 'send',    tab: 'wilds', text: 'Send it into the Verdant Forest. Pick it for the party, then "Send them".',
+  { id: 'bud',     tab: 'brood', text: (s) => `Bud a full party: four slimes. Tap "Bud a slime" in The Spawn. (${Math.min(4, s.slimeCount)}/4)`,
+    done: (s) => s.slimeCount >= 4 || s.flags.sent || s.totalKills > 0 },
+  { id: 'send',    tab: 'wilds', text: 'Send them into the Verdant Forest. Pick all four for the party, then "Send them".',
     done: (s) => s.flags.sent || s.totalKills > 0 },
-  { id: 'eat',     tab: 'wilds', text: 'Let it eat a few things. Five kills will do.',
-    done: (s) => s.totalKills >= 5 },
+  // Measured against the real price of the Queen's next level, so this step
+  // can never finish before the "level up" step it sets up is affordable.
+  { id: 'eat',     tab: 'wilds', text: (s) => `Let them eat until we have enough for the Queen's next level. (${Math.min(s.levelCost, Math.floor(s.biomassAll))}/${s.levelCost}🧬)`,
+    done: (s) => s.biomassAll >= s.levelCost || s.queenLevel >= 2 },
   { id: 'home',    tab: 'wilds', text: 'Call the party home. What they carry only counts once they\'re back.',
     done: (s) => s.flags.recalled || s.bankedKills > 0 },
   { id: 'squeeze', tab: 'brood', text: 'Squeeze out the biomass it brought back. "Squeeze all" in The Spawn.',

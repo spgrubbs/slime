@@ -1591,3 +1591,131 @@ no Digest among them, about 70% with two, and every time with four.
 The trail is in Memory: after 100 slimetraps a rumor appears under the Verdant
 Forest ("something under the roots is calling them"), then what it is waiting
 for, then, once beaten, the full entry.
+
+## 25. Playtest round four: slower, scarcer, fuller, and a body to tap
+
+An overnight run paid 6 mutagens in 2 hours and a pile of rare ones by morning,
+and long idles left slimes holding biomass and traits with no limit and no
+notice. This round slows the whole loop down and makes scarcity visible.
+
+### Pace
+
+| | before | now |
+|---|---|---|
+| Round length | 1.6 s | 2.4 s |
+| Intermission | 4.5 s | 9.6 s |
+| Kills an hour, forest | ~277 | ~150-180 |
+| Queen level cost | `100·L^1.35` | `50·L^1.35` |
+| Building, Tendril and Ranch costs | | ×0.55, rounded clean (Seals and Hearts stay 1) |
+
+Costs fell a little less than the kill rate on purpose: a Tendril's Provoke
+still takes about 1.5 h of forest farming, 3 h of swamp, 6 h of caves, 10 h of
+ruins and 16 h of peaks. The pacing tests check those hours, not the raw
+numbers, so the next retune keeps them.
+
+### Mutagens
+
+| | |
+|---|---|
+| Common drop | 0.25% per kill of that monster |
+| Rare drop | 0.15% per kill of a rare monster (about 1 fight in 20 has one) |
+| Pity | every 1,000 kills of one monster guarantees its mutagen |
+| Any mutagen | about one every 200-600 kills, under one an hour in every zone |
+| A specific rare, unboosted | 8,000-20,000 kills: several days |
+| A specific rare, fully boosted | 300-1,500 kills: an evening |
+
+What boosts them, and nothing else does:
+
+- **Gene Hunger** (Instinct, after Evolution Pulse): common mutagens ×2.
+- **Trophy Hunter** (Instinct): rare mutagens ×3. It used to guarantee the first
+  drop of each trip, which with Quarry Scent turned into a fountain.
+- **Musk of Want** (pheromone, from the Gene Hunger branch): rare mutagens ×3
+  for 4 h, 60 musk.
+- **Gene Sieve** (building, 3 levels): all mutagens ×1.5 / ×2 / ×2.5.
+
+Prisms drop at 0.02% a kill, about one in 5,000.
+
+### Carrying
+
+Biomass gathered on the road stays in the slimes until they come home, and now
+each slime can only hold so much.
+
+| Tier | Carries |
+|---|---|
+| Basic | 1,000 |
+| Enhanced | 1,800 |
+| Elite | 3,500 |
+| Royal | 5,000 |
+
+When every slime in a party is full, new biomass spills on the ground and the
+kill log says so. A full party fills in about four hours, so a night away
+pays about the same as an evening; checking in matters again. The expedition
+HUD shows the party's fill (`🧬 64%`, `🧬 Full`), roster cards show
+`held/cap` in amber when full, and a phone notification fires when a party
+fills while the game is closed (forecast from the same seeded simulation as
+the other notifications).
+
+Ways up:
+
+- **Stretchy Membrane** (Instinct, after Second Front): +50% carry.
+- **Feeding Tendril** (building, 3 levels): pipes 15% / 30% / 45% of every
+  kill's biomass straight home. Piped biomass never touches the cap.
+- Higher tiers.
+
+Biomass the party is carrying counts toward the first-steps goal, and the
+Brood's "Squeeze all" pulls it home at once.
+
+### Traits
+
+A trait used to be a 1-in-6 road event, so a night away handed out a dozen
+silently. Now:
+
+- A road trait is a 0.01% roll per road beat: about one every two to five days
+  for a party that is out all day.
+- Each tier has a cap on ordinary traits: Basic 1, Enhanced 2, Elite 3, Royal 4.
+  A slime at its cap never rolls one (legendary traits don't count).
+- Every new trait is announced: a ✨ log line with what it does, a sound, a
+  floating `+🔥 Fierce` over the slime, and a "Who changed while you were gone"
+  block in the welcome-back screen.
+- Luxury Lounge's trait roll respects the cap too.
+
+### First steps
+
+The first-steps quest now says to bud a full party of four before sending it,
+and its biomass goal is the Queen's next level cost, shown as a counter
+(`(40/50🧬)`), counting what the party is carrying. Five kills was never
+enough for that with four mouths.
+
+### Small fixes
+
+- Sending a new party clears the old expedition summary cards.
+- The Instinct detail panel sits above the tree, so tapping a node shows its
+  text without scrolling.
+- The screen menu is a centred modal; tap outside, tap a place, or swipe it
+  away in any direction.
+
+### The Nucleus is a body now
+
+The Nucleus screen is the inside of the Queen: a pixel-art cell drawn at
+120×160 by the same rule-based shading as the slime sprite (same-hue outline,
+rim light, sunk pool, upper-left specks; `src/art/pixel.js`), breathing on a
+four-frame loop.
+
+| Organ | Opens |
+|---|---|
+| The Queen, crowned, in the middle | level up |
+| Neural knot | Instincts (badge: points to spend) |
+| Musk gland | Pheromones (badge: how many are in the air) |
+| Stomach | Stores |
+| Vat | Buildings |
+| Mossback, outside the membrane | the stall, while it is here |
+| A Tendril for each zone reached | that zone in the Wilds |
+
+Nothing locked is drawn. The gland grows when the first pheromone is learned
+and the vat when Calcified Frame is, and each Tendril gets longer with its
+level, so progress shows up as the body growing. Each organ opens its old panel
+in a bottom sheet that closes on a tap above it, the ✕, or a drag down.
+
+This is a first step toward drawn screens. The art is generated from shapes,
+so new organs and zones are a few lines in `src/art/nucleusArt.js`;
+`scripts/pixel-mockups.mjs` renders the same shapes to PNG for review.

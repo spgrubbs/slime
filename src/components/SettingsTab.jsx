@@ -57,7 +57,7 @@ const SettingsTab = ({ onSave, onDelete, onExport, onImport, lastSave, prisms, s
           </div>
         </div>
         <div style={{ fontSize: 11, opacity: 0.7, marginBottom: 15 }}>
-          Prisms are rare and shiny. They turn up about once in every 1,000 kills, and every time we wipe out a whole caravan.
+          Prisms are rare and shiny. They turn up about once in every 5,000 kills, and every time we wipe out a whole caravan.
         </div>
 
         {/* Slime Selector Modal */}
