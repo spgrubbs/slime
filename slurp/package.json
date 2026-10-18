@@ -8,7 +8,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "test": "node --test src/engine/*.test.js",
-    "sim": "node tools/sim.js"
+    "sim": "node tools/sim.js",
+    "build:single": "vite build && node tools/build-single.js"
   },
   "dependencies": {
     "react": "18.3.1",

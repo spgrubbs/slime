@@ -90,9 +90,8 @@ export default function App() {
     <div className="app">
       <header className="topbar">
         <span className="logo">🟢 SLURP</span>
-        {inRun ? <RunHud run={run} onSlime={() => setShowSlime(s => !s)} onAbandon={() => {
-          if (window.confirm('Abandon this run? You still bank Genes for it.')) act(abandonRun);
-        }} /> : <span className="hud-item">🧬 {profile.genes} Genes</span>}
+        {inRun ? <RunHud run={run} onSlime={() => setShowSlime(s => !s)} onAbandon={() => act(abandonRun)} />
+          : <span className="hud-item">🧬 {profile.genes} Genes</span>}
       </header>
       {error && <div className="toast" onClick={() => setError(null)}>{error}</div>}
       <main>{screen}</main>
@@ -102,13 +101,22 @@ export default function App() {
 }
 
 function RunHud({ run, onSlime, onAbandon }) {
+  // In-page confirm: browser dialogs are unavailable in some hosts (and clunky on phones).
+  const [confirming, setConfirming] = useState(false);
+  useEffect(() => {
+    if (!confirming) return undefined;
+    const t = setTimeout(() => setConfirming(false), 3000);
+    return () => clearTimeout(t);
+  }, [confirming]);
   return (
     <div className="hud">
       <span className="hud-item">Act {Math.min(run.act + 1, 4)}</span>
       <span className="hud-item">💧 {run.gel}</span>
       {run.salt > 0 && <span className="hud-item">🧂 {run.salt}</span>}
       <button className="small" onClick={onSlime}>Slime</button>
-      <button className="small ghost" onClick={onAbandon}>✕</button>
+      <button className={confirming ? 'small danger' : 'small ghost'} onClick={() => (confirming ? onAbandon() : setConfirming(true))}>
+        {confirming ? 'Tap again to abandon' : '✕'}
+      </button>
     </div>
   );
 }

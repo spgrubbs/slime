@@ -14,6 +14,7 @@ npm run dev      # play at http://localhost:5173
 npm test         # engine tests (node:test)
 npm run sim      # balance harness: bot careers with meta progression
 npm run build    # static build in dist/
+npm run build:single  # one self-contained dist/slurp.html (for single-page hosts)
 ```
 
 ## What's in the draft
