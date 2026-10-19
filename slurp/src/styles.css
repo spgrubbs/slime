@@ -148,3 +148,16 @@ h3 { font-size: 15px; margin: 14px 0 6px; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* Tags, mutations, stat strip */
+.tags { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0; justify-content: inherit; }
+.center .tags { justify-content: center; }
+.tag { font-size: 11px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
+.tag.have { color: var(--text); border-color: var(--accent); background: rgba(163, 230, 53, 0.12); }
+.mods { margin-top: 6px; display: flex; flex-direction: column; gap: 2px; }
+.mod { color: #d8b4fe; }
+.warn { color: #fca5a5; margin-top: 4px; }
+.pip.milestone { border-color: var(--gold); border-width: 2px; }
+.stat-strip { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; justify-content: center; background: var(--panel-2); border: 1px solid var(--line); border-radius: 12px; padding: 6px 10px; margin: 8px 0; font-size: 13px; font-variant-numeric: tabular-nums; }
+.stat-strip .bloated { color: #fca5a5; font-weight: 600; }
+.cards.left { text-align: left; }

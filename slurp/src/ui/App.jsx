@@ -69,7 +69,7 @@ export default function App() {
   if (!run) {
     screen = <Hub profile={profile} setProfile={setProfile} onStart={startRun} />;
   } else {
-    const props = { run, act };
+    const props = { run, act, openSlime: () => setShowSlime(true) };
     screen = {
       map: <MapView {...props} />,
       battle: <BattleView {...props} />,
@@ -80,8 +80,8 @@ export default function App() {
       treasure: <TreasureScreen {...props} />,
       event: <EventScreen {...props} />,
       actComplete: <ActCompleteScreen {...props} />,
-      victory: <RunEndScreen run={run} onBank={bankRun} />,
-      defeat: <RunEndScreen run={run} onBank={bankRun} />,
+      victory: <RunEndScreen run={run} onBank={bankRun} canBankHeirloom={!!profile.upgrades.heirloom} />,
+      defeat: <RunEndScreen run={run} onBank={bankRun} canBankHeirloom={!!profile.upgrades.heirloom} />,
     }[run.phase] || <div className="panel">Unknown phase: {run.phase}</div>;
   }
 
@@ -113,7 +113,7 @@ function RunHud({ run, onSlime, onAbandon }) {
       <span className="hud-item">Act {Math.min(run.act + 1, 4)}</span>
       <span className="hud-item">💧 {run.gel}</span>
       {run.salt > 0 && <span className="hud-item">🧂 {run.salt}</span>}
-      <button className="small" onClick={onSlime}>Slime</button>
+      <button className="small" onClick={onSlime}>🫧 My Slime</button>
       <button className={confirming ? 'small danger' : 'small ghost'} onClick={() => (confirming ? onAbandon() : setConfirming(true))}>
         {confirming ? 'Tap again to abandon' : '✕'}
       </button>

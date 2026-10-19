@@ -4,7 +4,9 @@ import assert from 'node:assert/strict';
 import { resolveBattle, fmt, MAX_TRIGGER_DEPTH } from './battle.js';
 import { buildPlayer, buildEnemy, levelFor } from './combatant.js';
 import { generateMap, ROWS, reachable } from './map.js';
-import { newRun, enterNode, finishBattle, absorb, gainEssence, needsReplace, slotCount, serializeRun } from './run.js';
+import { newRun, enterNode, finishBattle, absorb, gainEssence, addsBloat, slotCount, serializeRun, chooseMutation, mutationOptions, tagWeight } from './run.js';
+import { slimeProfile, BLOAT_PER } from './combatant.js';
+import { MUTATIONS, mutationDef } from './content/mutations.js';
 import { ESSENCES } from './content/essences.js';
 import { ENEMIES, ACTS } from './content/enemies.js';
 import { RELICS } from './content/relics.js';
@@ -142,15 +144,60 @@ test('gaining copies queues a Fusion Burst at each new level', () => {
   assert.deepEqual(run.fusionQueue.map(f => f.level), [1, 2]);
 });
 
-test('full slots require choosing an essence to expel', () => {
+test('no slot limit, but essences past capacity cause Bloat', () => {
   const run = newRun({ seed: 'S', species: 'gloop' });
-  while (run.slime.slotted.length < slotCount(run)) gainEssence(run, ['fangs', 'harden', 'jiggle', 'glimmer'][run.slime.slotted.length - 1], 1);
-  assert.ok(needsReplace(run, 'pounce'));
-  assert.throws(() => gainEssence(run, 'pounce', 1));
-  const gel = run.gel;
-  gainEssence(run, 'pounce', 1, 1);
-  assert.ok(run.slime.slotted.some(e => e.id === 'pounce'));
-  assert.ok(run.gel > gel, 'expelled essence pays out as a Husk');
+  const cap = slotCount(run);
+  const ids = ['fangs', 'harden', 'jiggle', 'glimmer', 'pounce', 'webShot', 'sporeCloud'];
+  for (const id of ids) if (run.slime.slotted.length < cap) gainEssence(run, id, 1);
+  const before = slimeProfile(run.slime, run).stats.firm;
+  assert.ok(addsBloat(run, 'diveBomb'));
+  gainEssence(run, 'diveBomb', 1);
+  gainEssence(run, 'wail', 1);
+  const prof = slimeProfile(run.slime, run);
+  assert.equal(prof.bloat, 2);
+  assert.ok(prof.stats.firm < before, 'stats shrink with Bloat');
+  assert.ok(Math.abs(prof.bloatMult - (1 - BLOAT_PER) ** 2) < 1e-9);
+});
+
+test('fusion offers Mutations for that essence, and the pick changes the build', () => {
+  let run = newRun({ seed: 'MUT', species: 'gloop' });
+  gainEssence(run, 'pounce', 1);
+  const e = run.slime.slotted.find(x => x.id === 'pounce');
+  const opts = mutationOptions(run, e, 1);
+  assert.equal(opts.length, 3);
+  assert.ok(opts.filter(k => k.startsWith('pounce.')).length === 2, 'two of its own Mutations');
+  for (const k of opts) assert.ok(mutationDef(k), k);
+  run.phase = 'map';
+  run = absorbCopies(run, 'pounce', 2); // reach 3 copies → fusion
+  assert.equal(run.phase, 'fusion');
+  run = chooseMutation(run, 0);
+  assert.equal(run.slime.slotted.find(x => x.id === 'pounce').mods.length, 1);
+  assert.equal(run.phase, 'map');
+});
+
+function absorbCopies(run, id, n) {
+  // Drive gainEssence through a no-op action so the fusion screen opens like in play.
+  const r = structuredClone(run);
+  gainEssence(r, id, n);
+  r.phase = 'shop'; r.pending = { essences: [], relics: [], services: { heal: { used: true, price: 0 }, remove: { price: 0 }, infuse: { price: 0 } } };
+  return leaveShopLike(r);
+}
+import { leaveShop } from './run.js';
+const leaveShopLike = (r) => leaveShop(r);
+
+test('every slotted essence has at least two Mutations of its own', () => {
+  for (const [id, d] of Object.entries(ESSENCES)) {
+    if (!['action', 'reflex', 'trait'].includes(d.type)) continue;
+    assert.ok(Object.keys(MUTATIONS[id] || {}).length >= 2, `${id} needs Mutations`);
+  }
+});
+
+test('Flavor Memory makes essences that share your tags more likely', () => {
+  const run = newRun({ seed: 'T', species: 'gloop' });
+  gainEssence(run, 'pyrolyze', 1);
+  assert.equal(tagWeight(run, 'kindling'), 1, 'no effect before the upgrade');
+  run.meta.upgrades.flavorMemory = 2;
+  assert.ok(tagWeight(run, 'kindling') > tagWeight(run, 'harden'), 'fire/burn essence favored');
 });
 
 // ── Run flow ─────────────────────────────────────────────────────────────────
@@ -197,4 +244,16 @@ test('runs bank Genes and upgrades are permanent stat gains', () => {
   p = buyUpgrade(p, 'denseCore');
   const upgraded = newRun({ seed: 'M', species: 'gloop', meta: { upgrades: p.upgrades } });
   assert.equal(upgraded.slime.base.firm, run.slime.base.firm + 1);
+});
+
+test('Mutations change how the essence behaves in battle', () => {
+  const withMods = (mods) => runWith([{ id: 'pounce', copies: 3, mods }]);
+  const pounceHits = (mods) => {
+    const res = resolveBattle(buildPlayer(withMods(mods), 'pebblet'), buildEnemy('pebblet'));
+    return res.records.filter(r => r.kind === 'hit' && r.actor === 'player' && /Pounce/.test(r.text));
+  };
+  assert.ok(!pounceHits([])[0].crit, 'plain Pounce does not crit on its first use');
+  assert.ok(pounceHits(['pounce.ambush'])[0].crit, 'Ambush makes Pounce crit');
+  const twin = resolveBattle(buildPlayer(withMods(['generic.twinned']), 'pebblet'), buildEnemy('pebblet'));
+  assert.ok(twin.records.some(r => r.kind === 'action' && /Pounce ×2/.test(r.text)), 'Twinned fires twice');
 });

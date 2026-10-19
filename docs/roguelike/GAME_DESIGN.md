@@ -2,7 +2,7 @@
 
 _Working title. A slime roguelite where you become what you defeat._
 
-_Status: **draft v0.2**. v0.2 records your answers to the first round of questions
+_Status: **draft v0.3**. v0.2 and v0.3 record your answers to the first two rounds of feedback
 (below). A playable first draft lives in [`/slurp`](../../slurp/README.md). Every number here is a starting value for
 tuning, not a final one. Decisions I made on your behalf are listed in §19 (Open Questions)
 with the default I assumed. Testable requirements live in
@@ -10,7 +10,7 @@ with the default I assumed. Testable requirements live in
 
 ---
 
-## Decisions (v0.2)
+## Decisions (v0.2–v0.3)
 
 These override anything older in this document. Sections that changed are marked "v0.2".
 
@@ -25,6 +25,10 @@ These override anything older in this document. Sections that changed are marked
 | Game | Standalone, set in the Hive Queen world |
 | Art | Placeholders only; you'll do the art |
 | Business | Paid up front. No microtransactions to design around |
+| Slots (v0.3) | **No hard limit.** Each essence past your capacity (4 + upgrades + boss rewards) adds **Bloat**: −7% to every stat, compounding. Tuned so a pile of Level I essences rarely beats fewer leveled ones (in the bot harness, a hoarding policy first wins about 15 runs later than a leveling one) |
+| Fusion rewards (v0.3) | Reaching 3 and 6 copies offers 3 **Mutations for that essence**: two of its own (e.g. Pounce → *Rending* or *Ambush*) plus generic ones (*Empowered*, *Quickened*, *Twinned*, *Opener*, *Echoing*, *Attuned*). They replace the generic stat boons |
+| Tags (v0.3) | Every essence carries tags: family, element, damage type (physical, poison, burn, bleed, true) and role (crit, membrane, heal, speed, control, thorns, growth). Species have intrinsic tags. The early **Flavor Memory** upgrade makes essences that share your tags more likely in offers and shops. Tag-scaling essences (*Kindling*, *Toxic Bloom*, *Bedrock*, *Undertow*, *Pack Tactics*, *Bloodletting*) pay off per tag |
+| Heirlooms (v0.3) | Banking an essence at run end requires the Ancestral Memory upgrade |
 
 ## Contents
 

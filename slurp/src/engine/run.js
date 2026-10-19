@@ -9,7 +9,7 @@
 
 import { stream, weightedSample, pick } from './rng.js';
 import { resolveBattle } from './battle.js';
-import { buildPlayer, buildEnemy, slimeProfile, levelFor } from './combatant.js';
+import { buildPlayer, buildEnemy, slimeProfile, levelFor, capacityOf, bloatOf, tagsOf, tagCounts } from './combatant.js';
 import { generateMap, finaleMap, reachable } from './map.js';
 import { ESSENCES, isSlotted } from './content/essences.js';
 import { ENEMIES, ACTS, FINALE } from './content/enemies.js';
@@ -18,9 +18,9 @@ import { SPECIES } from './content/species.js';
 import { EVENTS } from './content/events.js';
 import { saltRules } from './content/salt.js';
 import { familyCounts, activeResonance } from './content/families.js';
+import { MUTATIONS, GENERIC_MUTATIONS, mutationDef } from './content/mutations.js';
 
-export const RUN_VERSION = 1;
-export const MAX_SLOTS = 8;
+export const RUN_VERSION = 2;
 const RARITY_WEIGHT = { common: 60, uncommon: 30, rare: 10, keystone: 5 };
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -43,11 +43,9 @@ export function maxMass(run) {
   return slimeProfile(run.slime, run).stats.mass;
 }
 
-export function slotCount(run) {
-  const sp = SPECIES[run.slime.species].rules || {};
-  const relicSlots = run.relics.reduce((n, id) => n + (RELICS[id]?.run?.slots || 0), 0);
-  return Math.max(1, Math.min(MAX_SLOTS, 3 + up(run, 'vacuole') + run.bonusSlots + (sp.slots || 0) + relicSlots));
-}
+/** Essences the slime can hold before Bloat (there is no hard limit). */
+export const slotCount = (run) => capacityOf(run);
+export { bloatOf };
 
 const copiesFor = (run) => SPECIES[run.slime.species].rules?.copiesFor || [1, 3, 6];
 export const levelOfOwned = (run, e) => levelFor(e, copiesFor(run));
@@ -64,8 +62,13 @@ function loseMass(run, n) {
 function runEffects(run, key) {
   const out = [];
   for (const e of run.slime.slotted) {
+    const L = levelOfOwned(run, e);
     const fx = ESSENCES[e.id]?.run?.[key];
-    if (fx !== undefined) out.push({ fx, L: levelOfOwned(run, e) });
+    if (fx !== undefined) out.push({ fx, L });
+    for (const m of e.mods || []) {
+      const mfx = mutationDef(m)?.run?.[key];
+      if (mfx !== undefined) out.push({ fx: mfx, L });
+    }
   }
   for (const id of run.relics) {
     const fx = RELICS[id]?.run?.[key];
@@ -83,16 +86,16 @@ const sumRun = (run, key) => runEffects(run, key).reduce((n, { fx }) => n + fx, 
 
 // ── Essences ─────────────────────────────────────────────────────────────────
 
-/** Would gaining `id` need an empty slot the slime doesn't have? */
-export function needsReplace(run, id) {
-  return isSlotted(id) && !run.slime.slotted.some(e => e.id === id) && run.slime.slotted.length >= slotCount(run);
+/** Would gaining `id` add a new essence past capacity (i.e. more Bloat)? */
+export function addsBloat(run, id) {
+  return isSlotted(id) && !run.slime.slotted.some(e => e.id === id) && run.slime.slotted.length >= capacityOf(run);
 }
 
 /**
- * Add copies of an essence. Slotted essences fuse as copies accumulate; a
- * level-up queues a Fusion Burst. `replaceIndex` expels that slot first.
+ * Add copies of an essence. Slotted essences fuse as copies accumulate; each
+ * new level queues a Mutation choice.
  */
-export function gainEssence(run, id, copies = 1, replaceIndex = null) {
+export function gainEssence(run, id, copies = 1) {
   const d = ESSENCES[id];
   if (!d) return;
   if (!isSlotted(id)) {
@@ -112,11 +115,7 @@ export function gainEssence(run, id, copies = 1, replaceIndex = null) {
     }
     return;
   }
-  if (run.slime.slotted.length >= slotCount(run)) {
-    if (replaceIndex === null || !run.slime.slotted[replaceIndex]) throw new Error('Slots are full: choose an essence to expel');
-    expel(run, replaceIndex);
-  }
-  run.slime.slotted.push({ id, copies });
+  run.slime.slotted.push({ id, copies, mods: [] });
   const e = run.slime.slotted[run.slime.slotted.length - 1];
   const L = levelOfOwned(run, e);
   for (let l = 1; l <= L; l++) { run.fusionQueue.push({ id, level: l }); run.stats.fusions++; }
@@ -137,50 +136,41 @@ export const reorderSlot = (run, index, dir) => mutate(run, r => {
   [s[index], s[j]] = [s[j], s[index]];
 });
 
-// ── Fusion Bursts ────────────────────────────────────────────────────────────
+// ── Fusion → Mutations ───────────────────────────────────────────────────────
 
-const BOONS = {
-  1: [
-    { kind: 'mass', amount: 8, label: '+8 max Mass' },
-    { kind: 'gel', amount: 30, label: '+30 Gel' },
-    { kind: 'heal', amount: 0.25, label: 'Heal 25%' },
-    { kind: 'copy', amount: 1, label: '+1 copy to another essence' },
-  ],
-  2: [
-    { kind: 'firm', amount: 2, label: '+2 FIRM' },
-    { kind: 'slip', amount: 2, label: '+2 SLIP' },
-    { kind: 'visc', amount: 3, label: '+3 VISC' },
-    { kind: 'mass', amount: 20, label: '+20 max Mass' },
-    { kind: 'relic', amount: 1, label: 'A random relic' },
-  ],
-};
+/** Three Mutations to choose from when essence `e` reaches `level`. */
+export function mutationOptions(run, e, level) {
+  const rng = stream(run.seed, 'mutation', e.id, level, run.step);
+  const taken = new Set(e.mods || []);
+  const type = ESSENCES[e.id].type;
+  const own = shuffle(rng, Object.keys(MUTATIONS[e.id] || {}).map(k => `${e.id}.${k}`).filter(k => !taken.has(k)));
+  const generic = shuffle(rng, Object.entries(GENERIC_MUTATIONS)
+    .filter(([k, g]) => g.types.includes(type) && level >= (g.minLevel || 0) && !taken.has(`generic.${k}`))
+    .map(([k]) => `generic.${k}`));
+  return [...own.slice(0, 2), ...generic].slice(0, 3);
+}
+
+function shuffle(rng, arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
+  return a;
+}
 
 function openFusion(run) {
   const next = run.fusionQueue[0];
-  const rng = stream(run.seed, 'boon', run.step, run.stats.fusions, run.fusionQueue.length);
-  const table = BOONS[Math.min(2, next.level)] || BOONS[1];
-  run.fusion = { ret: { phase: run.phase, pending: run.pending }, burst: next, boons: weightedSample(rng, table, 3, () => 1) };
+  const e = run.slime.slotted.find(x => x.id === next.id);
+  const options = e ? mutationOptions(run, e, next.level) : [];
+  if (!options.length) { run.fusionQueue.shift(); return; }
+  run.fusion = { ret: { phase: run.phase, pending: run.pending }, burst: next, options };
   run.phase = 'fusion';
   run.pending = null;
 }
 
-export const chooseBoon = (run, index) => mutate(run, r => {
-  const b = r.fusion.boons[index];
-  const rng = stream(r.seed, 'boonApply', r.step, r.stats.fusions);
-  switch (b.kind) {
-    case 'mass': r.slime.maxMassBonus += b.amount; heal(r, b.amount); break;
-    case 'gel': r.gel += b.amount; break;
-    case 'heal': heal(r, maxMass(r) * b.amount); break;
-    case 'firm': case 'slip': case 'visc': r.slime.base[b.kind] += b.amount; break;
-    case 'relic': addRandomRelic(r, rng); break;
-    case 'copy': {
-      const others = r.slime.slotted.filter(e => e.id !== r.fusion.burst.id && levelOfOwned(r, e) < 2);
-      if (others.length) gainEssence(r, pick(rng, others).id, 1);
-      else r.gel += 30;
-      break;
-    }
-    default: break;
-  }
+export const chooseMutation = (run, index) => mutate(run, r => {
+  if (r.phase !== 'fusion') return;
+  const key = r.fusion.options[index];
+  const e = r.slime.slotted.find(x => x.id === r.fusion.burst.id);
+  if (key && e) (e.mods ||= []).push(key);
   r.fusionQueue.shift();
   const { ret } = r.fusion;
   r.fusion = null;
@@ -237,11 +227,9 @@ export function newRun({ seed, species = 'gloop', salt = 0, meta = { upgrades: {
     lastEnemy: null,
     winsSinceFerment: 0,
     stats: { floors: 0, kills: 0, elites: 0, bosses: 0, fusions: 0, absorbed: 0, biggestHit: 0, mostActions: 0, won: false, peakMass: base.mass },
-    slime: { species, base, hp: base.mass, slotted: [{ id: sp.starter, copies: 1 }], stats: [], maxMassBonus: 0 },
+    slime: { species, base, hp: base.mass, slotted: [{ id: sp.starter, copies: 1, mods: [] }], stats: [], maxMassBonus: 0 },
   };
-  if (u('heirloom') && meta.heirloom && ESSENCES[meta.heirloom]) {
-    gainEssence(run, meta.heirloom, 1, run.slime.slotted.length >= slotCount(run) ? 0 : null);
-  }
+  if (u('heirloom') && meta.heirloom && ESSENCES[meta.heirloom]) gainEssence(run, meta.heirloom, 1);
   run.fusionQueue = []; // no bursts for starting kit
   return run;
 }
@@ -330,7 +318,7 @@ function startBattle(r, enemyId, kind) {
   const [lo, hi] = ENEMIES[enemyId].gel;
   let gel = Math.floor((lo + rng() * (hi - lo + 1)) * (1 + 0.15 * up(r, 'gelGlands')));
   const gains = { maxMass: 0, gel: 0 };
-  for (const { fx, L } of runEffects(r, 'onWin')) fx(L, gains);
+  for (const { fx, L } of runEffects(r, 'onWin')) fx(L, gains, r);
   if (kind === 'elite') for (const { fx } of runEffects(r, 'onEliteWin')) fx(r);
   gel += gains.gel;
   r.gel += gel;
@@ -359,6 +347,17 @@ export const finishBattle = (run) => mutate(run, r => {
 
 // ── Absorbing ────────────────────────────────────────────────────────────────
 
+// Flavor Memory: owning a tag makes essences with that tag more likely.
+const FLAVOR_PER_TAG = [0, 0.1, 0.18, 0.3];
+
+export function tagWeight(run, id) {
+  const per = FLAVOR_PER_TAG[Math.min(3, up(run, 'flavorMemory'))];
+  if (!per) return 1;
+  const counts = tagCounts(run.slime);
+  const matches = tagsOf(id).reduce((n, t) => n + Math.min(4, counts[t] || 0), 0);
+  return 1 + per * matches;
+}
+
 function makeOffer(r, enemyId, kind, { flawless, devoured }) {
   const rng = stream(r.seed, 'offer', r.step);
   const pool = ENEMIES[enemyId].pool;
@@ -384,7 +383,7 @@ function makeOffer(r, enemyId, kind, { flawless, devoured }) {
 
   const rest = candidates.filter(id => !options.some(o => o.id === id));
   const drawn = weightedSample(rng, rest, Math.max(0, n - options.length),
-    id => (RARITY_WEIGHT[ESSENCES[id].rarity] || 30) * (owns(id) ? affinity : 1));
+    id => (RARITY_WEIGHT[ESSENCES[id].rarity] || 30) * (owns(id) ? affinity : 1) * tagWeight(r, id));
   options.push(...drawn.map(id => ({ id, copies: 1 })));
 
   // Guarantee one slotted option when the pool has one.
@@ -396,11 +395,11 @@ function makeOffer(r, enemyId, kind, { flawless, devoured }) {
   return { kind, enemyId, picks, flawless, devoured, options: options.slice(0, Math.max(n, options.length)) };
 }
 
-export const absorb = (run, optionIndex, replaceIndex = null) => mutate(run, r => {
+export const absorb = (run, optionIndex) => mutate(run, r => {
   if (r.phase !== 'absorb') throw new Error('Not absorbing');
   const opt = r.pending.options[optionIndex];
   if (!opt) throw new Error('No such option');
-  gainEssence(r, opt.id, opt.copies, replaceIndex);
+  gainEssence(r, opt.id, opt.copies);
   r.stats.absorbed++;
   heal(r, maxMass(r) * 0.05);
   r.pending.options.splice(optionIndex, 1);
@@ -479,7 +478,7 @@ function makeShop(r) {
     [p.signature, ...(p.shared || []), p.stat, p.element].filter(Boolean).forEach(id => ids.add(id));
   }
   const m = priceMult(r);
-  const essences = weightedSample(rng, [...ids], 3, id => RARITY_WEIGHT[ESSENCES[id].rarity] || 30).map(id => {
+  const essences = weightedSample(rng, [...ids], 3, id => (RARITY_WEIGHT[ESSENCES[id].rarity] || 30) * tagWeight(r, id)).map(id => {
     const d = ESSENCES[id];
     const base = d.type === 'stat' || d.type === 'element' ? ESSENCE_PRICE.stat : ESSENCE_PRICE[d.rarity];
     return { id, price: Math.round(base * m), sold: false };
@@ -509,7 +508,7 @@ export const shopBuy = (run, kind, index, arg = null) => mutate(run, r => {
     if (!item || item.sold) return;
     pay(item.price);
     item.sold = true;
-    gainEssence(r, item.id, 1, arg);
+    gainEssence(r, item.id, 1);
   } else if (kind === 'relic') {
     const item = shop.relics[index];
     if (!item || item.sold) return;
@@ -546,7 +545,6 @@ export const leaveShop = (run) => mutate(run, r => {
 
 const eventApi = {
   gainEssence: (run, id, n) => {
-    if (needsReplace(run, id)) { run.gel += 20; return; } // no room: it dissolves into Gel
     gainEssence(run, id, n);
   },
   randomOwnedSlotted: (run, rng) => pick(rng, run.slime.slotted),
@@ -555,9 +553,8 @@ const eventApi = {
   loseMass: (run, n) => loseMass(run, n),
   maxMass: (run) => maxMass(run),
   randomEssence: (rng, run) => {
-    // With no free slot, the mushroom feeds something you already have.
-    if (run && run.slime.slotted.length >= slotCount(run)) return pick(rng, run.slime.slotted).id;
-    return pick(rng, Object.keys(ESSENCES).filter(id => isSlotted(id) && ['common', 'uncommon'].includes(ESSENCES[id].rarity)));
+    const ids = Object.keys(ESSENCES).filter(id => isSlotted(id) && ['common', 'uncommon'].includes(ESSENCES[id].rarity));
+    return weightedSample(rng, ids, 1, id => (run ? tagWeight(run, id) : 1))[0];
   },
   addRandomRelic: (run, rng) => addRandomRelic(run, rng),
   apexCandidates: (run) => run.slime.slotted.filter(e => !e.apex && levelOfOwned(run, e) >= 2),

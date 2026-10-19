@@ -81,7 +81,8 @@ function runHooks(ctx, c, name, ev, reactive = false) {
   }
   for (const hk of c.hooks) {
     const fn = hk.h[name];
-    if (fn) fn(ctx, c, ctx.foe(c), hk.L, ev, hk);
+    // `repeat` comes from the Echoing mutation: the effect triggers again.
+    for (let i = 0; fn && i <= (hk.repeat || 0) && !ctx.over; i++) fn(ctx, c, ctx.foe(c), hk.L, ev, hk);
     if (ctx.over) break;
   }
   if (reactive) ctx.depth--;
@@ -139,7 +140,8 @@ function heal(ctx, c, amount, label = '') {
 
 function gainMembrane(ctx, c, amount, label = '') {
   if (ctx.over || amount <= 0) return;
-  const n = Math.floor(amount);
+  const n = Math.floor(amount * c.membraneMult);
+  if (n <= 0) return;
   c.membrane += n;
   ctx.push({ kind: 'membrane', target: c.side, amount: n, text: `🛡️ ${label ? label + ': ' : ''}${c.name} gains ${fmt(n)} Membrane` });
 }
@@ -220,6 +222,7 @@ function hit(ctx, src, tgt, ev, hitMult) {
     else if (ELEMENT_STRONG[tgt.element] === src.element) dmg *= 0.75;
   }
   if (tgt.status.softened) dmg *= 1.25;
+  dmg *= src.damageDealtMult;
   dmg *= tgt.damageTakenMult;
   dmg = Math.max(1, Math.floor(dmg));
 
@@ -236,7 +239,7 @@ function hit(ctx, src, tgt, ev, hitMult) {
 
   if (src.lifesteal > 0 && dealt > 0) heal(ctx, src, dealt * src.lifesteal, 'Lifesteal');
 
-  const hitEv = { damage: dealt, crit, label: ev.label, basic: ev.basic };
+  const hitEv = { damage: dealt, crit, label: ev.label, basic: ev.basic, absorbed: a.absorbed };
   if (crit) runHooks(ctx, src, 'onCrit', hitEv, true);
   runHooks(ctx, src, 'onHit', hitEv, true);
   if (tgt.status.thorns > 0 && !ctx.over) damage(ctx, tgt, src, tgt.status.thorns, { label: 'Thorns', icon: '🌵 ' });
@@ -295,7 +298,7 @@ function act(ctx, c, actionIndex) {
   // priority — it is set outside battle, never during it.
   const ready = c.hooks.find(hk => hk.h.action && (c.cooldowns[hk.key] || 0) <= 0);
   if (ready) {
-    const times = 1 + (c.flags.echoActions || 0) + (actionIndex === 0 && c.flags.echoFirst && !c.flags.echoFirstUsed ? 1 : 0);
+    const times = 1 + (c.flags.echoActions || 0) + (ready.extraTimes || 0) + (actionIndex === 0 && c.flags.echoFirst && !c.flags.echoFirstUsed ? 1 : 0);
     if (actionIndex === 0 && c.flags.echoFirst) c.flags.echoFirstUsed = true;
     ctx.push({ kind: 'action', actor: c.side, text: `${ready.icon || '✨'} ${c.name} uses ${ready.name}${times > 1 ? ` ×${times}` : ''}` });
     for (let i = 0; i < times && !ctx.over; i++) ready.h.action(ctx, c, foe, ready.L, {}, ready);
@@ -316,7 +319,7 @@ function roundEnd(ctx) {
       if (c.status[t] > 0 && c.statusRound[t] !== ctx.round) c.status[t] -= 1;
     }
     if (c.status.sticky > 0) c.status.sticky -= 1;
-    if (c.status.bleed > 0) c.status.bleed -= 1;
+    if (c.status.bleed > 0 && !c.flags.bleedNoDecay) c.status.bleed -= 1;
     if (c.status.stunResist > 0) c.status.stunResist -= 1;
     runHooks(ctx, c, 'roundEnd', {});
   }

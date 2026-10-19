@@ -23,9 +23,13 @@ npm run build:single  # one self-contained dist/slurp.html (for single-page host
   against the Hollow One. Slay the Spire–style maps with Fight, Elite, Boss, Event,
   Mystery, Shop, Pool and Treasure nodes.
 - **Absorption:** after every win, pick 1 of 3–4 essences from the enemy you beat. 3
-  copies fuse to II, 6 to III (renamed and stronger), each with a Fusion Burst boon. Slots
-  are limited, so a full slime has to expel something.
-- **Families:** 9 families with Resonance bonuses at 2, 4 and 6 slotted essences.
+  copies fuse to II, 6 to III (renamed and stronger). Each fusion offers 3 **Mutations**
+  for that essence. There's no slot limit, but every essence past capacity adds **Bloat**
+  (−7% to every stat).
+- **Tags and families:** every essence carries family, element, damage-type and role
+  tags, and species have their own. Flavor Memory (an early upgrade) biases offers toward
+  your tags, and some essences scale per tag. 9 families give Resonance bonuses at 2, 4
+  and 6.
 - **Combat:** 1v1, turn-based, **fully deterministic**. There is no input and no dice.
   Crit and dodge fill meters (25% crit = every 4th hit). Tempo gives extra actions from
   the speed ratio, statuses stack, Salt Rain ends stalemates, and runaway chains are cut
@@ -36,7 +40,7 @@ npm run build:single  # one self-contained dist/slurp.html (for single-page host
   is meant to lose.
 - **Difficulty:** Salt levels unlock per species after a win (10 defined, then
   uncapped Deep Salt).
-- **Content:** 58 essences, 36 enemies (including elites and bosses), 17 relics, 8 events and 4 species.
+- **Content:** 64 essences with 86 hand-made Mutations plus 6 generic ones, 36 enemies (including elites and bosses), 17 relics, 8 events and 4 species.
 - **Saves:** the profile and the current run live in `localStorage`. The same seed and
   the same choices always replay the same run.
 

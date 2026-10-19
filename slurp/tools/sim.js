@@ -6,8 +6,8 @@
 // spending Genes between runs. It reports how many runs it takes to first
 // beat each act and to win — the shape of the meta-progression curve.
 
-import { newRun, enterNode, finishBattle, absorb, digest, chooseBoon, takeTreasure, usePool, shopBuy, leaveShop,
-  chooseEvent, leaveEvent, nextAct, needsReplace, maxMass, levelOfOwned, eventChoiceAllowed } from '../src/engine/run.js';
+import { newRun, enterNode, finishBattle, absorb, digest, chooseMutation, takeTreasure, usePool, shopBuy, leaveShop,
+  chooseEvent, leaveEvent, nextAct, addsBloat, bloatOf, maxMass, levelOfOwned, eventChoiceAllowed } from '../src/engine/run.js';
 import { reachable } from '../src/engine/map.js';
 import { newProfile, applyRunEnd, metaForRun, nextCost, buyUpgrade, heirloomChoices } from '../src/engine/meta.js';
 import { UPGRADES } from '../src/engine/content/upgrades.js';
@@ -16,6 +16,7 @@ import { EVENTS } from '../src/engine/content/events.js';
 
 const careers = Number(process.argv[2] || 20);
 const VERBOSE = process.argv.includes('-v');
+const POLICY = process.env.POLICY || 'focused';
 const runsPer = Number(process.argv[3] || 60);
 
 function botStep(run) {
@@ -34,12 +35,17 @@ function botStep(run) {
     case 'absorb': {
       const o = run.pending.options;
       const owned = (id) => run.slime.slotted.find(e => e.id === id);
-      const rank = (x) => owned(x.id) && levelOfOwned(run, owned(x.id)) < 2 ? 3 : isSlotted(x.id) && !needsReplace(run, x.id) ? 2 : !isSlotted(x.id) ? 1 : 0;
+      // focused (default): grow owned essences first; take new ones until Bloat would pass 1.
+      // hoarder: always take a new essence first, ignoring Bloat.
+      const rank = POLICY === 'hoarder'
+        ? (x) => (isSlotted(x.id) && !owned(x.id) ? 3 : owned(x.id) && levelOfOwned(run, owned(x.id)) < 2 ? 2 : !isSlotted(x.id) ? 1 : 0)
+        : (x) => (owned(x.id) && levelOfOwned(run, owned(x.id)) < 2 ? 3
+          : isSlotted(x.id) && (!addsBloat(run, x.id) || bloatOf(run) < 1) ? 2 : !isSlotted(x.id) ? 1 : 0);
       const best = o.map((x, i) => [rank(x), i]).sort((a, b) => b[0] - a[0])[0];
       if (!best || best[0] === 0) return digest(run, hpPct < 0.5 ? 'heal' : 'gel');
       return absorb(run, best[1]);
     }
-    case 'fusion': return chooseBoon(run, 0);
+    case 'fusion': return chooseMutation(run, 0);
     case 'treasure': return takeTreasure(run);
     case 'pool': {
       if (hpPct < 0.7 || !run.slime.slotted.length) return usePool(run, 'soak');
@@ -49,7 +55,7 @@ function botStep(run) {
     case 'shop': {
       const s = run.pending;
       if (hpPct < 0.5 && !s.services.heal.used && run.gel >= s.services.heal.price) return shopBuy(run, 'heal');
-      const i = s.essences.findIndex(e => !e.sold && e.price <= run.gel && !needsReplace(run, e.id));
+      const i = s.essences.findIndex(e => !e.sold && e.price <= run.gel && !addsBloat(run, e.id));
       if (i >= 0) return shopBuy(run, 'essence', i);
       const j = s.relics.findIndex(e => !e.sold && e.price <= run.gel);
       if (j >= 0) return shopBuy(run, 'relic', j);
@@ -110,7 +116,7 @@ for (let c = 0; c < careers; c++) {
 
 const med = (xs) => { const v = xs.filter(x => x !== null).sort((a, b) => a - b); return v.length ? v[Math.floor(v.length / 2)] : '—'; };
 const share = (xs) => `${xs.filter(x => x !== null).length}/${xs.length}`;
-console.log(`careers=${careers} runs/career=${runsPer}`);
+console.log(`careers=${careers} runs/career=${runsPer} policy=${POLICY}`);
 ['Act 1 boss', 'Act 2 boss', 'Act 3 boss', 'Hollow One'].forEach((label, a) =>
   console.log(`${label.padEnd(11)} first beaten at run (median) ${String(med(firstAct[a])).padStart(4)}   careers: ${share(firstAct[a])}`));
 console.log('deaths by act:', deaths);

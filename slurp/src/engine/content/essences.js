@@ -74,7 +74,7 @@ export const ESSENCES = {
     desc: (L) => `CD 4: if the enemy is below ${pct(v([0.25, 0.3, 0.35, 0.45], L))} Mass, swallow it whole (Devour kill: absorb 2). Otherwise a 100% hit`,
     hooks: {
       action: (ctx, me, foe, L) => {
-        if (foe.hp <= foe.maxHp * v([0.25, 0.3, 0.35, 0.45], L)) {
+        if (foe.hp <= foe.maxHp * (v([0.25, 0.3, 0.35, 0.45], L) + (me.flags.devourBonus || 0))) {
           ctx.devoured = true;
           ctx.damage(me, foe, foe.hp, { label: 'DEVOUR', trueDmg: true, icon: '😋 ' });
         } else ctx.attack(me, foe, { mult: 1, label: 'Devour' });
@@ -259,9 +259,10 @@ export const ESSENCES = {
     hooks: {
       onAction: (ctx, me, foe, L) => {
         me.temp.static = (me.temp.static || 0) + 1;
-        if (me.temp.static >= 5) {
+        if (me.temp.static >= (me.flags.staticAt || 5)) {
           me.temp.static = 0;
           ctx.attack(me, foe, { mult: v([2, 3, 5, 7], L), label: 'Static Discharge' });
+          if (me.flags.arcStun) ctx.applyStatus(me, foe, 'stun', 1, 'Arc');
         }
       },
     },
@@ -286,7 +287,9 @@ export const ESSENCES = {
     desc: (L) => `Every hit grants +1 FIRM for the battle (up to +${v([10, 20, 40, 80], L)})`,
     hooks: {
       onHit: (ctx, me, foe, L) => {
-        if ((me.temp.firm || 0) < v([10, 20, 40, 80], L)) me.temp.firm = (me.temp.firm || 0) + 1;
+        const cap = v([10, 20, 40, 80], L) * (me.flags.consumeCapMult || 1);
+        if ((me.temp.firm || 0) < cap) me.temp.firm = (me.temp.firm || 0) + 1;
+        if (me.flags.consumeSlip && (me.temp.slip || 0) < cap) me.temp.slip = (me.temp.slip || 0) + 1;
       },
     },
   },
@@ -299,6 +302,38 @@ export const ESSENCES = {
         if (L >= 3) foe.damageTakenMult *= 1.15;
       },
     },
+  },
+
+  // ═══ TAG SYNERGY — scale with how many of a tag you carry ═══════════════
+  kindling: {
+    name: 'Kindling', icon: '🪵', type: 'trait', family: 'spirit', element: 'fire', rarity: 'uncommon', socket: 'right',
+    desc: (L) => `+${pct(v([0.06, 0.09, 0.14, 0.2], L))} hit damage per 🔥 Fire tag you have`,
+    hooks: { beforeAttack: (ctx, me, foe, L, ev) => { ev.bonusMult *= 1 + v([0.06, 0.09, 0.14, 0.2], L) * (me.tags.fire || 0); } },
+  },
+  toxicBloom: {
+    name: 'Toxic Bloom', icon: '🌺', type: 'trait', family: 'flora', element: 'nature', rarity: 'uncommon', socket: 'crown',
+    desc: (L) => `Poison you apply +${pct(v([0.1, 0.15, 0.22, 0.3], L))} per 🧪 Poison tag you have`,
+    passive: (c, L) => { c.statusAmp.poison = (c.statusAmp.poison || 1) * (1 + v([0.1, 0.15, 0.22, 0.3], L) * (c.tags.poison || 0)); },
+  },
+  bedrock: {
+    name: 'Bedrock', icon: '🏔️', type: 'trait', family: 'stone', element: 'earth', rarity: 'uncommon', socket: 'base',
+    desc: (L) => `Membrane you gain +${pct(v([0.1, 0.15, 0.22, 0.3], L))} per 🛡️ Membrane tag you have`,
+    passive: (c, L) => { c.membraneMult *= 1 + v([0.1, 0.15, 0.22, 0.3], L) * (c.tags.membrane || 0); },
+  },
+  undertow: {
+    name: 'Undertow', icon: '🌊', type: 'trait', family: 'sky', element: 'water', rarity: 'uncommon', socket: 'tail',
+    desc: (L) => `+${v([1, 2, 3, 4], L)} SLIP per 💧 Water tag you have`,
+    passive: (c, L) => { c.slip += v([1, 2, 3, 4], L) * (c.tags.water || 0); },
+  },
+  packTactics: {
+    name: 'Pack Tactics', icon: '🐾', type: 'trait', family: 'beast', rarity: 'uncommon', socket: 'brow',
+    desc: (L) => `+${pct(v([0.03, 0.04, 0.06, 0.08], L))} crit chance per 🐾 Beast tag you have`,
+    passive: (c, L) => { c.critChance += v([0.03, 0.04, 0.06, 0.08], L) * (c.tags.beast || 0); },
+  },
+  bloodletting: {
+    name: 'Bloodletting', icon: '🩸', type: 'trait', family: 'beast', rarity: 'uncommon', socket: 'left',
+    desc: (L) => `Bleed you apply +${pct(v([0.12, 0.18, 0.26, 0.35], L))} per 🩸 Bleed tag you have`,
+    passive: (c, L) => { c.statusAmp.bleed = (c.statusAmp.bleed || 1) * (1 + v([0.12, 0.18, 0.26, 0.35], L) * (c.tags.bleed || 0)); },
   },
 
   // ═══ CONSTRUCT ══════════════════════════════════════════════════════════

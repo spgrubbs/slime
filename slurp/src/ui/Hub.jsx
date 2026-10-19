@@ -6,6 +6,7 @@ import { saltDesc } from '../engine/content/salt.js';
 import { buyUpgrade, nextCost, rankOf, unlockedSpecies } from '../engine/meta.js';
 import { fmt } from '../engine/battle.js';
 import Slime from './Slime.jsx';
+import { TagChips } from './EssenceCard.jsx';
 
 export default function Hub({ profile, setProfile, onStart }) {
   const species = unlockedSpecies(profile);
@@ -33,6 +34,7 @@ export default function Hub({ profile, setProfile, onStart }) {
           ))}
         </div>
         <p><b>{sp.name}, {sp.title}.</b> {sp.innate}. Starts with {ESSENCES[sp.starter].icon} {ESSENCES[sp.starter].name}.</p>
+        <TagChips tags={sp.tags || []} />
         <div className="row">
           <label>🧂 Salt
             <select value={salt} onChange={e => setSalt(Number(e.target.value))}>
@@ -68,7 +70,7 @@ export default function Hub({ profile, setProfile, onStart }) {
         <h2>Hall of Slimes</h2>
         <p className="muted small">
           Runs {profile.runs} · Wins {profile.wins} · Biggest hit {fmt(profile.records.biggestHit)} · Peak Mass {fmt(profile.records.peakMass)}
-          {profile.heirloom && <> · Heirloom: {ESSENCES[profile.heirloom]?.icon} {ESSENCES[profile.heirloom]?.name}</>}
+          {profile.heirloom && profile.upgrades.heirloom && <> · Heirloom: {ESSENCES[profile.heirloom]?.icon} {ESSENCES[profile.heirloom]?.name}</>}
         </p>
         {profile.hall.length === 0 && <p className="muted">No champions yet.</p>}
         <div className="hall">

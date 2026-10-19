@@ -1,8 +1,11 @@
 import React, { useState } from 'react';
 import {
-  absorb, digest, chooseBoon, shopBuy, leaveShop, usePool, poolHealPct, takeTreasure, chooseEvent, leaveEvent,
-  nextAct, needsReplace, slotCount, maxMass, huskValue, eventChoiceAllowed, levelOfOwned,
+  absorb, digest, chooseMutation, shopBuy, leaveShop, usePool, poolHealPct, takeTreasure, chooseEvent, leaveEvent,
+  nextAct, addsBloat, maxMass, huskValue, eventChoiceAllowed, levelOfOwned,
 } from '../engine/run.js';
+import { tagCounts, BLOAT_PER } from '../engine/combatant.js';
+import { mutationDef } from '../engine/content/mutations.js';
+import { StatStrip } from './SlimePanel.jsx';
 import { heirloomChoices } from '../engine/meta.js';
 import { genesFor } from '../engine/content/upgrades.js';
 import { ESSENCES, displayName, LEVEL_NAMES } from '../engine/content/essences.js';
@@ -36,26 +39,24 @@ function SlotPicker({ run, title, onPick, onCancel, disabled = () => false, note
 
 // ── Absorb ───────────────────────────────────────────────────────────────────
 
-export function AbsorbScreen({ run, act }) {
+export function AbsorbScreen({ run, act, openSlime }) {
   const p = run.pending;
-  const [replaceFor, setReplaceFor] = useState(null);
   const enemy = ENEMIES[p.enemyId];
-  const choose = (i) => {
-    if (needsReplace(run, p.options[i].id)) setReplaceFor(i);
-    else act(absorb, i);
-  };
+  const myTags = tagCounts(run.slime);
+  const bloatWarn = `New essence past capacity: Bloat, all stats −${Math.round(BLOAT_PER * 100)}%`;
   return (
     <div className="panel">
       <h2>{p.kind === 'boss' ? '👑 Boss Essence' : `Absorb ${enemy.icon} ${enemy.name}`}</h2>
-      <p className="muted">
-        Pick {p.picks > 1 ? `${p.picks} essences` : 'one essence'} to make part of you. Eating heals 5%.
-        Slots {run.slime.slotted.length}/{slotCount(run)}.
+      <StatStrip run={run} onOpen={openSlime} />
+      <p className="muted small">
+        Pick {p.picks > 1 ? `${p.picks} essences` : 'one essence'}. Eating heals 5%. Gold pips mark the 3rd and 6th copy, where the essence mutates.
       </p>
       <div className="cards">
         {p.options.map((o, i) => (
-          <EssenceCard key={o.id} id={o.id} owned={owned(run, o.id)} adds={o.copies} copiesFor={copiesFor(run)}
+          <EssenceCard key={o.id} id={o.id} owned={owned(run, o.id)} adds={o.copies} copiesFor={copiesFor(run)} myTags={myTags}
             badge={o.copies > 1 ? `Concentrated ×${o.copies}` : o.signature ? 'Signature' : o.rare ? 'Rare!' : null}
-            onClick={() => choose(i)} />
+            warn={addsBloat(run, o.id) ? bloatWarn : null}
+            onClick={() => act(absorb, i)} />
         ))}
       </div>
       {p.kind !== 'boss' && (
@@ -65,49 +66,56 @@ export function AbsorbScreen({ run, act }) {
         </div>
       )}
       {p.kind === 'boss' && p.options.length === 0 && <button onClick={() => act(digest, 'gel')}>Continue</button>}
-      {replaceFor !== null && (
-        <SlotPicker run={run} title={`Slots full: expel one to make room for ${ESSENCES[p.options[replaceFor].id].name}`}
-          note={(e) => `Husk ${huskValue(e)} Gel`}
-          onPick={(slot) => { act(absorb, replaceFor, slot); setReplaceFor(null); }} onCancel={() => setReplaceFor(null)} />
-      )}
     </div>
   );
 }
 
-// ── Fusion Burst ─────────────────────────────────────────────────────────────
+// ── Mutation ─────────────────────────────────────────────────────────────────
 
-export function FusionScreen({ run, act }) {
-  const { burst, boons } = run.fusion;
+export function FusionScreen({ run, act, openSlime }) {
+  const { burst, options } = run.fusion;
+  const e = run.slime.slotted.find(x => x.id === burst.id);
   return (
     <div className="panel center fusion">
       <div className="fusion-flash">{ESSENCES[burst.id].icon}</div>
       <h2>FUSION! {displayName(burst.id, burst.level)} {LEVEL_NAMES[burst.level]}</h2>
-      <p className="muted">Pick a Fusion Burst boon.</p>
-      <div className="row wrap">
-        {boons.map((b, i) => <button key={i} className="primary" onClick={() => act(chooseBoon, i)}>{b.label}</button>)}
+      <p className="muted">Choose how it mutates. This is permanent for the run.</p>
+      <div className="cards left">
+        {options.map((k, i) => {
+          const m = mutationDef(k);
+          const generic = k.startsWith('generic.');
+          return (
+            <div key={k} className={`ess-card clickable ${generic ? '' : 'rare'}`} onClick={() => act(chooseMutation, i)}>
+              <div className="ess-top"><span className="ess-icon">🧬</span><span className="ess-name">{m.name}</span>{!generic && <span className="badge">{ESSENCES[burst.id].name}</span>}</div>
+              <div className="ess-desc">{m.desc}</div>
+            </div>
+          );
+        })}
       </div>
+      {e?.mods?.length > 0 && <p className="muted small">Already mutated: {e.mods.map(k => mutationDef(k)?.name).join(', ')}</p>}
+      <StatStrip run={run} onOpen={openSlime} />
     </div>
   );
 }
 
 // ── Shop ─────────────────────────────────────────────────────────────────────
 
-export function ShopScreen({ run, act }) {
+export function ShopScreen({ run, act, openSlime }) {
   const s = run.pending;
-  const [picker, setPicker] = useState(null); // { kind, index? }
-  const buyEssence = (i) => {
-    if (needsReplace(run, s.essences[i].id)) setPicker({ kind: 'essence', index: i });
-    else act(shopBuy, 'essence', i);
-  };
+  const [picker, setPicker] = useState(null); // { kind: 'infuse' | 'remove' }
+  const myTags = tagCounts(run.slime);
+  const buyEssence = (i) => act(shopBuy, 'essence', i);
   return (
     <div className="panel">
       <h2>🛒 The Gelatinous Bazaar</h2>
       <p className="muted">Shelly the hermit crab peers out of her jam jar. You have 💧 {run.gel} Gel.</p>
+      <StatStrip run={run} onOpen={openSlime} />
       <h3>Essence vials</h3>
       <div className="cards">
         {s.essences.map((e, i) => (
           <div key={e.id} className="shop-item">
-            <EssenceCard id={e.id} owned={owned(run, e.id)} adds={1} copiesFor={copiesFor(run)} />
+            <EssenceCard id={e.id} owned={owned(run, e.id)} adds={1} copiesFor={copiesFor(run)} myTags={myTags}
+              warn={addsBloat(run, e.id) ? `Past capacity: Bloat −${Math.round(BLOAT_PER * 100)}% stats` : null} />
             <button disabled={e.sold || run.gel < e.price} onClick={() => buyEssence(i)}>{e.sold ? 'Sold' : `💧 ${e.price}`}</button>
           </div>
         ))}
@@ -130,12 +138,8 @@ export function ShopScreen({ run, act }) {
       <button className="primary" onClick={() => act(leaveShop)}>Leave</button>
       {picker && (
         <SlotPicker run={run}
-          title={picker.kind === 'essence' ? 'Slots full: expel one' : picker.kind === 'infuse' ? 'Infuse which essence?' : 'Remove which essence?'}
-          onPick={(slot) => {
-            if (picker.kind === 'essence') act(shopBuy, 'essence', picker.index, slot);
-            else act(shopBuy, picker.kind, null, slot);
-            setPicker(null);
-          }}
+          title={picker.kind === 'infuse' ? 'Infuse which essence?' : 'Remove which essence?'}
+          onPick={(slot) => { act(shopBuy, picker.kind, null, slot); setPicker(null); }}
           onCancel={() => setPicker(null)} />
       )}
     </div>
@@ -233,8 +237,8 @@ export function ActCompleteScreen({ run, act }) {
 
 // ── Run end ──────────────────────────────────────────────────────────────────
 
-export function RunEndScreen({ run, onBank }) {
-  const choices = heirloomChoices(run);
+export function RunEndScreen({ run, onBank, canBankHeirloom }) {
+  const choices = canBankHeirloom ? heirloomChoices(run) : [];
   const [heir, setHeir] = useState(null);
   const won = run.phase === 'victory';
   const s = run.stats;
@@ -248,7 +252,7 @@ export function RunEndScreen({ run, onBank }) {
       <h2>+{genesFor(s, run.salt)} 🧬 Genes</h2>
       {choices.length > 0 && (
         <>
-          <p>Bank one essence as your Heirloom (used by the Ancestral Memory upgrade):</p>
+          <p>Bank one essence as your Heirloom. Your next champion starts with a copy:</p>
           <div className="row wrap">
             {choices.map(id => (
               <button key={id} className={heir === id ? 'chip on' : 'chip'} onClick={() => setHeir(heir === id ? null : id)}>
@@ -258,6 +262,7 @@ export function RunEndScreen({ run, onBank }) {
           </div>
         </>
       )}
+      {!canBankHeirloom && <p className="muted small">Unlock Ancestral Memory in the Gene Tree to pass an essence down to your next champion.</p>}
       <button className="primary big" onClick={() => onBank(heir)}>Return to the Brood Pool</button>
     </div>
   );

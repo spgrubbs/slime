@@ -76,7 +76,7 @@ export function applyRunEnd(profile, run, heirloomId = null) {
   rec.peakMass = Math.max(rec.peakMass, run.stats.peakMass);
   rec.mostActions = Math.max(rec.mostActions, run.stats.mostActions);
   rec.deepestAct = Math.max(rec.deepestAct, run.act + (run.stats.won ? 1 : 0));
-  if (heirloomId) p.heirloom = heirloomId;
+  if (heirloomId && p.upgrades.heirloom) p.heirloom = heirloomId; // banking needs Ancestral Memory
 
   const prof = slimeProfile(run.slime, run);
   p.hall.unshift({
